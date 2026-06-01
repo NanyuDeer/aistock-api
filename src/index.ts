@@ -25,6 +25,7 @@ import { StockAnalysisController } from './controllers/StockAnalysisController';
 import { StockOcrController } from './controllers/StockOcrController';
 import { TenxScoreController } from './controllers/TenxScoreController';
 import { CapitalFlowController } from './controllers/CapitalFlowController';
+import { MonitorEventController } from './controllers/MonitorEventController';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -44,7 +45,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-internal-token'],
     maxAge: 86400,
 }));
 
@@ -108,6 +109,8 @@ app.get('/api/users/me/news/push', (req, res, next) => UserController.getPushNew
 app.post('/api/users/me/favorites', (req, res, next) => UserController.addFavorites(req, res, next));
 app.delete('/api/users/me/favorites', (req, res, next) => UserController.removeFavorites(req, res, next));
 app.post('/api/users/me/favorites/delete', (req, res, next) => UserController.removeFavorites(req, res, next));
+
+app.post('/api/internal/monitor-events', (req, res, next) => MonitorEventController.mockMonitorEvent(req, res, next));
 
 app.get('/api/cn/market/stockrank', (req, res, next) => StockRankController.getHotRank(req, res, next));
 app.get('/api/cn/stocks', (req, res, next) => StockListController.getStockList(req, res, next));
