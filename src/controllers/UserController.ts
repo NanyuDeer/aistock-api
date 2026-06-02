@@ -183,6 +183,145 @@ export class UserController {
         createResponse(res, 200, 'success', { 推送新闻: [] });
     }
 
+    static async getPushHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const auth = await UserController.requireAuth(req);
+        if (!auth.ok) {
+            createResponse(res, auth.code, auth.message);
+            return;
+        }
+        const { openid } = auth;
+
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10) || 50, 1), 100);
+        const offset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
+        const status = String(req.query.status || '').trim();
+        const symbol = String(req.query.symbol || '').trim();
+
+        const conditions = ['openid = $1'];
+        const values: any[] = [openid];
+
+        if (status && ['sent', 'skipped', 'failed'].includes(status)) {
+            values.push(status);
+            conditions.push(`status = $${values.length}`);
+        }
+        if (symbol && isValidAShareSymbol(symbol)) {
+            values.push(symbol);
+            conditions.push(`symbol = $${values.length}`);
+        }
+
+        const whereClause = conditions.join(' AND ');
+        const totalResult = await pool.query(
+            `SELECT COUNT(*)::int AS total
+             FROM wechat_push_logs
+             WHERE ${whereClause}`,
+            values,
+        );
+
+        const listValues = [...values, limit, offset];
+        const result = await pool.query(
+            `SELECT
+                event_id,
+                symbol,
+                stock_name,
+                event_type,
+                level,
+                summary,
+                status,
+                error_msg,
+                sent_at,
+                click_url
+             FROM wechat_push_logs
+             WHERE ${whereClause}
+             ORDER BY sent_at DESC
+             LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
+            listValues,
+        );
+
+        createResponse(res, 200, 'success', {
+            total: totalResult.rows[0]?.total || 0,
+            limit,
+            offset,
+            items: result.rows.map((item: any) => ({
+                event_id: item.event_id,
+                stock_code: item.symbol,
+                stock_name: item.stock_name,
+                event_type: item.event_type,
+                level: item.level,
+                summary: item.summary,
+                status: item.status,
+                error_msg: item.error_msg || null,
+                sent_at: item.sent_at || null,
+                detail_url: item.click_url || null,
+            })),
+        });
+    }
+
+    static async getPushRanking(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const auth = await UserController.requireAuth(req);
+        if (!auth.ok) {
+            createResponse(res, auth.code, auth.message);
+            return;
+        }
+        const { openid } = auth;
+
+        const date = String(req.query.date || '').trim();
+        const dateCondition = /^\d{4}-\d{2}-\d{2}$/.test(date)
+            ? 'sent_at::date = $2::date'
+            : 'sent_at::date = CURRENT_DATE';
+        const values: any[] = /^\d{4}-\d{2}-\d{2}$/.test(date) ? [openid, date] : [openid];
+
+        const result = await pool.query(
+            `SELECT
+                symbol,
+                stock_name,
+                COUNT(*)::int AS push_count,
+                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END)::int AS sent_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)::int AS failed_count,
+                SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END)::int AS skipped_count,
+                MAX(CASE level
+                    WHEN 'L4' THEN 4
+                    WHEN 'L3' THEN 3
+                    WHEN 'L2' THEN 2
+                    WHEN 'L1' THEN 1
+                    ELSE 0
+                END)::int AS max_level_score,
+                (array_agg(level ORDER BY
+                    CASE level
+                        WHEN 'L4' THEN 4
+                        WHEN 'L3' THEN 3
+                        WHEN 'L2' THEN 2
+                        WHEN 'L1' THEN 1
+                        ELSE 0
+                    END DESC, sent_at DESC))[1] AS max_level,
+                (array_agg(summary ORDER BY sent_at DESC))[1] AS latest_summary,
+                MAX(sent_at) AS latest_sent_at,
+                (array_agg(click_url ORDER BY sent_at DESC))[1] AS detail_url
+             FROM wechat_push_logs
+             WHERE openid = $1 AND ${dateCondition}
+             GROUP BY symbol, stock_name
+             ORDER BY max_level_score DESC, push_count DESC, latest_sent_at DESC
+             LIMIT 50`,
+            values,
+        );
+
+        createResponse(res, 200, 'success', {
+            date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
+            items: result.rows.map((item: any, index: number) => ({
+                rank: index + 1,
+                stock_code: item.symbol,
+                stock_name: item.stock_name,
+                push_count: item.push_count,
+                sent_count: item.sent_count,
+                failed_count: item.failed_count,
+                skipped_count: item.skipped_count,
+                max_level: item.max_level || null,
+                latest_summary: item.latest_summary || null,
+                latest_sent_at: item.latest_sent_at || null,
+                detail_url: item.detail_url || null,
+                cumulative_return: null,
+            })),
+        });
+    }
+
     static async getSettings(req: Request, res: Response, _next: NextFunction): Promise<void> {
         const auth = await UserController.requireAuth(req);
         if (!auth.ok) {

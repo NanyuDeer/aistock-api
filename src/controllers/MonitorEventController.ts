@@ -250,6 +250,7 @@ export class MonitorEventController {
             matched_users: 0,
             sent: 0,
             skipped: 0,
+            push_failed: 0,
         };
 
         for (const item of events) {
@@ -269,6 +270,7 @@ export class MonitorEventController {
                 summary.matched_users += pushResult.matched_users;
                 summary.sent += pushResult.sent;
                 summary.skipped += pushResult.skipped;
+                summary.push_failed += pushResult.failed;
                 results.push({
                     status: 'success',
                     event_id: event.event_id,

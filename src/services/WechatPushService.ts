@@ -45,6 +45,13 @@ export class WechatPushService {
         return `${base.replace(/\/+$/, '')}/${detailUrl.replace(/^\/+/, '')}`;
     }
 
+    private static formatEventTime(eventTime: string): string {
+        if (!eventTime) return '';
+        const normalized = eventTime.replace('T', ' ');
+        const match = normalized.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/);
+        return match ? `${match[1]} ${match[2]}` : eventTime;
+    }
+
     private static async isPushEnabled(openid: string): Promise<boolean> {
         const result = await pool.query(
             `SELECT enabled
@@ -142,7 +149,7 @@ export class WechatPushService {
                         event_type: { value: event.event_type },
                         level: { value: event.level },
                         summary: { value: event.summary },
-                        time: { value: event.event_time },
+                        time: { value: WechatPushService.formatEventTime(event.event_time) },
                     },
                 }),
             },
