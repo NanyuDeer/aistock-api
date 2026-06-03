@@ -26,6 +26,7 @@ import { StockOcrController } from './controllers/StockOcrController';
 import { TenxScoreController } from './controllers/TenxScoreController';
 import { CapitalFlowController } from './controllers/CapitalFlowController';
 import { MonitorEventController } from './controllers/MonitorEventController';
+import { StockMonitorController } from './controllers/StockMonitorController';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -113,6 +114,12 @@ app.delete('/api/users/me/favorites', (req, res, next) => UserController.removeF
 app.post('/api/users/me/favorites/delete', (req, res, next) => UserController.removeFavorites(req, res, next));
 
 app.post('/api/internal/monitor-events', (req, res, next) => MonitorEventController.mockMonitorEvent(req, res, next));
+app.post('/api/internal/monitor-events/batch', (req, res, next) => MonitorEventController.mockMonitorEvent(req, res, next));
+
+// 个股异动监测 - 前端查询接口
+app.get('/api/cn/monitor/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
+app.get('/api/cn/monitor/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
+app.get('/api/cn/monitor/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
 
 app.get('/api/cn/market/stockrank', (req, res, next) => StockRankController.getHotRank(req, res, next));
 app.get('/api/cn/stocks', (req, res, next) => StockListController.getStockList(req, res, next));

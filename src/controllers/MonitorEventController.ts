@@ -109,10 +109,17 @@ export class MonitorEventController {
     }
 
     private static parseEvent(body: any): { ok: true; event: MonitorEvent } | { ok: false; message: string } {
-        const symbol = String(body?.symbol || body?.stock_code || body?.stockCode || '').trim();
+        let symbol = String(body?.symbol || body?.stock_code || body?.stockCode || '').trim();
+        // 支持 SH600519/SZ000001 格式，自动去除市场前缀后验证
+        if (/^(SH|SZ|sh|sz)[0-9]{6}$/.test(symbol)) {
+            symbol = symbol.slice(2);
+        }
         if (!isValidAShareSymbol(symbol)) {
             return { ok: false, message: 'Invalid stock_code - A share symbol must be 6 digits' };
         }
+        // 统一转换为 SH/SZ 前缀格式存入数据库
+        const marketPrefix = symbol.startsWith('6') ? 'SH' : 'SZ';
+        const fullSymbol = `${marketPrefix}${symbol}`;
 
         const stockName = MonitorEventController.normalizeText(body?.stock_name || body?.stockName);
         const eventTypeInput = MonitorEventController.normalizeText(
@@ -140,7 +147,7 @@ export class MonitorEventController {
             ok: true,
             event: {
                 event_id: eventId,
-                symbol,
+                symbol: fullSymbol,
                 stock_code: symbol,
                 stock_name: stockName,
                 股票异动: eventType,

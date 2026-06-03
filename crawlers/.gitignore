@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 环境变量
+.env
+
+# 数据文件（data/ 目录已有 .gitignore）
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 日志
+*.log
