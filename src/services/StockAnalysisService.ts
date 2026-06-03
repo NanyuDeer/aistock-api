@@ -2,13 +2,14 @@ import { TushareQuoteService } from './TushareQuoteService';
 import { ThsService } from './ThsService';
 import { ClsStockNewsService } from './ClsStockNewsService';
 import { formatToChinaTime } from '../utils/datetime';
+import { setAiIndicatorScores } from './TenxScoreService';
 import pool from '../db';
 
 type AnalysisConclusion = '重大利好' | '利好' | '中性' | '利空' | '重大利空';
 
 interface StockNewsDigest { title: string; time: string; summary: string; link: string; }
 
-interface StockAnalysisResult { '结论': AnalysisConclusion; '核心逻辑': string; '风险提示': string; }
+interface StockAnalysisResult { '结论': AnalysisConclusion; '核心逻辑': string; '风险提示': string; '十倍股指标打分'?: Record<string, number>; }
 
 export interface StockAnalysisProgressEvent { stage: string; message: string; at: string; meta?: Record<string, unknown>; }
 type StockAnalysisProgressHandler = (event: StockAnalysisProgressEvent) => void;
@@ -26,7 +27,7 @@ export class StockAnalysisService {
 
 你必须严格遵守以下规则：
 1. 只能输出一个 JSON 对象，不得输出任何解释、前后缀、Markdown 代码块。
-2. JSON 仅允许三个字段：结论、核心逻辑、风险提示；不得新增或删除字段。
+2. JSON 允许四个字段：结论、核心逻辑、风险提示、十倍股指标打分；不得新增或删除字段。
 3. 不得编造事实、数据、新闻标题或新闻链接；仅可使用输入中提供的信息。
 4. 结论必须与证据链一致，若证据不足必须体现审慎倾向。
 5. 语言应专业、清晰、克制，避免口号式和空泛表达。
@@ -97,8 +98,34 @@ JSON 结构如下：
 {
   "结论": "",
   "核心逻辑": "",
-  "风险提示": ""
-}`;
+  "风险提示": "",
+  "十倍股指标打分": {}
+}
+
+【十倍股指标打分说明】
+请根据新闻内容，对以下指标进行0-100分的打分评估。如果新闻中无相关信息，则不包含该指标。
+打分依据：新闻内容是否支持该指标向好（高分）或向坏（低分）。
+
+可选指标及打分标准：
+- "policy_trend_score": 政策/产业趋势强度（0=压制, 40=平淡, 60=一般, 80=有政策支持, 100=国家战略级）
+- "hard_catalyst": 硬催化强度（20=利空, 40=无催化, 60=催化偏弱, 100=明确未兑现硬催化）
+- "market_share_trend": 市占率趋势（20=同质化, 40=跟随者, 60=龙二且提升, 80=龙一稳步提升, 100=龙一且快速提升）
+- "industry_position": 行业地位不可替代性（20=同质化, 40=跟随者, 80=细分龙头, 100=绝对龙头+卡脖子）
+- "industry_penetration": 行业渗透率位置（数值为渗透率百分比估算，如8表示8%渗透率，越低分越高）
+- "profit_forecast_cagr": 未来预期净利润增速（数值为百分比，如80表示80%增速）
+
+示例输出：
+{
+  "结论": "利好",
+  "核心逻辑": "...",
+  "风险提示": "...",
+  "十倍股指标打分": {
+    "policy_trend_score": 80,
+    "hard_catalyst": 100
+  }
+}
+
+注意："十倍股指标打分"字段中只需包含有新闻依据的指标，无依据的指标不要包含。`;
 
     private static emitProgress(onProgress: StockAnalysisProgressHandler | undefined, stage: string, message: string, meta?: Record<string, unknown>): void {
         if (!onProgress) return;
@@ -154,14 +181,32 @@ JSON 结构如下：
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
             const keys = Object.keys(parsed);
             const required = ['结论', '核心逻辑', '风险提示'];
-            if (keys.length !== required.length) return null;
             if (!required.every(key => keys.includes(key))) return null;
+            // 允许3或4个字段（兼容旧版3字段和新版4字段）
+            if (keys.length < 3 || keys.length > 4) return null;
             const conclusion = this.normalizeText((parsed as any)['结论']) as AnalysisConclusion;
             const coreLogic = this.normalizeMultilineText((parsed as any)['核心逻辑']);
             const riskWarning = this.normalizeMultilineText((parsed as any)['风险提示']);
             if (!this.ALLOWED_CONCLUSIONS.has(conclusion)) return null;
             if (!coreLogic || !riskWarning) return null;
-            return { '结论': conclusion, '核心逻辑': coreLogic, '风险提示': riskWarning };
+
+            // 解析十倍股指标打分（可选字段）
+            let tenxIndicatorScores: Record<string, number> | undefined = undefined;
+            const rawScores = (parsed as any)['十倍股指标打分'];
+            if (rawScores && typeof rawScores === 'object' && !Array.isArray(rawScores)) {
+                const validKeys = new Set(['policy_trend_score', 'hard_catalyst', 'market_share_trend', 'industry_position', 'industry_penetration', 'profit_forecast_cagr']);
+                const filtered: Record<string, number> = {};
+                for (const [k, v] of Object.entries(rawScores)) {
+                    if (validKeys.has(k) && typeof v === 'number') {
+                        filtered[k] = Math.min(100, Math.max(0, v));
+                    }
+                }
+                if (Object.keys(filtered).length > 0) {
+                    tenxIndicatorScores = filtered;
+                }
+            }
+
+            return { '结论': conclusion, '核心逻辑': coreLogic, '风险提示': riskWarning, '十倍股指标打分': tenxIndicatorScores };
         } catch { return null; }
     }
 
@@ -438,16 +483,27 @@ JSON 结构如下：
         this.emitProgress(onProgress, 'db.writing', '开始写入数据库');
 
         await pool.query(
-            `INSERT INTO stock_analysis (symbol, analysis_time, conclusion, core_logic, risk_warning) VALUES ($1, $2, $3, $4, $5)`,
-            [symbol, analysisTime, modelResult['结论'], modelResult['核心逻辑'], modelResult['风险提示']],
+            `INSERT INTO stock_analysis (symbol, analysis_time, conclusion, core_logic, risk_warning, ai_indicator_scores) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [symbol, analysisTime, modelResult['结论'], modelResult['核心逻辑'], modelResult['风险提示'], modelResult['十倍股指标打分'] ? JSON.stringify(modelResult['十倍股指标打分']) : null],
         );
 
         this.emitProgress(onProgress, 'completed', '个股评价生成完成', { symbol, analysisTime, conclusion: modelResult['结论'] });
+
+        // 将AI指标打分注入到十倍股评分系统
+        if (modelResult['十倍股指标打分']) {
+            try {
+                setAiIndicatorScores(symbol, modelResult['十倍股指标打分']);
+                console.log(`[StockAnalysis] ${symbol} AI指标打分已注入:`, JSON.stringify(modelResult['十倍股指标打分']));
+            } catch (e) {
+                console.warn(`[StockAnalysis] ${symbol} AI指标打分注入失败:`, e);
+            }
+        }
 
         return {
             '来源': 'AI 股票评价', '模型': process.env.EVA_MODEL,
             '股票代码': symbol, '股票简称': stockName, '分析时间': analysisTime,
             '结论': modelResult['结论'], '核心逻辑': modelResult['核心逻辑'], '风险提示': modelResult['风险提示'],
+            '十倍股指标打分': modelResult['十倍股指标打分'] || null,
             '输入摘要': { '新闻数量': newsList.length, '业绩预测摘要': forecastData, '交易数据': tradingData },
         };
     }

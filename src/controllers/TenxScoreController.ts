@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import { TenxScoreService } from '../services/TenxScoreService';
+import { VetoError, vetoCheck } from '../services/TenxScoreService';
 import { TenxBatchService } from '../services/TenxBatchService';
 import pool from '../db';
 
@@ -21,7 +22,17 @@ export class TenxScoreController {
                     const { rawData, ...response } = calcResult;
                     createResponse(res, 200, 'success (computed)', response);
                 } catch (calcError: any) {
-                    createResponse(res, 500, calcError instanceof Error ? calcError.message : '查询评分失败');
+                    if (calcError instanceof VetoError) {
+                        createResponse(res, 200, 'vetoed', {
+                            vetoed: true,
+                            symbol: calcError.symbol,
+                            reasons: calcError.reasons,
+                            avgAmount: calcError.avgAmount,
+                            isSt: calcError.isSt,
+                        });
+                    } else {
+                        createResponse(res, 500, calcError instanceof Error ? calcError.message : '查询评分失败');
+                    }
                 }
                 return;
             }
@@ -42,7 +53,17 @@ export class TenxScoreController {
                 const { rawData, ...response } = calcResult;
                 createResponse(res, 200, 'success (computed)', response);
             } catch (calcError: any) {
-                createResponse(res, 500, calcError instanceof Error ? calcError.message : '查询评分失败');
+                if (calcError instanceof VetoError) {
+                    createResponse(res, 200, 'vetoed', {
+                        vetoed: true,
+                        symbol: calcError.symbol,
+                        reasons: calcError.reasons,
+                        avgAmount: calcError.avgAmount,
+                        isSt: calcError.isSt,
+                    });
+                } else {
+                    createResponse(res, 500, calcError instanceof Error ? calcError.message : '查询评分失败');
+                }
             }
         }
     }
@@ -106,7 +127,17 @@ export class TenxScoreController {
             const { rawData, ...response } = result;
             createResponse(res, 200, mode === 'quick' ? 'success (quick refreshed)' : 'success (refreshed)', response);
         } catch (error: any) {
-            createResponse(res, 500, error instanceof Error ? error.message : '刷新评分失败');
+            if (error instanceof VetoError) {
+                createResponse(res, 200, 'vetoed', {
+                    vetoed: true,
+                    symbol: error.symbol,
+                    reasons: error.reasons,
+                    avgAmount: error.avgAmount,
+                    isSt: error.isSt,
+                });
+            } else {
+                createResponse(res, 500, error instanceof Error ? error.message : '刷新评分失败');
+            }
         }
     }
 
@@ -226,5 +257,51 @@ export class TenxScoreController {
             .then(() => console.log(`[TenxScore] rebuildAll 完成, 耗时${((Date.now() - startTime) / 1000).toFixed(1)}秒`))
             .catch(err => console.error('[TenxScore] rebuildAll failed:', err?.message || err));
         createResponse(res, 200, '全量重算已启动，后台执行中，预计1-2分钟完成');
+    }
+
+    /** 独立的一票否决检查接口 */
+    static async checkVeto(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const symbol = String(req.params.symbol || '');
+        try {
+            const result = await vetoCheck(symbol);
+            createResponse(res, 200, 'success', result);
+        } catch (error: any) {
+            createResponse(res, 500, error instanceof Error ? error.message : '否决检查失败');
+        }
+    }
+
+    /** 获取评分Top30股票列表（按分数降序） */
+    static async getTopStocks(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const limit = Math.min(50, Math.max(1, Number(req.query.limit || '30')));
+        try {
+            const result = await pool.query(`
+                SELECT t.symbol, t.score, t.label, t.expected_multiple, t.score_date,
+                       t.dim_scores, t.description,
+                       COALESCE(s.name, '') as name
+                FROM tenx_scores t
+                LEFT JOIN stocks s ON t.symbol = s.symbol
+                WHERE t.score_date = (
+                    SELECT MAX(t2.score_date) FROM tenx_scores t2
+                )
+                AND t.label NOT IN ('D')
+                ORDER BY t.score DESC
+                LIMIT $1
+            `, [limit]);
+
+            const items = result.rows.map((r: any) => ({
+                symbol: r.symbol,
+                name: r.name,
+                score: Number(r.score),
+                label: r.label,
+                expectedMultiple: r.expected_multiple,
+                scoreDate: r.score_date,
+                dimScores: JSON.parse(r.dim_scores || '[]'),
+                description: r.description,
+            }));
+
+            createResponse(res, 200, 'success', items);
+        } catch (error: any) {
+            createResponse(res, 500, error instanceof Error ? error.message : '获取Top股票失败');
+        }
     }
 }

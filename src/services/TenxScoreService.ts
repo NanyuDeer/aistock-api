@@ -1,6 +1,20 @@
 import * as TushareService from './TushareService';
 import { TushareInfoService } from './TushareInfoService';
 
+/**
+ * 十倍股评分体系 v4：前瞻爆发版（百分制）
+ * 
+ * 设计逻辑：参考十倍股评分系统结构文档，6维度18指标
+ * 1. 业绩爆发力 30% - 未来预期增速、营收增速、利润加速
+ * 2. 赛道景气度 25% - 行业资本开支、渗透率、政策趋势
+ * 3. 估值弹性 15% - PEG、市值、估值空间
+ * 4. 盈利质量 15% - 毛利率、净利率提升、现金流
+ * 5. 竞争壁垒 10% - 市占率、合同负债、行业地位
+ * 6. 消息催化 5% - 机构调研、股东集中度、硬催化
+ * 
+ * 百分制换算：原5分制 → 1分=20, 2分=40, 3分=60, 4分=80, 5分=100
+ */
+
 interface DimDef {
     name: string;
     weight: number;
@@ -8,37 +22,35 @@ interface DimDef {
 }
 
 const TENX_DIMS: DimDef[] = [
-    { name: '成长性', weight: 20, indicators: [
-        { name: '营收3年CAGR', key: 'rev_cagr' }, { name: '净利润3年CAGR', key: 'profit_cagr' },
-        { name: '扣非净利3年CAGR', key: 'deducted_cagr' }, { name: '盈利质量提升(净利增速-营收增速)', key: 'profit_quality' },
+    { name: '业绩爆发力', weight: 30, indicators: [
+        { name: '未来2年预期净利润复合增速', key: 'profit_forecast_cagr' },
+        { name: '最近单季营收同比增速', key: 'rev_yoy_latest' },
+        { name: '最近一季利润同比加速', key: 'earnings_accel' },
     ]},
-    { name: '盈利能力', weight: 15, indicators: [
-        { name: 'ROE(3年均)', key: 'roe' }, { name: 'ROIC(3年均)', key: 'roic' },
-        { name: '毛利率(3年均)', key: 'gross_margin' }, { name: '净利率(3年均)', key: 'net_margin' },
+    { name: '赛道景气度', weight: 25, indicators: [
+        { name: '市场认可度', key: 'market_recognition' },
+        { name: '行业渗透率位置', key: 'industry_penetration' },
+        { name: '政策/产业趋势强度', key: 'policy_trend_score' },
     ]},
-    { name: '估值潜力', weight: 15, indicators: [
-        { name: 'PEG', key: 'peg' }, { name: 'PE分位数(5年)', key: 'pe_pct' },
-        { name: 'PB分位数(5年)', key: 'pb_pct' }, { name: '市值规模', key: 'market_cap' },
+    { name: '估值弹性', weight: 15, indicators: [
+        { name: 'PEG', key: 'peg' },
+        { name: '当前总市值(亿)', key: 'market_cap' },
+        { name: '估值双击空间(倍)', key: 'valuation_upside' },
     ]},
-    { name: '行业赛道', weight: 12, indicators: [
-        { name: '行业景气指数', key: 'industry_boom' }, { name: '行业渗透率/市场空间', key: 'industry_penetration' },
-        { name: '政策支持评分', key: 'policy_score' }, { name: '集中度提升空间', key: 'concentration' },
+    { name: '盈利质量', weight: 15, indicators: [
+        { name: '毛利率(%)', key: 'gross_margin' },
+        { name: '净利率同比提升(pct)', key: 'net_margin_improve' },
+        { name: '经营现金流/净利润', key: 'ocf_to_profit' },
     ]},
-    { name: '财务健康', weight: 12, indicators: [
-        { name: '流动比率/速动比率', key: 'liquidity_ratio' }, { name: '利息保障倍数', key: 'interest_cover' },
-        { name: '自由现金流(3年均)', key: 'fcf' }, { name: '资产负债率(反)', key: 'debt_ratio' },
+    { name: '竞争壁垒', weight: 10, indicators: [
+        { name: '细分赛道市占率趋势', key: 'market_share_trend' },
+        { name: '合同负债环比增速', key: 'contract_liab_growth' },
+        { name: '行业地位不可替代性', key: 'industry_position' },
     ]},
-    { name: '竞争壁垒', weight: 12, indicators: [
-        { name: '市占率', key: 'market_share' }, { name: '毛利率稳定性(3年)', key: 'margin_stability' },
-        { name: '研发投入占比(3年均)', key: 'rd_ratio' }, { name: '无形资产占比(品牌/专利)', key: 'brand_patent' },
-    ]},
-    { name: '管理层治理', weight: 7, indicators: [
-        { name: '大股东质押比(反)', key: 'pledge_ratio' }, { name: '高管增减持净比', key: 'holder_trade_ratio' },
-        { name: '管理层持股比例', key: 'mgmt_share_ratio' }, { name: '分红率(3年均)', key: 'dividend_ratio' },
-    ]},
-    { name: '催化剂强度', weight: 7, indicators: [
-        { name: '业绩加速信号', key: 'earnings_accel' }, { name: '订单/合同负债增速', key: 'contract_liab_growth' },
-        { name: '分析师预期上修比例', key: 'analyst_upgrade_ratio' }, { name: '事件催化密度评分', key: 'event_catalyst_score' },
+    { name: '消息催化', weight: 5, indicators: [
+        { name: '近1月机构调研家数', key: 'research_visit_count' },
+        { name: '股东户数较上期变化率', key: 'holder_change_rate' },
+        { name: '硬催化(政策/订单)', key: 'hard_catalyst' },
     ]},
 ];
 
@@ -53,346 +65,1037 @@ function scoreByRange(value: number, ranges: [number, number][]): number {
     return ranges[ranges.length - 1][1];
 }
 
+function scoreByRangeLowBetter(value: number, ranges: [number, number][]): number {
+    if (value <= ranges[0][0]) return ranges[0][1];
+    for (let i = 1; i < ranges.length; i++) {
+        if (value <= ranges[i][0]) {
+            const ratio = (ranges[i][0] - value) / (ranges[i][0] - ranges[i - 1][0]);
+            return Math.round(ranges[i][1] + ratio * (ranges[i - 1][1] - ranges[i][1]));
+        }
+    }
+    return ranges[ranges.length - 1][1];
+}
+
+const LOW_BETTER_KEYS = new Set(['peg', 'market_cap', 'holder_change_rate']);
+
+/**
+ * 百分制评分映射表
+ * 原文档5分制 → 百分制换算：1分=20, 2分=40, 3分=60, 4分=80, 5分=100
+ * 在区间之间做线性插值
+ */
 const SCORE_MAPS: Record<string, [number, number][]> = {
-    rev_cagr: [[30, 90], [20, 70], [10, 50], [0, 20]],
-    profit_cagr: [[30, 90], [20, 70], [10, 50], [0, 20]],
-    deducted_cagr: [[30, 90], [20, 70], [10, 50], [0, 20]],
-    profit_quality: [[20, 90], [10, 70], [0, 50], [-10, 20]],
-    roe: [[20, 90], [15, 70], [10, 50], [0, 20]],
-    roic: [[15, 90], [10, 70], [5, 50], [0, 20]],
-    gross_margin: [[50, 90], [35, 70], [20, 50], [0, 20]],
-    net_margin: [[20, 90], [12, 70], [5, 50], [0, 20]],
-    peg: [[0.5, 90], [0.8, 70], [1.2, 50], [2.0, 20]],
-    pe_pct: [[10, 90], [25, 70], [50, 50], [80, 20]],
-    pb_pct: [[10, 90], [25, 70], [50, 50], [80, 20]],
-    market_cap: [[0, 95], [50, 90], [200, 70], [500, 50], [1000, 20]],
-    industry_boom: [[80, 90], [60, 70], [40, 50], [0, 20]],
-    industry_penetration: [[3, 95], [5, 90], [15, 70], [30, 50], [60, 20]],
-    policy_score: [[5, 90], [3, 70], [1, 50], [0, 20]],
-    concentration: [[20, 90], [35, 70], [50, 50], [70, 20]],
-    liquidity_ratio: [[2.0, 90], [1.5, 70], [1.0, 50], [0, 20]],
-    interest_cover: [[8, 90], [5, 70], [3, 50], [1, 20]],
-    fcf: [[10, 90], [0, 70], [-5, 50], [-20, 20]],
-    debt_ratio: [[30, 90], [45, 70], [60, 50], [80, 20]],
-    market_share: [[20, 90], [10, 70], [5, 50], [0, 20]],
-    margin_stability: [[0, 90], [1, 90], [3, 70], [5, 50], [10, 20]],
-    rd_ratio: [[15, 90], [10, 70], [5, 50], [0, 20]],
-    brand_patent: [[30, 90], [15, 70], [5, 50], [0, 20]],
-    pledge_ratio: [[0, 90], [5, 90], [15, 70], [30, 50], [50, 20]],
-    holder_trade_ratio: [[2, 90], [0, 70], [-0.5, 60], [-2, 50], [-5, 20]],
-    mgmt_share_ratio: [[15, 90], [8, 70], [3, 50], [0, 20]],
-    dividend_ratio: [[30, 90], [20, 85], [40, 70], [60, 40], [0, 30]],
-    earnings_accel: [[20, 90], [10, 70], [0, 50], [-10, 30], [-30, 20]],
-    contract_liab_growth: [[40, 90], [20, 70], [5, 50], [0, 40], [-20, 20]],
-    analyst_upgrade_ratio: [[70, 90], [50, 70], [30, 50], [0, 20]],
-    event_catalyst_score: [[80, 90], [60, 70], [40, 50], [0, 20]],
+    // 业绩爆发力
+    // 未来2年预期净利润复合增速: ≥80%→100, 60-80%→80, 40-60%→60, 20-40%→40, <20%→20
+    profit_forecast_cagr: [[80, 100], [60, 80], [40, 60], [20, 40], [0, 20], [-20, 10]],
+    // 最近单季营收同比增速: ≥80%→100, 50-80%→80, 30-50%→60, 0-30%→40, <0→20
+    rev_yoy_latest: [[80, 100], [50, 80], [30, 60], [0, 40], [-10, 20]],
+    // 最近一季利润同比加速(二阶导): 明显加速+20pct→100, 小幅加速→80, 持平→60, 减速→20
+    earnings_accel: [[20, 100], [10, 80], [0, 60], [-10, 40], [-30, 20], [-60, 10]],
+
+    // 赛道景气度
+    // 市场认可度(机构持股比例%): ≥40%→100, 30-40%→80, 20-30%→60, 10-20%→40, <10%→20
+    market_recognition: [[40, 100], [30, 80], [20, 60], [10, 40], [0, 20]],
+    // 行业渗透率位置: <10%→100, 10-20%→80, 20-40%→60, >40%→20
+    industry_penetration: [[10, 100], [20, 80], [40, 60], [80, 20]],
+    // 政策/产业趋势强度: 国家战略+资本开支高增→100, 有政策支持→80, 平淡→40, 压制→20
+    policy_trend_score: [[5, 100], [4, 80], [3, 60], [2, 40], [1, 20]],
+
+    // 估值弹性
+    // PEG: <0.5→100, 0.5-0.8→80, 0.8-1.2→60, 1.2-2→40, >2→20
+    peg: [[0.5, 100], [0.8, 80], [1.2, 60], [2, 40], [5, 20]],
+    // 当前总市值(亿): <50→100, 50-100→80, 100-300→60, 300-500→40, >500→20
+    market_cap: [[50, 100], [100, 80], [300, 60], [500, 40], [2000, 20]],
+    // 估值双击空间(倍): ≥10→100, 5-10→80, 3-5→60, 1-3→40, <1→20
+    valuation_upside: [[10, 100], [5, 80], [3, 60], [1, 40], [0, 20]],
+
+    // 盈利质量
+    // 毛利率: ≥40%→100, 30-40%→80, 20-30%→60, 10-20%→40, <10%→20
+    gross_margin: [[40, 100], [30, 80], [20, 60], [10, 40], [0, 20]],
+    // 净利率同比提升(pct): 提升>5pct→100, 2-5pct→80, 持平/升<2→60, 降2-5pct→40, 降>5pct→20
+    net_margin_improve: [[5, 100], [2, 80], [0, 60], [-2, 40], [-5, 20], [-20, 10]],
+    // 经营现金流/净利润: ≥1.2→100, 1.0-1.2→80, 0.8-1.0→60, 0.5-0.8→40, <0.5→20
+    ocf_to_profit: [[1.2, 100], [1.0, 80], [0.8, 60], [0.5, 40], [0, 20], [-0.5, 10]],
+
+    // 竞争壁垒
+    // 细分赛道市占率趋势: 龙一且快速提升→100, 龙一稳步提升→80, 龙二且提升→60, 龙一下滑/跟随者→40, 同质化→20
+    market_share_trend: [[5, 100], [4, 80], [3, 60], [2, 40], [1, 20]],
+    // 合同负债环比增速: 环比增>30%→100, 10-30%→80, 0-10%→60, -10%~0→40, <-10%→20
+    contract_liab_growth: [[30, 100], [10, 80], [0, 60], [-10, 40], [-30, 20]],
+    // 行业地位不可替代性: 绝对龙头+卡脖子→100, 细分龙头→80, 跟随者→40, 同质化→20
+    industry_position: [[5, 100], [4, 80], [2, 40], [1, 20]],
+
+    // 消息催化
+    // 近1月机构调研家数: ≥50→100, 20-50→80, 5-20→60, 1-5→40, 0→20
+    research_visit_count: [[50, 100], [20, 80], [5, 60], [1, 40], [0, 20]],
+    // 股东户数较上期变化率: 下降≥30%→100, 降15-30%→80, 持平→60, 增加≥15%→20
+    holder_change_rate: [[-30, 100], [-15, 80], [0, 60], [15, 40], [30, 20]],
+    // 硬催化(政策/订单): 明确未兑现硬催化→100, 催化偏弱→60, 无催化→40, 利空→20
+    hard_catalyst: [[5, 100], [3, 60], [2, 40], [1, 20]],
+};
+
+/**
+ * 数据缺失时的默认评分
+ * 策略：核心维度缺失给中等偏低分，辅助维度缺失给中等分
+ */
+const DEFAULT_SCORE_WHEN_MISSING: Record<string, number> = {
+    // 业绩爆发力 - 核心维度，缺失给中等分
+    profit_forecast_cagr: 55,   // 无预期数据给55（中性偏上）
+    rev_yoy_latest: 55,
+    earnings_accel: 55,
+    // 赛道景气度 - 核心维度
+    market_recognition: 60,     // 市场认可度缺失给60（有交易活跃度兜底一般不会缺失）
+    industry_penetration: 60,   // 无渗透率数据给60
+    policy_trend_score: 60,     // 无政策趋势给60
+    // 估值弹性 - 辅助维度
+    peg: 60,
+    market_cap: 60,
+    valuation_upside: 60,
+    // 盈利质量 - 核心维度
+    gross_margin: 55,
+    net_margin_improve: 55,
+    ocf_to_profit: 55,
+    // 竞争壁垒 - 辅助维度
+    market_share_trend: 55,
+    contract_liab_growth: 55,
+    industry_position: 55,
+    // 消息催化
+    research_visit_count: 50,   // 无调研数据默认中等
+    holder_change_rate: 55,
+    hard_catalyst: 50,          // 无催化默认中等
 };
 
 function avg(nums: number[]): number { if (!nums.length) return 0; return nums.reduce((a, b) => a + b, 0) / nums.length; }
-function cagr(startVal: number, endVal: number, years: number): number { if (startVal <= 0 || endVal <= 0 || years <= 0) return 0; return Math.pow(endVal / startVal, 1 / years) - 1; }
 function percentile(arr: number[], value: number): number { if (!arr.length) return 50; const sorted = [...arr].sort((a, b) => a - b); let count = 0; for (const v of sorted) { if (v <= value) count++; else break; } return Math.round((count / sorted.length) * 100); }
 
-function formatValue(key: string, raw: number | string | null): string {
-    if (raw === null || raw === undefined) return '-';
+function formatValue(key: string, raw: number | string | null | undefined): string {
+    if (raw === null || raw === undefined) return '--';
     if (typeof raw === 'string') return raw;
-    const pctKeys = new Set(['rev_cagr', 'profit_cagr', 'deducted_cagr', 'profit_quality', 'roe', 'roic', 'gross_margin', 'net_margin', 'debt_ratio', 'market_share', 'rd_ratio', 'pledge_ratio', 'holder_trade_ratio', 'mgmt_share_ratio', 'dividend_ratio', 'earnings_accel', 'contract_liab_growth', 'analyst_upgrade_ratio', 'industry_penetration', 'brand_patent']);
-    const pctileKeys = new Set(['pe_pct', 'pb_pct', 'concentration']);
+    const pctKeys = new Set(['profit_forecast_cagr', 'rev_yoy_latest', 'earnings_accel', 'market_recognition', 'gross_margin', 'net_margin_improve', 'contract_liab_growth', 'holder_change_rate']);
+    const ratioKeys = new Set(['ocf_to_profit', 'peg', 'valuation_upside']);
+    const pctileKeys = new Set(['industry_penetration']);
     if (pctKeys.has(key)) return raw.toFixed(1) + '%';
-    if (pctileKeys.has(key)) return Math.round(raw) + '%';
-    if (key === 'peg') return raw.toFixed(2);
-    if (key === 'liquidity_ratio') return raw.toFixed(2);
-    if (key === 'interest_cover') return raw.toFixed(1) + 'x';
-    if (key === 'fcf') return (raw >= 0 ? '+' : '') + raw.toFixed(1) + '亿';
-    if (key === 'margin_stability') return raw.toFixed(1) + 'pp';
+    if (ratioKeys.has(key)) return raw.toFixed(2);
+    if (pctileKeys.has(key)) return raw.toFixed(1) + '%';
     if (key === 'market_cap') return raw.toFixed(0) + '亿';
-    if (key === 'policy_score' || key === 'industry_boom' || key === 'event_catalyst_score') return Math.round(raw).toString();
+    if (key === 'policy_trend_score' || key === 'market_share_trend' || key === 'industry_position' || key === 'hard_catalyst') return Math.round(raw).toString();
+    if (key === 'research_visit_count') return Math.round(raw).toString() + '家';
     return raw.toFixed(2);
 }
 
 interface RawIndicators { [key: string]: number | string | null | undefined; stockName?: string; }
 
-export interface IndustryCache { [industryCode: string]: { industryName: string; industry_boom: number; industry_penetration: number; concentration: number; members: string[]; }; }
+export interface IndustryCache { [industryCode: string]: { industryName: string; market_recognition: number; policy_trend_score: number; members: string[]; }; }
+
 interface PrefetchedData {
     income: TushareService.IncomeRow[]; fina: TushareService.FinaIndicatorRow[]; cashflow: TushareService.CashflowRow[];
-    balance: TushareService.BalanceSheetRow[]; daily: TushareService.DailyBasicRow[]; pledge: TushareService.PledgeRow[];
-    holdertrade: TushareService.HolderTradeRow[]; managers: TushareService.StkManagerRow[]; dividend: TushareService.DividendRow[];
-    top10: TushareService.Top10HolderRow[]; industry: { ts_code: string; industry_name: string; industry_code: string } | null;
+    balance: TushareService.BalanceSheetRow[]; daily: TushareService.DailyBasicRow[];
+    prices: TushareService.DailyPriceRow[];
+    forecast: TushareService.ForecastRow[];
+    holderNumber: TushareService.HolderNumberRow[];
+    institutionalHold: TushareService.InstitutionalHoldRow[];
+    hkHold: TushareService.HkHoldRow[];
+    survival: TushareService.StkSurvivalRow[];
+    analystRating: TushareService.AnalystRatingRow[];
+    industry: { ts_code: string; industry_name: string; industry_code: string } | null;
 }
-interface RevenueCache { [symbol: string]: TushareService.IncomeRow[]; }
 
 async function prefetchAllData(symbol: string): Promise<PrefetchedData> {
     const threeYearsAgo = new Date(); threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 4);
     const startDate = threeYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
     const fiveYearsAgo = new Date(); fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
     const startDate5y = fiveYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
+    const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const startDate1y = oneYearAgo.toISOString().slice(0, 10).replace(/-/g, '');
     const emptyArr: any[] = [];
     const catchEmpty = (label: string) => (e: any) => { console.warn(`[TenxScore] ${label} failed:`, e?.message); return emptyArr; };
 
-    const [income, fina, cashflow, balance, daily, pledge, holdertrade, managers, dividend] = await Promise.all([
+    const [income, fina, cashflow, balance, daily, prices, forecast, holderNumber, institutionalHold, hkHold, survival, analystRating] = await Promise.all([
         TushareService.getIncome(symbol, startDate).catch(catchEmpty('getIncome')),
         TushareService.getFinaIndicator(symbol, startDate).catch(catchEmpty('getFinaIndicator')),
         TushareService.getCashflow(symbol, startDate).catch(catchEmpty('getCashflow')),
         TushareService.getBalanceSheet(symbol, startDate).catch(catchEmpty('getBalanceSheet')),
         TushareService.getDailyBasic(symbol, startDate5y).catch(catchEmpty('getDailyBasic')),
-        TushareService.getPledgeDetail(symbol).catch(catchEmpty('getPledgeDetail')),
-        TushareService.getStkHoldertrade(symbol, startDate).catch(catchEmpty('getStkHoldertrade')),
-        TushareService.getStkManagers(symbol).catch(catchEmpty('getStkManagers')),
-        TushareService.getDividend(symbol).catch(catchEmpty('getDividend')),
+        TushareService.getDailyPrices(symbol, startDate5y).catch(catchEmpty('getDailyPrices')),
+        TushareService.getForecast(symbol, startDate1y).catch(catchEmpty('getForecast')),
+        TushareService.getHolderNumber(symbol, startDate1y).catch(catchEmpty('getHolderNumber')),
+        TushareService.getInstitutionalHold(symbol, startDate1y).catch(catchEmpty('getInstitutionalHold')),
+        TushareService.getHkHold(symbol, startDate1y).catch(catchEmpty('getHkHold')),
+        TushareService.getStkSurvival(symbol, startDate1y).catch(catchEmpty('getStkSurvival')),
+        TushareService.getAnalystRating(symbol, startDate1y).catch(catchEmpty('getAnalystRating')),
     ]);
-    const [top10, industry] = await Promise.all([
-        TushareService.getTop10Holders(symbol).catch(catchEmpty('getTop10Holders')),
-        TushareService.getStockIndustry(symbol).catch(e => { console.warn('[TenxScore] getStockIndustry failed:', e?.message); return null; }) as Promise<any>,
-    ]);
-    return { income: income as any[], fina: fina as any[], cashflow: cashflow as any[], balance: balance as any[], daily: daily as any[], pledge: pledge as any[], holdertrade: holdertrade as any[], managers: managers as any[], dividend: dividend as any[], top10: top10 as any[], industry };
+    const industry = await TushareService.getStockIndustry(symbol).catch(e => { console.warn('[TenxScore] getStockIndustry failed:', e?.message); return null; }) as any;
+
+    console.log(`[TenxScore] ${symbol} 数据获取: income=${income.length}, fina=${fina.length}, cashflow=${cashflow.length}, balance=${balance.length}, daily=${daily.length}, prices=${prices.length}, forecast=${forecast.length}, holderNumber=${holderNumber.length}, instHold=${institutionalHold.length}, hkHold=${hkHold.length}, survival=${survival.length}, analyst=${analystRating.length}, industry=${industry ? industry.industry_name : 'null'}`);
+
+    return { income: income as any[], fina: fina as any[], cashflow: cashflow as any[], balance: balance as any[], daily: daily as any[], prices: prices as any[], forecast: forecast as any[], holderNumber: holderNumber as any[], institutionalHold: institutionalHold as any[], hkHold: hkHold as any[], survival: survival as any[], analystRating: analystRating as any[], industry };
 }
 
 async function prefetchDynamicData(symbol: string, cached: PrefetchedData): Promise<PrefetchedData> {
     const fiveYearsAgo = new Date(); fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
     const startDate5y = fiveYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
-    const threeYearsAgo = new Date(); threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 4);
-    const startDate = threeYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
+    const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const startDate1y = oneYearAgo.toISOString().slice(0, 10).replace(/-/g, '');
     const emptyArr: any[] = [];
     const catchEmpty = (label: string) => (e: any) => { console.warn(`[TenxScore] ${label} failed:`, e?.message); return emptyArr; };
-    const [daily, pledge, holdertrade] = await Promise.all([
+    const [daily, prices, holderNumber, institutionalHold, hkHold, survival, analystRating] = await Promise.all([
         TushareService.getDailyBasic(symbol, startDate5y).catch(catchEmpty('getDailyBasic(quick)')),
-        TushareService.getPledgeDetail(symbol).catch(catchEmpty('getPledgeDetail(quick)')),
-        TushareService.getStkHoldertrade(symbol, startDate).catch(catchEmpty('getStkHoldertrade(quick)')),
+        TushareService.getDailyPrices(symbol, startDate5y).catch(catchEmpty('getDailyPrices(quick)')),
+        TushareService.getHolderNumber(symbol, startDate1y).catch(catchEmpty('getHolderNumber(quick)')),
+        TushareService.getInstitutionalHold(symbol, startDate1y).catch(catchEmpty('getInstitutionalHold(quick)')),
+        TushareService.getHkHold(symbol, startDate1y).catch(catchEmpty('getHkHold(quick)')),
+        TushareService.getStkSurvival(symbol, startDate1y).catch(catchEmpty('getStkSurvival(quick)')),
+        TushareService.getAnalystRating(symbol, startDate1y).catch(catchEmpty('getAnalystRating(quick)')),
     ]);
-    return { income: cached.income, fina: cached.fina, cashflow: cached.cashflow, balance: cached.balance, daily: daily as any[], pledge: pledge as any[], holdertrade: holdertrade as any[], managers: cached.managers, dividend: cached.dividend, top10: cached.top10, industry: cached.industry };
+    return {
+        income: cached.income, fina: cached.fina, cashflow: cached.cashflow, balance: cached.balance,
+        daily: daily as any[], prices: prices as any[], forecast: cached.forecast,
+        holderNumber: holderNumber as any[], industry: cached.industry,
+        institutionalHold: institutionalHold as any[], hkHold: hkHold as any[],
+        survival: survival as any[], analystRating: analystRating as any[],
+    };
 }
 
-function calcGrowthData(data: PrefetchedData): RawIndicators {
-    const income = data.income;
-    const annualReports = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue).sort((a, b) => a.end_date.localeCompare(b.end_date)).slice(-4);
-    let rev_cagr = 0, profit_cagr = 0, deducted_cagr = 0, profit_quality = 0;
-    if (annualReports.length >= 2) {
-        const first = annualReports[0], last = annualReports[annualReports.length - 1], years = annualReports.length - 1;
-        if (first.total_revenue > 0 && last.total_revenue > 0) rev_cagr = cagr(first.total_revenue, last.total_revenue, years) * 100;
-        else if (first.total_revenue > 0) rev_cagr = ((last.total_revenue / first.total_revenue) - 1) * 100 / years;
-        if (first.n_income > 0 && last.n_income > 0) profit_cagr = cagr(first.n_income, last.n_income, years) * 100;
-        else if (first.n_income > 0) profit_cagr = ((last.n_income / first.n_income) - 1) * 100 / years;
-        else if (first.n_income < 0 && last.n_income < 0) profit_cagr = ((first.n_income - last.n_income) / Math.abs(first.n_income)) * 100 / years;
-        else if (first.n_income < 0 && last.n_income > 0) profit_cagr = 100;
-        const firstDp = first.n_income_attr_p, lastDp = last.n_income_attr_p;
-        if (firstDp && firstDp > 0 && lastDp && lastDp > 0) deducted_cagr = cagr(firstDp, lastDp, years) * 100;
-        else if (firstDp && firstDp > 0 && lastDp !== undefined) deducted_cagr = ((lastDp / firstDp) - 1) * 100 / years;
-        else if (firstDp && firstDp < 0 && lastDp && lastDp < 0) deducted_cagr = ((firstDp - lastDp) / Math.abs(firstDp)) * 100 / years;
-        else if (firstDp && firstDp < 0 && lastDp && lastDp > 0) deducted_cagr = 100;
-        const latest = annualReports[annualReports.length - 1], prev = annualReports[annualReports.length - 2];
-        let revGrowth = 0; if (prev.total_revenue > 0) revGrowth = ((latest.total_revenue / prev.total_revenue) - 1) * 100;
-        let profitGrowth = 0; if (prev.n_income > 0 && latest.n_income > 0) profitGrowth = ((latest.n_income / prev.n_income) - 1) * 100; else if (prev.n_income < 0 && latest.n_income > 0) profitGrowth = 100;
-        profit_quality = profitGrowth - revGrowth;
+/**
+ * 维度1：业绩爆发力 (30%)
+ * 指标：未来2年预期净利润复合增速、最近单季营收同比增速、最近一季利润同比加速
+ */
+function calcEarningsExplosion(data: PrefetchedData): RawIndicators {
+    const { income, fina, forecast } = data;
+
+    // ① 未来2年预期净利润复合增速
+    let profit_forecast_cagr: number | null = null;
+
+    // 优先用业绩预告数据
+    if (forecast.length > 0) {
+        const latestForecast = forecast.sort((a, b) => b.ann_date.localeCompare(a.ann_date))[0];
+        if (latestForecast.p_change_min != null && latestForecast.p_change_max != null) {
+            profit_forecast_cagr = (latestForecast.p_change_min + latestForecast.p_change_max) / 2;
+        }
     }
-    return { rev_cagr, profit_cagr, deducted_cagr, profit_quality };
-}
 
-function calcProfitabilityData(data: PrefetchedData): RawIndicators {
-    const annualFina = data.fina.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    return { roe: avg(annualFina.map(r => r.roe || 0)), roic: avg(annualFina.map(r => r.roic || 0)), gross_margin: avg(annualFina.map(r => r.grossprofit_margin || 0)), net_margin: avg(annualFina.map(r => r.netprofit_margin || 0)) };
-}
-
-function calcValuationData(data: PrefetchedData, profitCagr: number): RawIndicators {
-    const daily = data.daily;
-    const peArr = daily.map(r => r.pe).filter((v): v is number => v !== null && v > 0);
-    const pbArr = daily.map(r => r.pb).filter((v): v is number => v !== null && v > 0);
-    const currentPE = peArr.length > 0 ? peArr[peArr.length - 1] : 0;
-    const currentPB = pbArr.length > 0 ? pbArr[pbArr.length - 1] : 0;
-    const pe_pct = peArr.length > 0 ? percentile(peArr, currentPE) : 50;
-    const pb_pct = pbArr.length > 0 ? percentile(pbArr, currentPB) : 50;
-    const latestDaily = daily.length > 0 ? daily[daily.length - 1] : null;
-    const total_mv = latestDaily?.total_mv;
-    const market_cap = total_mv ? total_mv / 10000 : 0;
-    let peg = 99; if (currentPE > 0 && profitCagr > 0) peg = currentPE / profitCagr;
-    return { peg, pe_pct, pb_pct, market_cap };
-}
-
-function calcFinancialHealthData(data: PrefetchedData): RawIndicators {
-    const { fina, income, cashflow } = data;
-    const latestFina = fina.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
-    const current_ratio = latestFina?.current_ratio || 0;
-    const quick_ratio = latestFina?.quick_ratio || 0;
-    const liquidity_ratio = quick_ratio > 0 ? current_ratio * 0.4 + quick_ratio * 0.6 : current_ratio;
-    const debt_ratio = latestFina?.debt_to_assets || 0;
-    const latestIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
-    let interest_cover = 0;
-    if (latestIncome?.int_exp && latestIncome.int_exp > 0) { const ebit = (latestIncome.total_profit || 0) + latestIncome.int_exp; interest_cover = ebit / latestIncome.int_exp; }
-    else if (!latestIncome?.int_exp || latestIncome.int_exp === 0) interest_cover = 20;
-    const annualCashflow = cashflow.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    const fcfValues = annualCashflow.map(r => ((r.n_cashflow_act || 0) - Math.abs(r.c_pay_for_fix_assets || 0)) / 1e8);
-    const fcf = avg(fcfValues);
-    return { liquidity_ratio, interest_cover, fcf, debt_ratio };
-}
-
-function calcGovernanceData(data: PrefetchedData): RawIndicators {
-    const { pledge, holdertrade, managers, dividend, income, daily, top10 } = data;
-    let pledge_ratio = 0;
-    if (pledge.length > 0) { const latestPledge = pledge.sort((a, b) => (b.end_date || '').localeCompare(a.end_date || ''))[0]; pledge_ratio = latestPledge?.pledge_ratio || 0; }
-    let holder_trade_ratio = 0;
-    const execTrades = holdertrade.filter(r => r.holder_type === 'G' || r.holder_type === 'M');
-    if (execTrades.length > 0) { const totalBuyRatio = execTrades.filter(r => r.in_de === 'IN').reduce((s, r) => s + (r.change_ratio || 0), 0); const totalSellRatio = execTrades.filter(r => r.in_de === 'DE').reduce((s, r) => s + (r.change_ratio || 0), 0); holder_trade_ratio = totalBuyRatio - totalSellRatio; }
-    let mgmt_share_ratio = 0;
-    if (top10.length > 0 && managers.length > 0) {
-        const latestPeriod = top10.reduce((a, b) => (a.end_date > b.end_date ? a : b)).end_date;
-        const latestHolders = top10.filter(r => r.end_date === latestPeriod);
-        const mgmtNames = managers.map(m => m.name);
-        for (const holder of latestHolders) { const matched = mgmtNames.some(name => holder.holder_name === name || holder.holder_name.includes(name) || name.includes(holder.holder_name)); if (matched) mgmt_share_ratio += holder.hold_ratio || 0; }
+    // 如果没有业绩预告，用最近3年净利润CAGR
+    if (profit_forecast_cagr === null) {
+        const annualReports = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p)
+            .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
+        if (annualReports.length >= 2) {
+            const latest = annualReports[0].n_income_attr_p || 0;
+            const oldest = annualReports[annualReports.length - 1].n_income_attr_p || 0;
+            const years = annualReports.length - 1;
+            if (oldest > 0 && latest > 0) {
+                profit_forecast_cagr = (Math.pow(latest / oldest, 1 / years) - 1) * 100;
+            } else if (oldest < 0 && latest > 0) {
+                profit_forecast_cagr = 100; // 扭亏
+            }
+        }
     }
-    let dividend_ratio = 0;
-    const recentDividends = dividend.filter(r => (r.div_proc === '实施' || r.div_proc === '实施方案') && r.cash_div && r.cash_div > 0).sort((a, b) => (b.end_date || '').localeCompare(a.end_date || ''));
-    const seenYears = new Set<string>();
-    const uniqueDividends = recentDividends.filter(r => { const year = (r.end_date || '').substring(0, 4); if (seenYears.has(year)) return false; seenYears.add(year); return true; }).slice(0, 3);
-    if (uniqueDividends.length > 0) {
-        const annualIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-        const dividendRatios: number[] = [];
-        for (const div of uniqueDividends) { const divYear = (div.end_date || '').substring(0, 4); const matchingIncome = annualIncome.find(inc => (inc.end_date || '').startsWith(divYear)); if (!matchingIncome) continue; const cashDivPerShare = div.cash_div || 0; const eps = matchingIncome.basic_eps || 0; if (eps > 0 && cashDivPerShare > 0) dividendRatios.push((cashDivPerShare / eps) * 100); }
-        if (dividendRatios.length > 0) dividend_ratio = avg(dividendRatios);
-        else { const latestAnnual = annualIncome[0]; if (latestAnnual?.total_revenue && latestAnnual.revenue_ps && latestAnnual.revenue_ps > 0) { const totalShares = latestAnnual.total_revenue / latestAnnual.revenue_ps; const totalProfit = annualIncome.reduce((s, r) => s + (r.n_income || 0), 0); const totalCashDiv = uniqueDividends.reduce((s, r) => s + (r.cash_div || 0), 0) * totalShares; if (totalProfit > 0) dividend_ratio = (totalCashDiv / totalProfit) * 100; } }
+
+    // ② 最近单季营收同比增速 - 改进：用Tushare的季度报告直接对比
+    let rev_yoy_latest: number | null = null;
+    const quarterlyIncome = income.filter(r => r.end_date && r.total_revenue)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date));
+
+    // 尝试找同季度同比：比如最新2024Q3 vs 2023Q3
+    if (quarterlyIncome.length >= 2) {
+        const latest = quarterlyIncome[0];
+        const latestQuarter = latest.end_date.slice(4); // e.g., '0331', '0630', '0930', '1231'
+        // 找去年同季度
+        const prevYearSameQ = quarterlyIncome.find(r =>
+            r.end_date !== latest.end_date && r.end_date.endsWith(latestQuarter)
+        );
+        if (prevYearSameQ && prevYearSameQ.total_revenue > 0 && latest.total_revenue) {
+            rev_yoy_latest = ((latest.total_revenue / prevYearSameQ.total_revenue) - 1) * 100;
+        }
     }
-    return { pledge_ratio, holder_trade_ratio, mgmt_share_ratio, dividend_ratio };
-}
 
-const policyMap: Record<string, number> = {
-    '半导体': 5, '芯片': 5, '人工智能': 5, '新能源': 5, '储能': 5, '信创': 5, '数字经济': 5, '机器人': 5, '量子': 5, '脑机': 5,
-    '光伏': 4, '军工': 4, '航天': 4, '创新药': 4, '电池': 4, '风电': 4, '氢能': 4, '软件': 4, '云计算': 4, '大数据': 4, '网络安全': 4, '生物': 4, '基因': 4, '航空': 4, '新材料': 4, '稀土': 4, '碳中和': 4, '环保': 4, '核电': 4, '卫星': 4,
-    '医疗器械': 3, '消费电子': 3, '汽车': 3, '物联网': 3, '通信': 3, '5G': 3, '半导体材料': 3, '显示': 3, '面板': 3, '智能家居': 3, '工业互联': 3, '智能制造': 3, '特高压': 3, '宠物': 3, '医美': 3, '养老': 3, '体育': 3, '文化': 3, '教育': 3, '游戏': 3, '影视': 3, '食品': 3, '饮料': 3, '家电': 3, '建材': 3, '装饰': 3, '农业': 3, '种业': 3,
-    '银行': 2, '保险': 2, '证券': 2, '地产': 2, '钢铁': 2, '煤炭': 2, '石油': 2, '化工': 2, '有色': 2, '港口': 2, '公路': 2, '铁路': 2, '电力': 2, '水务': 2, '燃气': 2,
-    '教培': 1, '高耗能': 1,
-};
-
-async function calcIndustryData(symbol: string, data: PrefetchedData, industryCache?: IndustryCache, revenueCache?: RevenueCache): Promise<RawIndicators> {
-    let industryCode = data.industry?.industry_code || '';
-    let industryName = data.industry?.industry_name || '';
-    if (industryCode && industryCache?.[industryCode]) {
-        const cached = industryCache[industryCode];
-        let policy_score = 2; for (const [keyword, score] of Object.entries(policyMap)) { if (cached.industryName.includes(keyword)) { policy_score = score; break; } }
-        return { industry_boom: cached.industry_boom, industry_penetration: cached.industry_penetration, policy_score, concentration: cached.concentration };
+    // 回退：用年报数据
+    if (rev_yoy_latest === null) {
+        const annualReports = quarterlyIncome.filter(r => r.end_date.endsWith('1231')).slice(0, 2);
+        if (annualReports.length >= 2) {
+            const latest = annualReports[0], prev = annualReports[1];
+            if (prev.total_revenue > 0 && latest.total_revenue) {
+                rev_yoy_latest = ((latest.total_revenue / prev.total_revenue) - 1) * 100;
+            }
+        }
     }
-    let industry_boom = 50;
-    if (industryCode) { try { const longAgo = new Date(); longAgo.setDate(longAgo.getDate() - 150); const startDate = longAgo.toISOString().slice(0, 10).replace(/-/g, ''); const daily = await TushareService.getIndexDaily(industryCode, startDate); if (daily.length >= 10) { const sorted = daily.sort((a, b) => a.trade_date.localeCompare(b.trade_date)); const first = sorted[0], last = sorted[sorted.length - 1]; if (first.close > 0) { const pctChange = ((last.close / first.close) - 1) * 100; industry_boom = Math.max(0, Math.min(100, 50 + pctChange * 2)); } } } catch {} }
-    let industry_penetration = 30;
-    if (industryCode) { try { const revGrowth = await TushareService.getIndustryRevenueGrowth(industryCode); const growthRate = revGrowth.growthRate; if (growthRate > 30) industry_penetration = 5 + (50 - Math.min(growthRate, 50)) / 50 * 10; else if (growthRate > 15) industry_penetration = 15 + (30 - growthRate) / 15 * 15; else if (growthRate > 5) industry_penetration = 30 + (15 - growthRate) / 10 * 20; else industry_penetration = 50 + (5 - Math.max(growthRate, 0)) / 5 * 30; } catch {} }
-    let policy_score = 2; for (const [keyword, score] of Object.entries(policyMap)) { if (industryName.includes(keyword)) { policy_score = score; break; } }
-    let concentration = 40;
-    if (industryCode) { try { const members = await TushareService.getIndexMember(industryCode); if (members.length > 0) { const twoYearsAgo = new Date(); twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 3); const startDate = twoYearsAgo.toISOString().slice(0, 10).replace(/-/g, ''); const sample = members.length > 30 ? members.filter((_, i) => i % Math.ceil(members.length / 30) === 0) : members; const revenues: { symbol: string; revenue: number }[] = []; for (const sym of sample) { try { let symIncome: any[]; if (revenueCache?.[sym]) symIncome = revenueCache[sym]; else symIncome = await TushareService.getIncome(sym, startDate); const symAnnual = symIncome.filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue).sort((a, b) => b.end_date.localeCompare(a.end_date)); if (symAnnual[0]?.total_revenue) revenues.push({ symbol: sym, revenue: symAnnual[0].total_revenue }); } catch {} } if (revenues.length >= 5) { revenues.sort((a, b) => b.revenue - a.revenue); const top5Revenue = revenues.slice(0, 5).reduce((s, r) => s + r.revenue, 0); const totalRevenue = revenues.reduce((s, r) => s + r.revenue, 0); if (totalRevenue > 0) concentration = (top5Revenue / totalRevenue) * 100; } } } catch {} }
-    if (industryCode && industryCache) industryCache[industryCode] = { industryName, industry_boom, industry_penetration, concentration, members: [] };
-    return { industry_boom, industry_penetration, policy_score, concentration };
-}
 
-async function calcMoatData(symbol: string, data: PrefetchedData, industryCache?: IndustryCache, revenueCache?: RevenueCache): Promise<RawIndicators> {
-    const { fina, income, balance } = data;
-    const threeYearsAgo = new Date(); threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 4);
-    const startDate = threeYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
-    let market_share = 5;
-    try { let members: string[] = []; const industryCode = data.industry?.industry_code; if (industryCode) { if (industryCache?.[industryCode]) members = industryCache[industryCode].members; else members = await TushareService.getIndexMember(industryCode); if (members.length > 0) { const annualIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue).sort((a, b) => b.end_date.localeCompare(a.end_date)); const latestRevenue = annualIncome[0]?.total_revenue || 0; if (latestRevenue > 0) { const sample = members.length > 20 ? members.filter((_, i) => i % Math.ceil(members.length / 20) === 0) : members; const revenues: number[] = [latestRevenue]; for (const sym of sample) { if (sym === symbol) continue; try { let symIncome: any[]; if (revenueCache?.[sym]) symIncome = revenueCache[sym]; else symIncome = await TushareService.getIncome(sym, startDate); const symAnnual = symIncome.filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue).sort((a, b) => b.end_date.localeCompare(a.end_date)); if (symAnnual[0]?.total_revenue) revenues.push(symAnnual[0].total_revenue); } catch {} } revenues.sort((a, b) => b - a); if (revenues.length > 0 && latestRevenue > 0) { const totalIndustryRev = revenues.reduce((s, v) => s + v, 0); market_share = (latestRevenue / totalIndustryRev) * 100; } } } } } catch {}
-    const annualFina = fina.filter(r => r.end_date && r.end_date.endsWith('1231') && r.grossprofit_margin).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    let margin_stability = 5; if (annualFina.length >= 2) { const margins = annualFina.map(r => r.grossprofit_margin || 0); const mean = avg(margins); const variance = avg(margins.map(m => Math.pow(m - mean, 2))); margin_stability = Math.sqrt(variance); }
-    const annualIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    let rd_ratio = 0; if (annualIncome.length > 0) { const rdRatios: number[] = []; for (const r of annualIncome) { if (r.total_revenue && r.total_revenue > 0 && r.rd_exp) rdRatios.push((r.rd_exp / r.total_revenue) * 100); } if (rdRatios.length > 0) rd_ratio = avg(rdRatios); }
-    let brand_patent = 0; const annualBalance = balance.filter(r => r.end_date && r.end_date.endsWith('1231')).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    if (annualBalance.length > 0) { const ratios: number[] = []; for (const r of annualBalance) { const equity = r.total_hldr_eqy_exc_min_int || r.total_assets - r.total_liab; if (equity && equity > 0) { const intangible = r.intan_assets || 0; ratios.push((intangible / equity) * 100); } } if (ratios.length > 0) brand_patent = avg(ratios); }
-    return { market_share, margin_stability, rd_ratio, brand_patent };
-}
-
-async function calcCatalystData(symbol: string, data: PrefetchedData): Promise<RawIndicators> {
-    const { income, balance } = data;
-    let earnings_accel = 0;
-    const annualReports = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
-    if (annualReports.length >= 3) {
-        const latest = annualReports[0].n_income_attr_p || 0, prev = annualReports[1].n_income_attr_p || 0, prevPrev = annualReports[2].n_income_attr_p || 0;
-        let recentGrowth = 0; if (prev > 0) recentGrowth = ((latest / prev) - 1) * 100; else if (prev < 0 && latest > 0) recentGrowth = 100;
-        let prevGrowth = 0; if (prevPrev > 0) prevGrowth = ((prev / prevPrev) - 1) * 100; else if (prevPrev < 0 && prev > 0) prevGrowth = 100;
+    // ③ 最近一季利润同比加速(二阶导)
+    let earnings_accel: number | null = null;
+    const accelReports = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
+    if (accelReports.length >= 3) {
+        const latest = accelReports[0].n_income_attr_p || 0;
+        const prev = accelReports[1].n_income_attr_p || 0;
+        const prevPrev = accelReports[2].n_income_attr_p || 0;
+        let recentGrowth = 0;
+        if (prev > 0) recentGrowth = ((latest / prev) - 1) * 100;
+        else if (prev < 0 && latest > 0) recentGrowth = 120;
+        let prevGrowth = 0;
+        if (prevPrev > 0) prevGrowth = ((prev / prevPrev) - 1) * 100;
+        else if (prevPrev < 0 && prev > 0) prevGrowth = 120;
         earnings_accel = recentGrowth - prevGrowth;
     }
-    let contract_liab_growth = 0;
-    const annualBalance = balance.filter(r => r.end_date && r.end_date.endsWith('1231') && r.contract_liab !== null && r.contract_liab !== undefined).sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 2);
-    if (annualBalance.length >= 2) { const latest = annualBalance[0].contract_liab || 0, prev = annualBalance[1].contract_liab || 0; if (prev > 0) contract_liab_growth = ((latest / prev) - 1) * 100; }
-    let analyst_upgrade_ratio = 0;
-    try { const { ThsService } = await import('./ThsService'); const forecast = await ThsService.getProfitForecast(symbol); const detailTable = forecast['业绩预测详表_详细指标预测']; if (Array.isArray(detailTable) && detailTable.length > 0) { let upgrade = 0, total = 0; for (const row of detailTable) { if (row['预测机构'] || row['机构名称']) { total++; const action = row['评级'] || row['调整方向'] || ''; if (action.includes('上调') || action.includes('增持') || action.includes('买入')) upgrade++; } } if (total > 0) analyst_upgrade_ratio = (upgrade / total) * 100; } } catch {}
-    let event_catalyst_score = 0;
-    try { const { ClsStockNewsService } = await import('./ClsStockNewsService'); const newsResult = await ClsStockNewsService.getStockNews(symbol, { limit: 20, lastTime: 0 }); const recentCount = newsResult.items?.length || 0; const catalystKeywords = ['签约', '中标', '获批', '量产', '突破', '合作', '收购', '并购', '新品', '发布', '订单', '扩产', '投产', '上市', '获批', '授权', '认证', '首发', '落地', '交付']; let catalystCount = 0; for (const item of (newsResult.items || [])) { const text = (item.title || '') + (item.content || ''); if (catalystKeywords.some(kw => text.includes(kw))) catalystCount++; } const newsScore = Math.min(50, recentCount * 3); const catalystDensity = recentCount > 0 ? (catalystCount / recentCount) * 50 : 0; event_catalyst_score = Math.min(100, newsScore + catalystDensity); } catch {}
-    return { earnings_accel, contract_liab_growth, analyst_upgrade_ratio, event_catalyst_score };
+
+    return { profit_forecast_cagr, rev_yoy_latest, earnings_accel };
 }
 
-export interface TenxScoreResult {
-    score: number; label: string; expectedMultiple: string; description: string; aiConclusion: string;
-    dimensions: { name: string; weight: number; score: number; indicators: { name: string; key: string; value: string; score: number; }[]; }[];
-    dimScores: number[]; rawData?: PrefetchedData; updatedAt: string;
+/**
+ * 维度2：赛道景气度 (25%)
+ * 指标：市场认可度、行业渗透率位置、政策/产业趋势强度
+ */
+async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryCache?: IndustryCache): Promise<RawIndicators> {
+    let industryCode = data.industry?.industry_code || '';
+    let industryName = data.industry?.industry_name || '';
+
+    // ① 市场认可度 - 综合机构持股 + 北向资金 + 分析师覆盖 + 交易活跃度
+    let market_recognition: number | null = null;
+
+    // 1a. 机构持股比例
+    const instHold = data.institutionalHold;
+    let instHoldRatio: number | null = null;
+    if (instHold.length > 0) {
+        const latest = instHold.sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
+        instHoldRatio = latest.hold_ratio;
+    }
+
+    // 1b. 北向资金持股比例
+    const hkHold = data.hkHold;
+    let hkHoldRatio: number | null = null;
+    let hkHoldChange: number | null = null;
+    if (hkHold.length > 0) {
+        const sorted = hkHold.sort((a, b) => b.trade_date.localeCompare(a.trade_date));
+        const latest = sorted[0];
+        hkHoldRatio = latest.hold_ratio;
+        if (sorted.length >= 2) {
+            const prev = sorted[Math.min(sorted.length - 1, 19)];
+            hkHoldChange = latest.hold_ratio - prev.hold_ratio;
+        }
+    }
+
+    // 1c. 分析师覆盖数量
+    const analystCount = data.analystRating.length;
+
+    // 1d. 交易活跃度（换手率+成交额）- 作为市场认可度的替代指标
+    let tradingActivityScore: number | null = null;
+    if (data.daily.length > 0 || data.prices.length > 0) {
+        // 换手率来自daily_basic
+        const recentDaily = data.daily.slice(-20);
+        const avgTurnover = recentDaily.length > 0
+            ? recentDaily.reduce((s, r) => s + (r.turnover_rate || 0), 0) / recentDaily.length
+            : 0;
+        // 成交额来自prices（单位：千元）
+        const recentPrices = data.prices.slice(-20);
+        const avgAmount = recentPrices.length > 0
+            ? recentPrices.reduce((s, r) => s + (r.amount || 0), 0) / recentPrices.length
+            : 0;
+        // 换手率评分：日均换手率3%以上为高活跃
+        const turnoverScore = Math.min(avgTurnover / 3, 1) * 60;
+        // 成交额评分：日均成交额5亿以上为高关注
+        const amountScore = Math.min(avgAmount / 50000, 1) * 40;
+        tradingActivityScore = turnoverScore + amountScore;
+    }
+
+    // 1e. 业绩预告关注度
+    let forecastAttentionScore: number | null = null;
+    if (data.forecast.length > 0) {
+        const positiveTypes = data.forecast.filter(r => r.type === '预增' || r.type === '扭亏' || r.type === '略增');
+        forecastAttentionScore = Math.min(positiveTypes.length, 3) / 3 * 100;
+    }
+
+    // 综合计算市场认可度
+    let score = 0;
+    let weight = 0;
+
+    // 机构持股比例贡献（权重30%）
+    if (instHoldRatio != null) {
+        score += Math.min(instHoldRatio, 60) / 60 * 100 * 0.3;
+        weight += 0.3;
+    }
+
+    // 北向资金持股比例贡献（权重20%）
+    if (hkHoldRatio != null) {
+        score += Math.min(hkHoldRatio, 15) / 15 * 100 * 0.2;
+        if (hkHoldChange != null && hkHoldChange > 0) {
+            score += Math.min(hkHoldChange * 10, 15);
+        }
+        weight += 0.2;
+    }
+
+    // 分析师覆盖贡献（权重20%）
+    if (analystCount > 0) {
+        const analystScore = Math.min(analystCount, 20) / 20 * 100;
+        score += analystScore * 0.2;
+        weight += 0.2;
+    }
+
+    // 交易活跃度贡献（权重20%）- 替代指标
+    if (tradingActivityScore != null) {
+        score += tradingActivityScore * 0.2;
+        weight += 0.2;
+    }
+
+    // 业绩预告关注度贡献（权重10%）- 替代指标
+    if (forecastAttentionScore != null) {
+        score += forecastAttentionScore * 0.1;
+        weight += 0.1;
+    }
+
+    if (weight > 0) {
+        market_recognition = Math.min(100, Math.round(score / weight * 10) / 10);
+    }
+
+    // ② 行业渗透率位置 - 基于行业名称判断
+    const industry_penetration = calcPenetrationScore(industryName);
+
+    // ③ 政策/产业趋势强度
+    let policy_trend_score: number | null = null;
+    if (industryName) {
+        for (const [keyword, score] of Object.entries(policyTrendMap)) {
+            if (industryName.includes(keyword)) { policy_trend_score = score; break; }
+        }
+    }
+
+    if (industryCode && industryCache) {
+        industryCache[industryCode] = {
+            industryName,
+            market_recognition: market_recognition ?? 0,
+            policy_trend_score: policy_trend_score ?? 3,
+            members: [],
+        };
+    }
+
+    return { market_recognition, industry_penetration, policy_trend_score };
 }
 
-export class TenxScoreService {
-    static async calculateTenxScore(symbol: string, industryCache?: IndustryCache, cachedStaticData?: PrefetchedData, revenueCache?: RevenueCache): Promise<TenxScoreResult> {
-        let stockName = symbol;
-        try { const info = await TushareInfoService.getStockInfo(symbol); stockName = info['股票简称'] || symbol; } catch {}
+/**
+ * 政策/产业趋势强度映射（1-5分，对应百分制20-100）
+ * 5=国家战略+资本开支高增, 4=有政策支持, 3=一般, 2=平淡, 1=压制
+ */
+const policyTrendMap: Record<string, number> = {
+    // 5分：国家战略+资本开支高增
+    '半导体': 5, '芯片': 5, '人工智能': 5, '新能源': 5, '储能': 5, '信创': 5, '数字经济': 5, '机器人': 5, '量子': 5, '脑机': 5,
+    'CPO': 5, '光模块': 5, '算力': 5, '数据中心': 5, '物理AI': 5, '人形机器人': 5, '固态电池': 5, '低空经济': 5, 'eVTOL': 5,
+    '大模型': 5, 'AIGC': 5, '智算': 5, '国产替代': 5, '先进封装': 5, 'HBM': 5, '硅光': 5, 'Agent': 5,
+    // 4分：有政策支持
+    '光伏': 4, '军工': 4, '航天': 4, '创新药': 4, '电池': 4, '风电': 4, '氢能': 4, '软件': 4, '云计算': 4, '大数据': 4,
+    '网络安全': 4, '生物': 4, '基因': 4, '航空': 4, '新材料': 4, '稀土': 4, '碳中和': 4, '环保': 4, '核电': 4, '卫星': 4,
+    '存储': 4, 'PCB': 4, '光纤': 4, '碳化硅': 4, '特高压': 4, '智能驾驶': 4, '自动驾驶': 4, '激光雷达': 4,
+    '工业母机': 4, '3D打印': 4, '超导': 4, '合成生物': 4, '商业航天': 4, '6G': 4,
+    // 3分：一般
+    '医疗器械': 3, '消费电子': 3, '汽车': 3, '物联网': 3, '通信': 3, '5G': 3, '半导体材料': 3, '显示': 3, '面板': 3,
+    '智能家居': 3, '工业互联': 3, '智能制造': 3, '宠物': 3, '医美': 3, '养老': 3, '体育': 3, '文化': 3, '教育': 3,
+    '游戏': 3, '影视': 3, '食品': 3, '饮料': 3, '家电': 3, '建材': 3, '装饰': 3, '农业': 3, '种业': 3,
+    '培育钻石': 3, 'VR': 3, 'AR': 3, 'MR': 3, 'XR': 3, 'MiniLED': 3, 'MicroLED': 3,
+    '充电桩': 3, '换电': 3, '钠电池': 3, '钒电池': 3,
+    // 2分：平淡
+    '银行': 2, '保险': 2, '证券': 2, '地产': 2, '钢铁': 2, '煤炭': 2, '石油': 2, '化工': 2, '有色': 2,
+    '港口': 2, '公路': 2, '铁路': 2, '电力': 2, '水务': 2, '燃气': 2, '纺织': 2, '服装': 2, '造纸': 2,
+    '包装': 3, '家居': 3, '白酒': 2, '零售': 2, '贸易': 2,
+};
 
-        let data: PrefetchedData;
-        if (cachedStaticData) data = await prefetchDynamicData(symbol, cachedStaticData);
-        else data = await prefetchAllData(symbol);
+/**
+ * 行业渗透率位置评分
+ * 基于行业名称判断渗透率阶段
+ * <10%→100分(早期), 10-20%→80分(成长初期), 20-40%→60分(成长中期), >40%→20分(成熟期)
+ */
+function calcPenetrationScore(industryName: string): number | null {
+    if (!industryName) return null;
+    // 早期渗透率行业（<10%）→ 100分
+    const earlyStage = ['量子', '脑机', '物理AI', '人形机器人', '固态电池', '氢能', 'CPO', '共封装', '玻璃基板',
+        '算力Token', '算电协同', '低空经济', 'eVTOL', '硅光', 'HBM', '先进封装', '合成生物', 'Agent'];
+    // 成长初期行业（10-20%）→ 80分
+    const growthEarly = ['人工智能', '机器人', '储能', '创新药', '培育钻石', '碳化硅', '虚拟现实', 'MR',
+        'AIGC', '大模型', '智算', '信创', '数字经', '6G', '商业航天', '超导'];
+    // 成长中期行业（20-40%）→ 60分
+    const growthMid = ['新能源', '光伏', '半导体', '芯片', '电池', '风电', '5G', '物联网', '消费电子',
+        '光模块', '算力', '数据中心', '自动驾驶', '智能驾驶', '激光雷达', '工业母机', '3D打印', '充电桩'];
+    // 成熟期行业（>40%）→ 20分
+    const mature = ['银行', '保险', '证券', '地产', '钢铁', '煤炭', '石油', '化工', '食品', '饮料', '家电',
+        '汽车', '白酒', '零售', '贸易', '纺织', '造纸', '燃气', '水务', '电力'];
 
-        const growthData = calcGrowthData(data);
-        const profitData = calcProfitabilityData(data);
-        const healthData = calcFinancialHealthData(data);
-        const governanceData = calcGovernanceData(data);
-        const profitCagr = (growthData.profit_cagr as number) || 0;
-        const valuationData = calcValuationData(data, profitCagr);
-        const emptyData: RawIndicators = {};
-        const [industryData, moatData] = await Promise.all([
-            calcIndustryData(symbol, data, industryCache, revenueCache).catch(e => { console.warn('[TenxScore] calcIndustryData failed:', e?.message); return emptyData; }),
-            calcMoatData(symbol, data, industryCache, revenueCache).catch(e => { console.warn('[TenxScore] calcMoatData failed:', e?.message); return emptyData; }),
-        ]);
-        const catalystData = await calcCatalystData(symbol, data).catch(e => { console.warn('[TenxScore] calcCatalystData failed:', e?.message); return emptyData; });
+    if (earlyStage.some(k => industryName.includes(k))) return 8;
+    if (growthEarly.some(k => industryName.includes(k))) return 15;
+    if (growthMid.some(k => industryName.includes(k))) return 30;
+    if (mature.some(k => industryName.includes(k))) return 60;
+    return 25;
+}
 
-        const allRaw: RawIndicators = { stockName, ...growthData, ...profitData, ...valuationData, ...industryData, ...healthData, ...moatData, ...governanceData, ...catalystData };
+/**
+ * 维度3：估值弹性 (15%)
+ * 指标：PEG、当前总市值、估值双击空间
+ */
+function calcValuationElasticity(data: PrefetchedData): RawIndicators {
+    const daily = data.daily;
+    const fina = data.fina;
+    const forecast = data.forecast;
 
-        const indicatorScores: Record<string, number> = {};
-        const zeroAsMissingKeys = new Set(['rev_cagr', 'profit_cagr', 'deducted_cagr', 'earnings_accel', 'contract_liab_growth', 'holder_trade_ratio', 'mgmt_share_ratio', 'analyst_upgrade_ratio', 'event_catalyst_score']);
-        for (const [key, value] of Object.entries(allRaw)) {
-            if (typeof value === 'number' && SCORE_MAPS[key]) {
-                if (key === 'dividend_ratio') { const dr = value as number; if (dr >= 20 && dr <= 40) indicatorScores[key] = 90; else if (dr < 20) indicatorScores[key] = Math.round(30 + (dr / 20) * 55); else indicatorScores[key] = Math.round(90 - (dr - 40) * 1.5); indicatorScores[key] = Math.max(20, Math.min(90, indicatorScores[key])); }
-                else if (zeroAsMissingKeys.has(key) && value === 0) { indicatorScores[key] = 50; allRaw[key] = null; }
-                else indicatorScores[key] = scoreByRange(value, SCORE_MAPS[key]);
+    // ① PEG = PE_TTM / 未来2年预期增速
+    let peg: number | null = null;
+    const latestDaily = daily.length > 0 ? daily[daily.length - 1] : null;
+    const currentPE = latestDaily?.pe;
+
+    if (currentPE && currentPE > 0) {
+        // 优先用业绩预告增速
+        let growthRate: number | null = null;
+        if (forecast.length > 0) {
+            const latestForecast = forecast.sort((a, b) => b.ann_date.localeCompare(a.ann_date))[0];
+            if (latestForecast.p_change_min != null && latestForecast.p_change_max != null) {
+                growthRate = (latestForecast.p_change_min + latestForecast.p_change_max) / 2;
             }
         }
 
-        const dimensions = TENX_DIMS.map(dim => {
-            const scores = dim.indicators.map(ind => indicatorScores[ind.key] ?? 50);
-            const dimScore = Math.round(avg(scores));
-            return { name: dim.name, weight: dim.weight, score: dimScore, indicators: dim.indicators.map((ind, i) => ({ name: ind.name, key: ind.key, value: formatValue(ind.key, allRaw[ind.key] ?? null), score: scores[i] })) };
-        });
+        // 回退：用最近3年净利润CAGR
+        if (!growthRate) {
+            const annualIncome = data.income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p)
+                .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
+            if (annualIncome.length >= 2) {
+                const latest = annualIncome[0].n_income_attr_p || 0;
+                const oldest = annualIncome[annualIncome.length - 1].n_income_attr_p || 0;
+                const years = annualIncome.length - 1;
+                if (oldest > 0 && latest > 0) {
+                    growthRate = (Math.pow(latest / oldest, 1 / years) - 1) * 100;
+                }
+            }
+        }
 
-        const totalScore = Math.round(dimensions.reduce((sum, dim) => sum + dim.score * dim.weight / 100, 0) * 10) / 10;
-        const { label, expectedMultiple } = this.getRating(totalScore);
-        const aiConclusion = this.generateConclusion(stockName, totalScore, dimensions);
-
-        return { score: totalScore, label, expectedMultiple, description: this.getDescription(totalScore), aiConclusion, dimensions, dimScores: dimensions.map(d => d.score), rawData: data, updatedAt: new Date().toISOString() };
+        if (growthRate && growthRate > 0) {
+            peg = currentPE / growthRate;
+        }
     }
 
-    private static getRating(score: number): { label: string; expectedMultiple: string } {
-        if (score >= 85) return { label: '十倍股相似度', expectedMultiple: '10倍+' };
-        if (score >= 75) return { label: '五倍股相似度', expectedMultiple: '5-10倍' };
-        if (score >= 65) return { label: '三倍股相似度', expectedMultiple: '3-5倍' };
-        if (score >= 50) return { label: '一倍股相似度', expectedMultiple: '1-3倍' };
-        return { label: '低于平均', expectedMultiple: '<1倍' };
+    // ② 当前总市值(亿)
+    const total_mv = latestDaily?.total_mv;
+    let market_cap: number | null = null;
+    if (total_mv) market_cap = total_mv / 10000;
+
+    // ③ 估值双击空间(倍) = (1+预期增速)^3 × (行业合理PE/当前PE)
+    let valuation_upside: number | null = null;
+    if (currentPE && currentPE > 0) {
+        // 动态计算行业合理PE：基于行业分类取不同合理PE
+        const industryName = data.industry?.industry_name || '';
+        let reasonablePE = 25; // 默认
+        // 高成长行业给更高合理PE
+        const highPEIndustries = ['半导体', '芯片', '人工智能', '新能源', '储能', '信创', '机器人', 'CPO', '光模块', '算力', '创新药', '数字经济'];
+        const midPEIndustries = ['电子', '消费电子', '通信', '软件', '云计算', '军工', '光伏', '电池', '医疗器械'];
+        for (const kw of highPEIndustries) { if (industryName.includes(kw)) { reasonablePE = 45; break; } }
+        for (const kw of midPEIndustries) { if (industryName.includes(kw)) { reasonablePE = 35; break; } }
+
+        let growthRate = 0;
+        if (forecast.length > 0) {
+            const latestForecast = forecast.sort((a, b) => b.ann_date.localeCompare(a.ann_date))[0];
+            if (latestForecast.p_change_min != null && latestForecast.p_change_max != null) {
+                growthRate = ((latestForecast.p_change_min + latestForecast.p_change_max) / 2) / 100;
+            }
+        }
+        if (growthRate === 0) {
+            const annualIncome = data.income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p)
+                .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 3);
+            if (annualIncome.length >= 2) {
+                const latest = annualIncome[0].n_income_attr_p || 0;
+                const oldest = annualIncome[annualIncome.length - 1].n_income_attr_p || 0;
+                const years = annualIncome.length - 1;
+                if (oldest > 0 && latest > 0) {
+                    growthRate = Math.pow(latest / oldest, 1 / years) - 1;
+                }
+            }
+        }
+        const earningsUpside = Math.pow(1 + growthRate, 3);
+        const peUpside = reasonablePE / currentPE;
+        valuation_upside = earningsUpside * peUpside;
     }
 
-    private static getDescription(score: number): string {
-        if (score >= 85) return '整体具备十倍股核心特征，建议持续跟踪催化剂落地节奏。';
-        if (score >= 75) return '具备五倍股潜力，多数维度表现优秀，关注短板补强。';
-        if (score >= 65) return '有亮点但存在短板，需等待关键催化因素验证。';
-        if (score >= 50) return '部分维度有改善空间，需关注基本面拐点信号。';
-        return '当前与十倍股样本差距较大，建议关注基本面拐点信号。';
+    return { peg, market_cap, valuation_upside };
+}
+
+/**
+ * 维度4：盈利质量 (15%)
+ * 指标：毛利率、净利率同比提升幅度、经营现金流/净利润
+ */
+function calcProfitQuality(data: PrefetchedData): RawIndicators {
+    const { fina, cashflow, income } = data;
+
+    // ① 毛利率(%)
+    let gross_margin: number | null = null;
+    const annualFina = fina.filter(r => r.end_date && r.grossprofit_margin != null)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+    if (annualFina.length > 0) {
+        gross_margin = annualFina[0].grossprofit_margin || 0;
     }
 
-    private static generateConclusion(stockName: string, score: number, dimensions: TenxScoreResult['dimensions']): string {
-        const strongest = dimensions.reduce((a, b) => a.score > b.score ? a : b);
-        const weakest = dimensions.reduce((a, b) => a.score < b.score ? a : b);
-        const strongInds = strongest.indicators.filter(i => i.score >= 60).map(i => i.name);
-        const weakInds = weakest.indicators.filter(i => i.score < 50).map(i => i.name);
-        let text = `${stockName}综合评分${score}，评级${this.getRating(score).label}。`;
-        text += `最强维度"${strongest.name}"由${strongInds.join('、') || '多项指标'}支撑；`;
-        text += `"${weakest.name}"偏弱${weakInds.length ? '，需关注' + weakInds.join('、') + '能否补强' : '，各项指标均已激活'}。`;
-        if (score >= 80) text += '整体具备十倍股核心特征，建议持续跟踪催化剂落地节奏。';
-        else if (score >= 60) text += '有亮点但存在短板，需等待关键催化因素验证。';
-        else text += '当前与十倍股样本差距较大，建议关注基本面拐点信号。';
-        return text;
+    // ② 净利率同比提升幅度(pct)
+    let net_margin_improve: number | null = null;
+    const annualFinaForMargin = fina.filter(r => r.end_date && r.end_date.endsWith('1231') && r.netprofit_margin != null)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 2);
+    if (annualFinaForMargin.length >= 2) {
+        net_margin_improve = (annualFinaForMargin[0].netprofit_margin || 0) - (annualFinaForMargin[1].netprofit_margin || 0);
+    }
+
+    // ③ 经营现金流/净利润
+    let ocf_to_profit: number | null = null;
+    const annualCashflow = cashflow.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_cashflow_act != null)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+    const annualIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.n_income_attr_p)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+
+    if (annualCashflow.length > 0 && annualIncome.length > 0) {
+        const ocf = annualCashflow[0].n_cashflow_act || 0;
+        const profit = annualIncome[0].n_income_attr_p || 0;
+        if (profit !== 0) {
+            ocf_to_profit = ocf / profit;
+        }
+    }
+
+    return { gross_margin, net_margin_improve, ocf_to_profit };
+}
+
+/**
+ * 维度5：竞争壁垒 (10%)
+ * 指标：细分赛道市占率趋势、合同负债环比增速、行业地位不可替代性
+ */
+function calcCompetitiveMoat(data: PrefetchedData): RawIndicators {
+    const { balance, fina, income } = data;
+
+    // ① 细分赛道市占率趋势 - 综合毛利率水平、营收增速、ROE判断
+    // 5=龙一且快速提升, 4=龙一稳步提升, 3=龙二且提升, 2=龙一下滑/跟随者, 1=同质化
+    let market_share_trend: number | null = null;
+    const latestFina = fina.filter(r => r.grossprofit_margin != null)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+    const annualIncome = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 2);
+
+    let revGrowth = 0;
+    if (annualIncome.length >= 2) {
+        const prev = annualIncome[1].total_revenue;
+        if (prev > 0) revGrowth = ((annualIncome[0].total_revenue / prev) - 1) * 100;
+    }
+
+    const grossMargin = latestFina.length > 0 ? (latestFina[0].grossprofit_margin || 0) : 0;
+    const roe = latestFina.length > 0 ? (latestFina[0].roe || 0) : 0;
+
+    // 综合毛利率+营收增速+ROE判断市占率趋势
+    if (grossMargin >= 40 && revGrowth >= 30 && roe >= 15) market_share_trend = 5;
+    else if (grossMargin >= 30 && revGrowth >= 15 && roe >= 10) market_share_trend = 4;
+    else if (grossMargin >= 20 && revGrowth >= 10) market_share_trend = 3;
+    else if (grossMargin >= 10) market_share_trend = 2;
+    else market_share_trend = 1;
+
+    // ② 合同负债环比增速
+    let contract_liab_growth: number | null = null;
+    const balanceReports = balance.filter(r => r.end_date && r.contract_liab != null)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 2);
+    if (balanceReports.length >= 2) {
+        const latest = balanceReports[0].contract_liab || 0;
+        const prev = balanceReports[1].contract_liab || 0;
+        if (prev > 0) {
+            contract_liab_growth = ((latest / prev) - 1) * 100;
+        } else if (latest > 0 && prev === 0) {
+            contract_liab_growth = 100;
+        }
+    }
+
+    // ③ 行业地位不可替代性 - 综合毛利率+研发投入+营收规模判断
+    // 5=绝对龙头+卡脖子, 4=细分龙头, 3=行业前列, 2=跟随者, 1=同质化
+    let industry_position: number | null = null;
+    const rdExpense = income.filter(r => r.end_date && r.end_date.endsWith('1231') && r.rd_exp != null && r.total_revenue)
+        .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+
+    let rdRatio = 0;
+    if (rdExpense.length > 0 && rdExpense[0].total_revenue > 0) {
+        rdRatio = ((rdExpense[0].rd_exp || 0) / rdExpense[0].total_revenue) * 100;
+    }
+
+    // 营收规模（亿）
+    let revenueScale = 0;
+    if (annualIncome.length > 0 && annualIncome[0].total_revenue) {
+        revenueScale = annualIncome[0].total_revenue / 1e8;
+    }
+
+    if (grossMargin >= 50 && rdRatio >= 10) industry_position = 5;
+    else if (grossMargin >= 40 && rdRatio >= 5) industry_position = 4;
+    else if ((grossMargin >= 30 && rdRatio >= 3) || (grossMargin >= 35 && revenueScale >= 100)) industry_position = 3;
+    else if (grossMargin >= 20 || rdRatio >= 3) industry_position = 2;
+    else industry_position = 1;
+
+    return { market_share_trend, contract_liab_growth, industry_position };
+}
+
+/**
+ * 维度6：消息催化 (5%)
+ * 指标：近1月机构调研家数、股东户数较上期变化率、硬催化
+ */
+function calcNewsCatalyst(data: PrefetchedData): RawIndicators {
+    const { holderNumber, forecast, survival, analystRating } = data;
+
+    // ① 近1月机构调研家数 - 使用真实调研数据
+    let research_visit_count: number | null = null;
+    if (survival.length > 0) {
+        // 统计最近1个月不同的调研机构数量
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        const oneMonthAgoStr = oneMonthAgo.toISOString().slice(0, 10).replace(/-/g, '');
+        const recentVisits = survival.filter(r => r.visit_date && String(r.visit_date) >= oneMonthAgoStr);
+        // 去重机构名称
+        const uniqueInstitutions = new Set(recentVisits.map(r => r.institution_name).filter(Boolean));
+        research_visit_count = uniqueInstitutions.size;
+    }
+
+    // 如果没有调研数据，用分析师覆盖数量近似
+    if (research_visit_count === null || research_visit_count === 0) {
+        if (analystRating.length > 0) {
+            const uniqueOrgs = new Set(analystRating.map(r => r.org_name).filter(Boolean));
+            research_visit_count = uniqueOrgs.size * 3; // 分析师数量×3近似调研家数
+        } else {
+            // 最后回退：用业绩预告类型近似
+            const recentForecast = forecast.filter(r => r.ann_date)
+                .sort((a, b) => b.ann_date.localeCompare(a.ann_date)).slice(0, 3);
+            if (recentForecast.length > 0) {
+                const positiveTypes = recentForecast.filter(r => r.type === '预增' || r.type === '扭亏' || r.type === '略增');
+                if (positiveTypes.length >= 2) research_visit_count = 30;
+                else if (positiveTypes.length >= 1) research_visit_count = 15;
+                else research_visit_count = 5;
+            } else {
+                research_visit_count = 0;
+            }
+        }
+    }
+
+    // ② 股东户数较上期变化率
+    let holder_change_rate: number | null = null;
+    if (holderNumber.length >= 2) {
+        const sorted = holderNumber.sort((a, b) => b.end_date.localeCompare(a.end_date));
+        const latest = sorted[0].holder_num;
+        const prev = sorted[1].holder_num;
+        if (prev > 0) {
+            holder_change_rate = ((latest / prev) - 1) * 100;
+        }
+    }
+
+    // ③ 硬催化(政策/订单) - 综合业绩预告+分析师评级+调研热度判断
+    // 5=明确未兑现硬催化, 3=催化偏弱, 2=无催化, 1=利空
+    let hard_catalyst: number | null = null;
+
+    // 3a. 业绩预告信号
+    const recentForecast = forecast.filter(r => r.ann_date)
+        .sort((a, b) => b.ann_date.localeCompare(a.ann_date)).slice(0, 3);
+    let forecastSignal = 0; // -1=利空, 0=中性, 1=正面, 2=强正面
+    if (recentForecast.length > 0) {
+        const latestF = recentForecast[0];
+        if (latestF.type === '预增' || latestF.type === '扭亏') forecastSignal = 2;
+        else if (latestF.type === '略增' || latestF.type === '续盈') forecastSignal = 1;
+        else if (latestF.type === '预减' || latestF.type === '首亏') forecastSignal = -1;
+    }
+
+    // 3b. 分析师评级信号
+    let analystSignal = 0; // 0=无, 1=有买入评级
+    if (analystRating.length > 0) {
+        const buyKeywords = ['买入', '增持', '推荐', '强推', '强烈推荐'];
+        const hasBuy = analystRating.some(r => buyKeywords.some(k => (r.rating || '').includes(k)));
+        if (hasBuy) analystSignal = 1;
+    }
+
+    // 3c. 调研热度信号
+    let visitSignal = 0; // 0=无, 1=有调研
+    if (survival.length > 0) {
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 3);
+        const threeMonthAgoStr = oneMonthAgo.toISOString().slice(0, 10).replace(/-/g, '');
+        const recentVisits = survival.filter(r => r.visit_date && String(r.visit_date) >= threeMonthAgoStr);
+        if (recentVisits.length >= 5) visitSignal = 1;
+    }
+
+    // 综合判断
+    const totalSignal = forecastSignal + analystSignal + visitSignal;
+    if (totalSignal >= 3) hard_catalyst = 5;
+    else if (totalSignal >= 2) hard_catalyst = 4;
+    else if (totalSignal >= 1) hard_catalyst = 3;
+    else if (totalSignal === 0) hard_catalyst = 2;
+    else hard_catalyst = 1;
+
+    return { research_visit_count, holder_change_rate, hard_catalyst };
+}
+
+/**
+ * AI资讯分析打分注入点
+ * 当AI资讯分析返回了指标打分时，会通过此函数注入到原始指标中
+ */
+let aiIndicatorScores: Record<string, Record<string, number>> = {};
+
+export function setAiIndicatorScores(symbol: string, scores: Record<string, number>): void {
+    aiIndicatorScores[symbol] = scores;
+}
+
+export function getAiIndicatorScores(symbol: string): Record<string, number> | null {
+    return aiIndicatorScores[symbol] || null;
+}
+
+export function clearAiIndicatorScores(symbol: string): void {
+    delete aiIndicatorScores[symbol];
+}
+
+/**
+ * 计算单个指标的百分制评分
+ */
+function scoreIndicator(key: string, rawValue: number | string | null | undefined, aiScores?: Record<string, number> | null): number {
+    // 优先使用AI资讯分析打分
+    if (aiScores && aiScores[key] != null) {
+        return Math.min(100, Math.max(0, Math.round(aiScores[key])));
+    }
+
+    if (rawValue === null || rawValue === undefined) {
+        return DEFAULT_SCORE_WHEN_MISSING[key] ?? 50;
+    }
+    if (typeof rawValue === 'string') return DEFAULT_SCORE_WHEN_MISSING[key] ?? 50;
+
+    const ranges = SCORE_MAPS[key];
+    if (!ranges) return DEFAULT_SCORE_WHEN_MISSING[key] ?? 50;
+
+    if (LOW_BETTER_KEYS.has(key)) {
+        return Math.min(100, Math.max(0, scoreByRangeLowBetter(rawValue, ranges)));
+    }
+    return Math.min(100, Math.max(0, scoreByRange(rawValue, ranges)));
+}
+
+function scoreAllIndicators(raw: RawIndicators, aiScores?: Record<string, number> | null): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const dim of TENX_DIMS) {
+        for (const ind of dim.indicators) {
+            result[ind.key] = scoreIndicator(ind.key, raw[ind.key], aiScores);
+        }
+    }
+    return result;
+}
+
+function calcDimScore(dim: DimDef, indScores: Record<string, number>): number {
+    const scores = dim.indicators.map(ind => indScores[ind.key]);
+    return Math.round(avg(scores));
+}
+
+function calcTotalScore(dimScores: number[]): number {
+    let total = 0;
+    for (let i = 0; i < TENX_DIMS.length; i++) {
+        total += dimScores[i] * TENX_DIMS[i].weight / 100;
+    }
+    return Math.round(total * 10) / 10;
+}
+
+function getLabel(score: number): string {
+    if (score >= 85) return 'S';
+    if (score >= 75) return 'A';
+    if (score >= 65) return 'B';
+    if (score >= 55) return 'C';
+    return 'D';
+}
+
+function getExpectedMultiple(score: number): string {
+    if (score >= 85) return '5-10倍';
+    if (score >= 75) return '3-5倍';
+    if (score >= 65) return '2-3倍';
+    if (score >= 55) return '1-2倍';
+    return '<1倍';
+}
+
+function generateDescription(score: number, dimScores: number[], raw: RawIndicators): string {
+    const dimNames = TENX_DIMS.map((d, i) => ({ name: d.name, score: dimScores[i] }));
+    const strongest = dimNames.reduce((a, b) => a.score > b.score ? a : b);
+    const weakest = dimNames.reduce((a, b) => a.score < b.score ? a : b);
+
+    let text = '';
+    text += `综合评分${score}分（${getLabel(score)}级），`;
+    text += `最强维度"${strongest.name}"(${strongest.score}分)；`;
+    text += `"${weakest.name}"偏弱(${weakest.score}分)。`;
+    if (score >= 80) text += '整体具备十倍股核心特征，业绩爆发力与赛道景气度双轮驱动，建议持续跟踪催化剂落地节奏。';
+    else if (score >= 60) text += '有亮点但存在短板，需等待关键催化因素验证，关注业绩加速与估值修复空间。';
+    else text += '当前与十倍股样本差距较大，建议关注基本面拐点信号及赛道切换机会。';
+    return text;
+}
+
+/**
+ * 一票否决检查结果
+ */
+export interface VetoCheckResult {
+    passed: boolean;
+    reasons: string[];    // 否决原因列表
+    avgAmount: number | null;  // 近20日日均成交额（千元）
+    isSt: boolean;        // 是否ST
+}
+
+/** 近20日日均成交额阈值（千元）：3000万 = 300,000千元 */
+const AVG_AMOUNT_THRESHOLD = 300000;
+
+/**
+ * 一票否决检查：流动性与生存底线
+ * 条件：近20日日均成交额 > 3000万 且 非ST股
+ */
+export async function vetoCheck(symbol: string): Promise<VetoCheckResult> {
+    const reasons: string[] = [];
+    let avgAmount: number | null = null;
+    let isSt = false;
+
+    try {
+        // 并行获取成交额和ST状态
+        const [amountResult, stResult] = await Promise.allSettled([
+            TushareService.getAvgAmount(symbol, 20),
+            TushareService.getStStatus(symbol),
+        ]);
+
+        if (amountResult.status === 'fulfilled') {
+            avgAmount = amountResult.value;
+        }
+        if (stResult.status === 'fulfilled') {
+            isSt = stResult.value;
+        }
+
+        // 检查ST状态
+        if (isSt) {
+            reasons.push('该股票为ST/*ST股，存在退市风险，不符合十倍股基本生存条件');
+        }
+
+        // 检查日均成交额
+        if (avgAmount !== null && avgAmount < AVG_AMOUNT_THRESHOLD) {
+            const avgWan = (avgAmount / 100).toFixed(0); // 千元转万元
+            reasons.push(`近20日日均成交额仅${avgWan}万元，低于3000万元阈值，机构资金无法有效进出`);
+        } else if (avgAmount === null) {
+            reasons.push('无法获取成交额数据，流动性无法确认');
+        }
+
+    } catch (e) {
+        reasons.push('流动性数据获取失败，无法确认是否满足基本条件');
+    }
+
+    return {
+        passed: reasons.length === 0,
+        reasons,
+        avgAmount,
+        isSt,
+    };
+}
+
+/** 一票否决错误 */
+export class VetoError extends Error {
+    symbol: string;
+    reasons: string[];
+    avgAmount: number | null;
+    isSt: boolean;
+
+    constructor(symbol: string, reasons: string[], avgAmount: number | null, isSt: boolean) {
+        super(`十倍股否决: ${reasons.join('; ')}`);
+        this.name = 'VetoError';
+        this.symbol = symbol;
+        this.reasons = reasons;
+        this.avgAmount = avgAmount;
+        this.isSt = isSt;
+    }
+}
+
+export interface TenxScoreResult {
+    score: number;
+    label: string;
+    expectedMultiple: string;
+    description: string;
+    aiConclusion: string;
+    dimScores: number[];
+    dimensions: { name: string; weight: number; score: number; indicators: { name: string; key: string; value: string; score: number }[] }[];
+    rawData: PrefetchedData;
+    updatedAt: string;
+}
+
+export class TenxScoreService {
+    static async calculateTenxScore(symbol: string, industryCache?: IndustryCache, cachedStaticData?: any, skipVeto?: boolean): Promise<TenxScoreResult> {
+        console.log(`[TenxScore] 开始计算 ${symbol} 十倍股评分 (v4 前瞻爆发版)`);
+
+        // 一票否决检查（除非明确跳过）
+        if (!skipVeto) {
+            const veto = await vetoCheck(symbol);
+            if (!veto.passed) {
+                console.log(`[TenxScore] ${symbol} 未通过一票否决检查: ${veto.reasons.join('; ')}`);
+                throw new VetoError(symbol, veto.reasons, veto.avgAmount, veto.isSt);
+            }
+        }
+
+        let data: PrefetchedData;
+        if (cachedStaticData) {
+            data = await prefetchDynamicData(symbol, cachedStaticData);
+        } else {
+            data = await prefetchAllData(symbol);
+        }
+
+        // 获取AI资讯分析打分
+        const aiScores = getAiIndicatorScores(symbol);
+
+        // 计算各维度原始指标
+        const rawEarnings = calcEarningsExplosion(data);
+        const rawIndustry = await calcIndustryTrack(symbol, data, industryCache);
+        const rawValuation = calcValuationElasticity(data);
+        const rawProfit = calcProfitQuality(data);
+        const rawMoat = calcCompetitiveMoat(data);
+        const rawCatalyst = calcNewsCatalyst(data);
+
+        const raw: RawIndicators = {
+            ...rawEarnings,
+            ...rawIndustry,
+            ...rawValuation,
+            ...rawProfit,
+            ...rawMoat,
+            ...rawCatalyst,
+            stockName: data.industry?.industry_name,
+        };
+
+        // 计算所有指标百分制评分
+        const indScores = scoreAllIndicators(raw, aiScores);
+
+        // 计算维度评分
+        const dimScores = TENX_DIMS.map(dim => calcDimScore(dim, indScores));
+
+        // 计算总分
+        const score = calcTotalScore(dimScores);
+
+        // 生成标签和描述
+        const label = getLabel(score);
+        const expectedMultiple = getExpectedMultiple(score);
+        const description = generateDescription(score, dimScores, raw);
+
+        // 构建维度详情
+        const dimensions = TENX_DIMS.map((dim, i) => ({
+            name: dim.name,
+            weight: dim.weight,
+            score: dimScores[i],
+            indicators: dim.indicators.map(ind => ({
+                name: ind.name,
+                key: ind.key,
+                value: formatValue(ind.key, raw[ind.key]),
+                score: indScores[ind.key],
+            })),
+        }));
+
+        // AI结论
+        let aiConclusion = '';
+        try {
+            const stockInfo = await TushareInfoService.getStockInfo(symbol);
+            const stockName = stockInfo?.name || symbol;
+            const strongDims = dimensions.filter(d => d.score >= 70).map(d => d.name);
+            const weakDims = dimensions.filter(d => d.score < 50).map(d => d.name);
+            aiConclusion = `${stockName}十倍股评分${score}分(${label}级)。`;
+            if (strongDims.length > 0) aiConclusion += `优势维度：${strongDims.join('、')}。`;
+            if (weakDims.length > 0) aiConclusion += `待改善：${weakDims.join('、')}。`;
+            if (score >= 80) aiConclusion += '具备十倍股核心基因，建议重点跟踪。';
+            else if (score >= 60) aiConclusion += '有潜力但需催化，关注基本面变化。';
+            else aiConclusion += '当前十倍股特征不显著，需等待拐点。';
+        } catch {
+            aiConclusion = `十倍股评分${score}分(${label}级)。`;
+        }
+
+        // 清理AI打分缓存
+        clearAiIndicatorScores(symbol);
+
+        return {
+            score,
+            label,
+            expectedMultiple,
+            description,
+            aiConclusion,
+            dimScores,
+            dimensions,
+            rawData: data,
+            updatedAt: new Date().toISOString(),
+        };
     }
 }

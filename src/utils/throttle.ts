@@ -18,17 +18,22 @@ export function resetThrottle(): void {
 
 export function createThrottler(defaultMs: number = DEFAULT_THROTTLE_MS) {
     let lastTime = 0;
+    let queue = Promise.resolve();
     return {
         async throttle(ms: number = defaultMs): Promise<void> {
-            const now = Date.now();
-            const diff = now - lastTime;
-            if (diff < ms) {
-                await new Promise<void>(r => setTimeout(r, ms - diff));
-            }
-            lastTime = Date.now();
+            queue = queue.then(async () => {
+                const now = Date.now();
+                const diff = now - lastTime;
+                if (diff < ms) {
+                    await new Promise<void>(r => setTimeout(r, ms - diff));
+                }
+                lastTime = Date.now();
+            });
+            await queue;
         },
         reset(): void {
             lastTime = 0;
+            queue = Promise.resolve();
         }
     };
 }

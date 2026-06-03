@@ -1,12 +1,15 @@
-import { TenxScoreService, IndustryCache } from './TenxScoreService';
+import { TenxScoreService, IndustryCache, VetoError, vetoCheck } from './TenxScoreService';
 import * as TushareService from './TushareService';
 import pool from '../db';
 
 const PRIORITY_STOCKS = ['688205', '688008', '300058', '300136', '002050'];
 
-interface RevenueCache {
-    [symbol: string]: TushareService.IncomeRow[];
-}
+const policyMap: Record<string, number> = {
+    '半导体': 5, '芯片': 5, '人工智能': 5, '新能源': 5, '储能': 5, '信创': 5, '数字经济': 5, '机器人': 5, '量子': 5, '脑机': 5,
+    '光伏': 4, '军工': 4, '航天': 4, '创新药': 4, '电池': 4, '风电': 4, '氢能': 4, '软件': 4, '云计算': 4, '大数据': 4, '网络安全': 4, '生物': 4, '基因': 4, '航空': 4, '新材料': 4, '稀土': 4, '碳中和': 4, '环保': 4, '核电': 4, '卫星': 4,
+    '医疗器械': 3, '消费电子': 3, '汽车': 3, '物联网': 3, '通信': 3, '5G': 3, '半导体材料': 3, '显示': 3, '面板': 3, '智能家居': 3, '工业互联': 3, '智能制造': 3, '特高压': 3, '宠物': 3, '医美': 3, '养老': 3, '体育': 3, '文化': 3, '教育': 3, '游戏': 3, '影视': 3, '食品': 3, '饮料': 3, '家电': 3, '建材': 3, '装饰': 3, '农业': 3, '种业': 3,
+    '银行': 2, '保险': 2, '证券': 2, '地产': 2, '钢铁': 2, '煤炭': 2, '石油': 2, '化工': 2, '有色': 2, '港口': 2, '公路': 2, '铁路': 2, '电力': 2, '水务': 2, '燃气': 2,
+};
 
 export class TenxBatchService {
     private static readonly BATCH_DELAY_MS = 2000;
@@ -26,11 +29,12 @@ export class TenxBatchService {
         console.log(`[TenxBatch] 共${symbols.length}只股票待评分, date=${today}, force=${force}`);
         console.log(`[TenxBatch] 优先股票: ${symbols.slice(0, PRIORITY_STOCKS.length).join(', ')}`);
 
-        const { industryCache, revenueCache } = await this.preloadIndustryData(symbols);
-        console.log(`[TenxBatch] 行业数据缓存完成, 共${Object.keys(industryCache).length}个行业, 营收缓存${Object.keys(revenueCache).length}只股票`);
+        const industryCache = await this.preloadIndustryData(symbols);
+        console.log(`[TenxBatch] 行业数据缓存完成, 共${Object.keys(industryCache).length}个行业`);
 
         let success = 0;
         let skipped = 0;
+        let vetoed = 0;
         let failed = 0;
 
         for (const symbol of symbols) {
@@ -43,7 +47,20 @@ export class TenxBatchService {
                     if (existing.rows.length > 0) { skipped++; continue; }
                 }
 
-                const scoreResult = await TenxScoreService.calculateTenxScore(symbol, industryCache, undefined, revenueCache);
+                // 初筛：先做一票否决检查，被否决的跳过评分
+                try {
+                    const vetoResult = await vetoCheck(symbol);
+                    if (!vetoResult.passed) {
+                        vetoed++;
+                        continue;
+                    }
+                } catch {
+                    // 否决检查失败（如无数据），也跳过
+                    vetoed++;
+                    continue;
+                }
+
+                const scoreResult = await TenxScoreService.calculateTenxScore(symbol, industryCache);
 
                 const rawDataJson = scoreResult.rawData ? JSON.stringify(scoreResult.rawData) : null;
                 try {
@@ -98,7 +115,7 @@ export class TenxBatchService {
             }
         }
 
-        console.log(`[TenxBatch] 完成: 成功=${success}, 跳过=${skipped}, 失败=${failed}`);
+        console.log(`[TenxBatch] 完成: 成功=${success}, 跳过=${skipped}, 否决=${vetoed}, 失败=${failed}`);
     }
 
     private static prioritizeSymbols(symbols: string[]): string[] {
@@ -108,12 +125,8 @@ export class TenxBatchService {
         return [...priority, ...rest];
     }
 
-    private static async preloadIndustryData(symbols: string[]): Promise<{
-        industryCache: IndustryCache;
-        revenueCache: RevenueCache;
-    }> {
+    private static async preloadIndustryData(symbols: string[]): Promise<IndustryCache> {
         const industryCache: IndustryCache = {};
-        const revenueCache: RevenueCache = {};
 
         const stockIndustryMap = new Map<string, { code: string; name: string }>();
         for (const symbol of symbols) {
@@ -134,67 +147,40 @@ export class TenxBatchService {
 
         for (const [industryCode, industryName] of industrySet) {
             try {
-                let industry_boom = 50;
+                // 市场认可度：批量模式下用行业指数涨跌幅近似（0-100映射）
+                let market_recognition = 50;
                 try {
-                    const twentyDaysAgo = new Date();
-                    twentyDaysAgo.setDate(twentyDaysAgo.getDate() - 150);
-                    const startDate = twentyDaysAgo.toISOString().slice(0, 10).replace(/-/g, '');
+                    const sixMonthsAgo = new Date();
+                    sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180);
+                    const startDate = sixMonthsAgo.toISOString().slice(0, 10).replace(/-/g, '');
                     const daily = await TushareService.getIndexDaily(industryCode, startDate);
                     if (daily.length >= 2) {
                         const sorted = daily.sort((a, b) => a.trade_date.localeCompare(b.trade_date));
                         const first = sorted[0], last = sorted[sorted.length - 1];
                         if (first.close > 0) {
-                            const pctChange = ((last.close / first.close) - 1) * 100;
-                            industry_boom = Math.max(0, Math.min(100, 50 + pctChange * 2));
+                            const industryReturn = ((last.close / first.close) - 1) * 100;
+                            // 将行业涨跌幅映射为0-100的市场认可度
+                            market_recognition = Math.min(100, Math.max(0, 50 + industryReturn * 2));
                         }
                     }
                 } catch {}
 
+                let policy_trend_score = 2;
+                for (const [keyword, score] of Object.entries(policyMap)) {
+                    if (industryName.includes(keyword)) { policy_trend_score = score; break; }
+                }
+
                 let members: string[] = [];
                 try { members = await TushareService.getIndexMember(industryCode); } catch {}
 
-                let totalRevenue = 0, prevRevenue = 0;
-                const sampleSize = 20;
-                const sample = members.length > sampleSize
-                    ? members.filter((_, i) => i % Math.ceil(members.length / sampleSize) === 0)
-                    : members;
-
-                for (const sym of sample) {
-                    if (revenueCache[sym]) continue;
-                    try {
-                        const twoYearsAgo = new Date();
-                        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 3);
-                        const startDate = twoYearsAgo.toISOString().slice(0, 10).replace(/-/g, '');
-                        const income = await TushareService.getIncome(sym, startDate);
-                        revenueCache[sym] = income;
-                        const annualReports = income
-                            .filter(r => r.end_date && r.end_date.endsWith('1231') && r.total_revenue)
-                            .sort((a, b) => b.end_date.localeCompare(a.end_date));
-                        if (annualReports.length >= 2) {
-                            totalRevenue += annualReports[0].total_revenue || 0;
-                            prevRevenue += annualReports[1].total_revenue || 0;
-                        }
-                    } catch {}
-                }
-
-                const growthRate = prevRevenue > 0 ? ((totalRevenue / prevRevenue) - 1) * 100 : 0;
-                let industry_penetration = 30;
-                if (growthRate > 30) industry_penetration = 5 + (50 - Math.min(growthRate, 50)) / 50 * 10;
-                else if (growthRate > 15) industry_penetration = 15 + (30 - growthRate) / 15 * 15;
-                else if (growthRate > 5) industry_penetration = 30 + (15 - growthRate) / 10 * 20;
-                else industry_penetration = 50 + (5 - Math.max(growthRate, 0)) / 5 * 30;
-
-                let concentration = 40;
-                if (members.length > 0) concentration = Math.min(80, Math.max(20, 100 - members.length * 0.8));
-
-                industryCache[industryCode] = { industryName, industry_boom, industry_penetration, concentration, members };
-                console.log(`[TenxBatch] 行业缓存: ${industryName}(${industryCode}), 成分股=${members.length}, 景气=${industry_boom.toFixed(0)}, 渗透率=${industry_penetration.toFixed(1)}%`);
+                industryCache[industryCode] = { industryName, market_recognition, policy_trend_score, members };
+                console.log(`[TenxBatch] 行业缓存: ${industryName}(${industryCode}), 成分股=${members.length}, 市场认可度=${market_recognition.toFixed(1)}, 政策=${policy_trend_score}`);
             } catch (err: any) {
                 console.error(`[TenxBatch] 行业缓存失败 ${industryCode}:`, err?.message || err);
             }
         }
 
-        return { industryCache, revenueCache };
+        return industryCache;
     }
 
     private static sleep(ms: number): Promise<void> {

@@ -6,6 +6,7 @@ import { getAShareAdaptiveCacheTtlSeconds } from '../utils/tradingTime';
 
 const CAPITAL_FLOW_CACHE_KEY_PREFIX = 'capital_flow:';
 const CAPITAL_FLOW_TRADING_TTL_SECONDS = 3 * 60;
+const CAPITAL_FLOW_CLOSE_UPDATE_TIME = { hour: 19, minute: 5 };
 const CAPITAL_FLOW_BATCH_CACHE_KEY = 'capital_flow:batch_status';
 
 export class CapitalFlowController {
@@ -29,7 +30,7 @@ export class CapitalFlowController {
         try {
             const data = await getCapitalFlowWithAi(symbol);
             try {
-                const ttl = await getAShareAdaptiveCacheTtlSeconds(CAPITAL_FLOW_TRADING_TTL_SECONDS);
+                const ttl = await getAShareAdaptiveCacheTtlSeconds(CAPITAL_FLOW_TRADING_TTL_SECONDS, { afterCloseUpdateTime: CAPITAL_FLOW_CLOSE_UPDATE_TIME });
                 await CacheService.put(cacheKey, data as unknown as Record<string, any>, ttl);
             } catch {
                 await CacheService.put(cacheKey, data as unknown as Record<string, any>, CAPITAL_FLOW_TRADING_TTL_SECONDS);
@@ -74,7 +75,7 @@ export class CapitalFlowController {
                         if (cached) { skipped++; continue; }
                     }
                     const data = await getCapitalFlow(symbol);
-                    const ttl = await getAShareAdaptiveCacheTtlSeconds(CAPITAL_FLOW_TRADING_TTL_SECONDS);
+                    const ttl = await getAShareAdaptiveCacheTtlSeconds(CAPITAL_FLOW_TRADING_TTL_SECONDS, { afterCloseUpdateTime: CAPITAL_FLOW_CLOSE_UPDATE_TIME });
                     await CacheService.put(cacheKey, data as unknown as Record<string, any>, ttl);
                     success++;
                 } catch (err: any) {

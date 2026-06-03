@@ -132,6 +132,7 @@ app.get('/api/cn/index/quotes', (req, res, next) => IndexQuoteController.getInde
 app.get('/api/gb/index/quotes', (req, res, next) => IndexQuoteController.getGlobalIndexQuotes(req, res, next));
 
 app.get('/api/cn/stocks/tenx-score/batch', (req, res, next) => TenxScoreController.batchRefresh(req, res, next));
+app.post('/api/cn/stocks/tenx-score/batch', (req, res, next) => TenxScoreController.batchRefresh(req, res, next));
 app.get('/api/cn/stocks/tenx-score/rebuild', (req, res, next) => TenxScoreController.rebuildAll(req, res, next));
 app.get('/api/cn/stocks/profit-forecast', (req, res, next) => ProfitForecastController.getForecastList(req, res, next));
 app.get('/api/cn/stocks/profit-forecast/search', (req, res, next) => ProfitForecastController.searchForecastList(req, res, next));
@@ -220,6 +221,25 @@ app.get('/api/cn/stocks/:symbol/tenx-score/refresh', (req, res, next) => {
     }
     TenxScoreController.refreshScore(req, res, next);
 });
+app.post('/api/cn/stocks/:symbol/tenx-score/refresh', (req, res, next) => {
+    if (!isValidAShareSymbol(req.params.symbol)) {
+        res.status(400).json({ code: 400, message: 'Invalid symbol - A股代码必须是6位数字' });
+        return;
+    }
+    TenxScoreController.refreshScore(req, res, next);
+});
+
+app.get('/api/cn/stocks/:symbol/tenx-score/veto-check', (req, res, next) => {
+    if (!isValidAShareSymbol(req.params.symbol)) {
+        res.status(400).json({ code: 400, message: 'Invalid symbol - A股代码必须是6位数字' });
+        return;
+    }
+    TenxScoreController.checkVeto(req, res, next);
+});
+
+app.get('/api/cn/stocks/tenx-score/top', (req, res, next) => {
+    TenxScoreController.getTopStocks(req, res, next);
+});
 
 app.get('/api/news/headlines', (req, res, next) => NewsController.getHeadlines(req, res, next));
 app.get('/api/news/cn', (req, res, next) => NewsController.getCnNews(req, res, next));
@@ -243,7 +263,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
     res.status(500).json({ code: 500, message: err.message || 'Internal Server Error' });
 });
 
-cron.schedule('0 19 * * *', async () => {
+cron.schedule('0 4 * * *', async () => {
     console.log('[TenxCron] 开始批量评分');
     try {
         await TenxBatchService.run();
@@ -253,7 +273,7 @@ cron.schedule('0 19 * * *', async () => {
     }
 });
 
-cron.schedule('30 15 * * 1-5', async () => {
+cron.schedule('5 19 * * 1-5', async () => {
     console.log('[CapitalFlowCron] 收盘后批量预取资金流向');
     try {
         const { isAShareTradingTime } = await import('./utils/tradingTime');

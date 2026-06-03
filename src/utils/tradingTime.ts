@@ -13,7 +13,7 @@ interface HolidayApiResponse {
 
 interface ChinaDateTimeParts { year: number; month: number; day: number; hour: number; minute: number; second: number; }
 
-export interface AShareTradingTimeOptions { now?: Date | number; fetcher?: typeof fetch; }
+export interface AShareTradingTimeOptions { now?: Date | number; fetcher?: typeof fetch; afterCloseUpdateTime?: { hour: number; minute: number }; }
 
 const chinaDateFormatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -128,6 +128,25 @@ export async function getAShareAdaptiveCacheTtlSeconds(tradingTtlSeconds: number
     const holiday = weekend ? true : await isChinaHoliday(dateKey, fetcher);
     const inTradingWindows = isWithinTradingWindows(chinaParts);
     if (!weekend && !holiday && inTradingWindows && !isClosingRefreshMoment(chinaParts)) return resolvedTradingTtlSeconds;
+
+    // 盘后定时更新逻辑：如果指定了 afterCloseUpdateTime，则计算到该时间点的 TTL
+    if (options.afterCloseUpdateTime && !weekend && !holiday) {
+        const { hour: updateHour, minute: updateMinute } = options.afterCloseUpdateTime;
+        const nowSeconds = chinaParts.hour * 3600 + chinaParts.minute * 60 + chinaParts.second;
+        const updateSeconds = updateHour * 3600 + updateMinute * 60;
+
+        if (nowSeconds < updateSeconds) {
+            // 还没到更新时间，缓存到更新时刻
+            const ttl = updateSeconds - nowSeconds;
+            return Math.max(60, ttl);
+        }
+        // 已过更新时间，缓存到次日更新时刻
+        const tomorrow = addCalendarDays({ year: chinaParts.year, month: chinaParts.month, day: chinaParts.day }, 1);
+        const tomorrowUpdateMs = chinaDateTimeToTimestampMs(tomorrow, updateHour, updateMinute, 0);
+        const ttl = Math.ceil((tomorrowUpdateMs - nowDate.getTime()) / 1000);
+        return Math.max(60, ttl);
+    }
+
     return getSecondsUntilNextTradingOpen(nowDate, fetcher);
 }
 
