@@ -79,36 +79,38 @@ class Storage:
         key = self._make_key(stock_code, event_time)
         return key in self._seen
 
-    def _push_to_backend(self, record):
-        """将单条记录推送到后端API"""
+    def _push_to_backend(self, records):
+        """批量推送记录到后端API"""
+        if not records:
+            return
         try:
-            # 构建后端API期望的数据格式
-            stock_code = record.get("stock_code", "")
-            # 转换为后端symbol格式: SZ300308 / SH600000
-            if stock_code.startswith("6"):
-                symbol = f"SH{stock_code}"
-            elif stock_code.startswith("0") or stock_code.startswith("3"):
-                symbol = f"SZ{stock_code}"
-            else:
-                symbol = f"SZ{stock_code}"
+            events = []
+            for record in records:
+                stock_code = record.get("stock_code", "")
+                if stock_code.startswith("6"):
+                    symbol = f"SH{stock_code}"
+                elif stock_code.startswith("0") or stock_code.startswith("3"):
+                    symbol = f"SZ{stock_code}"
+                else:
+                    symbol = f"SZ{stock_code}"
 
-            event = {
-                "event_id": record.get("event_id", ""),
-                "symbol": symbol,
-                "stock_name": record.get("stock_name", ""),
-                "event_type": str(record.get("change_type_code", "")),
-                "level": record.get("level", ""),
-                "summary": record.get("summary", ""),
-                "event_time": record.get("event_time", ""),
-                "detail_url": record.get("detail_url", ""),
-                "raw_data_json": {
-                    "change_type": str(record.get("change_type_code", "")),
-                    "event_type": record.get("event_type", ""),
-                },
-            }
-            self._push_client.push_monitor_event(event)
+                events.append({
+                    "event_id": record.get("event_id", ""),
+                    "symbol": symbol,
+                    "stock_name": record.get("stock_name", ""),
+                    "event_type": str(record.get("change_type_code", "")),
+                    "level": record.get("level", ""),
+                    "summary": record.get("summary", ""),
+                    "event_time": record.get("event_time", ""),
+                    "detail_url": record.get("detail_url", ""),
+                    "raw_data_json": {
+                        "change_type": str(record.get("change_type_code", "")),
+                        "event_type": record.get("event_type", ""),
+                    },
+                })
+            self._push_client.push_batch_monitor_events(events)
         except Exception as e:
-            logger.warning(f"推送到后端失败: {e}")
+            logger.warning(f"批量推送到后端失败: {e}")
 
     def save(self, records):
         if not records:
@@ -138,9 +140,8 @@ class Storage:
             existing.append({k: record.get(k, "") for k in JSON_FIELDS})
         self._write_json(filepath, existing)
 
-        # 推送到后端API
-        for record in new_records:
-            self._push_to_backend(record)
+        # 批量推送到后端API
+        self._push_to_backend(new_records)
 
         saved_count = len(new_records)
         logger.info(f"保存 {saved_count} 条新记录到JSON, 并推送到后端")
