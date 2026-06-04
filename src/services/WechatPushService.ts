@@ -30,7 +30,19 @@ export interface PushResult {
 }
 
 export class WechatPushService {
-    private static readonly DAILY_LIMIT = 10;
+    private static readonly DAILY_LIMIT = 5;
+    private static readonly STOCK_COOLDOWN_MINUTES = 30;
+    private static readonly LEVEL_RANK: Record<string, number> = {
+        L1: 1,
+        L2: 2,
+        L3: 3,
+        L4: 4,
+    };
+    private static readonly EVENT_TYPE_SETTING_MAP: Record<string, string> = {
+        '短线异动': 'push_tag_short_term',
+        '中线异动': 'push_tag_mid_term',
+        '长线异动': 'push_tag_long_term',
+    };
 
     private static log(stage: string, message: string, data?: any): void {
         const ts = new Date().toISOString();
@@ -64,6 +76,28 @@ export class WechatPushService {
         return !setting || Number(setting.enabled) !== 0;
     }
 
+    private static async isEventTypeMatched(openid: string, eventType: string): Promise<boolean> {
+        const requiredSetting = WechatPushService.EVENT_TYPE_SETTING_MAP[eventType];
+        if (!requiredSetting) return true;
+
+        const result = await pool.query(
+            `SELECT setting_type, enabled
+             FROM user_settings
+             WHERE openid = $1
+               AND setting_type IN ('push_tag_short_term', 'push_tag_mid_term', 'push_tag_long_term')`,
+            [openid],
+        );
+
+        const settings = result.rows || [];
+        if (settings.length === 0) {
+            return true;
+        }
+
+        return settings.some((item: any) =>
+            item.setting_type === requiredSetting && Number(item.enabled) === 1,
+        );
+    }
+
     private static async hasPushed(eventId: string, openid: string): Promise<boolean> {
         const result = await pool.query(
             `SELECT id
@@ -85,6 +119,35 @@ export class WechatPushService {
             [openid],
         );
         return Number(result.rows[0]?.count || 0) >= WechatPushService.DAILY_LIMIT;
+    }
+
+    private static getLevelRank(level: string): number {
+        return WechatPushService.LEVEL_RANK[String(level || '').toUpperCase()] || 0;
+    }
+
+    private static isLowPriorityLevel(level: string): boolean {
+        return WechatPushService.getLevelRank(level) <= WechatPushService.LEVEL_RANK.L1;
+    }
+
+    private static async isInStockCooldown(event: MonitorEvent, openid: string): Promise<boolean> {
+        const result = await pool.query(
+            `SELECT level
+             FROM wechat_push_logs
+             WHERE openid = $1
+               AND symbol = $2
+               AND status = 'sent'
+               AND sent_at >= CURRENT_TIMESTAMP - ($3::text || ' minutes')::interval
+             ORDER BY sent_at DESC
+             LIMIT 1`,
+            [openid, event.symbol, WechatPushService.STOCK_COOLDOWN_MINUTES],
+        );
+
+        const lastSent = result.rows[0];
+        if (!lastSent) return false;
+
+        const currentRank = WechatPushService.getLevelRank(event.level);
+        const lastRank = WechatPushService.getLevelRank(lastSent.level);
+        return currentRank <= lastRank;
     }
 
     private static async insertPushLog(
@@ -196,10 +259,31 @@ export class WechatPushService {
                 continue;
             }
 
+            if (!(await WechatPushService.isEventTypeMatched(openid, event.event_type))) {
+                await WechatPushService.insertPushLog(event, openid, 'skipped', 'tag_mismatch', null);
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'tag_mismatch' });
+                continue;
+            }
+
+            if (WechatPushService.isLowPriorityLevel(event.level)) {
+                await WechatPushService.insertPushLog(event, openid, 'skipped', 'low_level', null);
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'low_level' });
+                continue;
+            }
+
             if (await WechatPushService.isOverDailyLimit(openid)) {
                 await WechatPushService.insertPushLog(event, openid, 'skipped', 'daily_limit_reached', null);
                 pushResult.skipped += 1;
                 pushResult.logs.push({ openid, status: 'skipped', reason: 'daily_limit_reached' });
+                continue;
+            }
+
+            if (await WechatPushService.isInStockCooldown(event, openid)) {
+                await WechatPushService.insertPushLog(event, openid, 'skipped', 'stock_cooldown', null);
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'stock_cooldown' });
                 continue;
             }
 

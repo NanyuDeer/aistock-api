@@ -27,6 +27,7 @@ import { TenxScoreController } from './controllers/TenxScoreController';
 import { CapitalFlowController } from './controllers/CapitalFlowController';
 import { MonitorEventController } from './controllers/MonitorEventController';
 import { StockMonitorController } from './controllers/StockMonitorController';
+import { PotentialStockPushController } from './controllers/PotentialStockPushController';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -120,6 +121,9 @@ app.post('/api/internal/monitor-events/batch', (req, res, next) => MonitorEventC
 app.get('/api/cn/monitor/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
 app.get('/api/cn/monitor/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
 app.get('/api/cn/monitor/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
+
+app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
+app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
 
 app.get('/api/cn/market/stockrank', (req, res, next) => StockRankController.getHotRank(req, res, next));
 app.get('/api/cn/stocks', (req, res, next) => StockListController.getStockList(req, res, next));
