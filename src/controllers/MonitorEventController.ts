@@ -4,6 +4,8 @@ import pool from '../db';
 import { createResponse } from '../utils/response';
 import { WechatPushService } from '../services/WechatPushService';
 
+const MAX_RESPONSE_RESULTS = 20;
+
 const CHANGE_TYPES: Record<string, string> = {
     '4': '封涨停板',
     '8': '封跌停板',
@@ -232,10 +234,9 @@ export class MonitorEventController {
             total: payloadEvents.length,
             success: 0,
             failed: 0,
-            matched_users: 0,
-            sent: 0,
-            skipped: 0,
-            push_failed: 0,
+            queued: 0,
+            not_queued: 0,
+            truncated_results: 0,
         };
 
         for (const payload of payloadEvents) {
@@ -246,30 +247,39 @@ export class MonitorEventController {
                 }
 
                 await saveEvent(event);
-                const pushResult = await WechatPushService.dispatchMonitorEvent(event);
+                const queueResult = WechatPushService.enqueueMonitorEvent(event);
 
                 summary.success += 1;
-                summary.matched_users += pushResult?.matched_users || 0;
-                summary.sent += pushResult?.sent || 0;
-                summary.skipped += pushResult?.skipped || 0;
-                summary.push_failed += pushResult?.failed || 0;
+                if (queueResult.queued) {
+                    summary.queued += 1;
+                } else {
+                    summary.not_queued += 1;
+                }
 
-                results.push({
-                    event,
-                    ...pushResult,
-                });
+                if (results.length < MAX_RESPONSE_RESULTS) {
+                    results.push({
+                        event,
+                        queue: queueResult,
+                    });
+                } else {
+                    summary.truncated_results += 1;
+                }
             } catch (err: any) {
                 summary.failed += 1;
-                results.push({
-                    status: 'failed',
-                    error: err instanceof Error ? err.message : String(err),
-                    raw: payload,
-                });
+                if (results.length < MAX_RESPONSE_RESULTS) {
+                    results.push({
+                        status: 'failed',
+                        error: err instanceof Error ? err.message : String(err),
+                        raw: payload,
+                    });
+                } else {
+                    summary.truncated_results += 1;
+                }
             }
         }
 
         const code = summary.failed > 0 ? 207 : 200;
-        createResponse(res, code, payloadEvents.length > 1 ? 'batch success' : 'success', {
+        createResponse(res, code, payloadEvents.length > 1 ? 'batch accepted' : 'accepted', {
             summary,
             results,
             event: results[0]?.event,
