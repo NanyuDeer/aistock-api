@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 # 加载 .env 文件中的环境变量
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = Path(__file__).parent.parent
 _env_file = _PROJECT_ROOT / ".env"
 if _env_file.exists():
     with open(_env_file, "r", encoding="utf-8") as _f:
