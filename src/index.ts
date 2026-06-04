@@ -28,6 +28,7 @@ import { CapitalFlowController } from './controllers/CapitalFlowController';
 import { MonitorEventController } from './controllers/MonitorEventController';
 import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
+import { HotSectorController } from './controllers/HotSectorController';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -121,6 +122,11 @@ app.post('/api/internal/monitor-events/batch', (req, res, next) => MonitorEventC
 app.get('/api/cn/monitor/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
 app.get('/api/cn/monitor/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
 app.get('/api/cn/monitor/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
+
+// 风口爆发股
+app.post('/api/cn/hot-sectors/refresh', (req, res, next) => HotSectorController.refreshAnalysis(req, res, next));
+app.get('/api/cn/hot-sectors', (req, res, next) => HotSectorController.getHotSectors(req, res, next));
+app.post('/api/internal/hot-sectors', (req, res, next) => HotSectorController.pushHotSectors(req, res, next));
 
 app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
 app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
@@ -314,6 +320,10 @@ cron.schedule('5 19 * * 1-5', async () => {
         console.error('[CapitalFlowCron] 批量预取失败:', err?.message || err);
     }
 });
+
+// 风口爆发股定时分析已迁移到 Python 后端（hot-sector-engine/app.py，每天凌晨3点执行）
+// TS 后端通过 POST /api/internal/hot-sectors 接收 Python 推送的数据
+// cron.schedule('35 15 * * 1-5', async () => { ... });
 
 async function start() {
     try {

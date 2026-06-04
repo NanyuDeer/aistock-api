@@ -564,3 +564,137 @@ export async function getAnalystRating(symbol: string, startDate?: string): Prom
 
     return [];
 }
+
+// ==================== 风口爆发股专用接口 ====================
+
+export interface MoneyflowRow {
+    ts_code: string; trade_date: string;
+    buy_sm_amount: number; sell_sm_amount: number;
+    buy_md_amount: number; sell_md_amount: number;
+    buy_lg_amount: number; sell_lg_amount: number;
+    buy_elg_amount: number; sell_elg_amount: number;
+    net_mf_amount: number;  // 净流入额（万元）
+}
+
+/** 获取个股资金流向 */
+export async function getMoneyflow(symbol: string, startDate?: string, endDate?: string): Promise<MoneyflowRow[]> {
+    const params: Record<string, any> = { ts_code: toTsCode(symbol) };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    const rows = await tushareRequest(
+        'moneyflow',
+        params,
+        'ts_code,trade_date,buy_sm_amount,sell_sm_amount,buy_md_amount,sell_md_amount,buy_lg_amount,sell_lg_amount,buy_elg_amount,sell_elg_amount,net_mf_amount',
+    );
+    return rows as MoneyflowRow[];
+}
+
+/** 获取单日全市场资金流向（用于批量选股） */
+export async function getMoneyflowByDate(tradeDate: string): Promise<MoneyflowRow[]> {
+    const rows = await tushareRequest(
+        'moneyflow',
+        { trade_date: tradeDate },
+        'ts_code,trade_date,buy_lg_amount,sell_lg_amount,buy_elg_amount,sell_elg_amount,net_mf_amount',
+    );
+    return rows as MoneyflowRow[];
+}
+
+export interface DailyBasicFullRow {
+    ts_code: string; trade_date: string;
+    close: number; turnover_rate: number; turnover_rate_f: number;
+    volume_ratio: number; pe: number; pe_ttm: number;
+    pb: number; ps: number; ps_ttm: number;
+    total_share: number; float_share: number; free_share: number;
+    total_mv: number; circ_mv: number;
+}
+
+/** 获取单日全市场每日指标（用于批量选股） */
+export async function getDailyBasicByDate(tradeDate: string): Promise<DailyBasicFullRow[]> {
+    const rows = await tushareRequest(
+        'daily_basic',
+        { trade_date: tradeDate },
+        'ts_code,trade_date,close,turnover_rate,turnover_rate_f,volume_ratio,pe,pe_ttm,pb,ps,ps_ttm,total_share,float_share,free_share,total_mv,circ_mv',
+    );
+    return rows as DailyBasicFullRow[];
+}
+
+/** 获取个股近N日日线行情（用于计算连续上涨天数等） */
+export async function getStockDailyRecent(symbol: string, days: number = 10): Promise<DailyPriceRow[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days * 2);
+    const startDateStr = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const rows = await tushareRequest(
+        'daily',
+        { ts_code: toTsCode(symbol), start_date: startDateStr },
+        'ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount',
+    );
+    // 取最近N个交易日
+    const sorted = rows.sort((a, b) => String(b.trade_date).localeCompare(String(a.trade_date)));
+    return sorted.slice(0, days) as DailyPriceRow[];
+}
+
+// ==================== 同花顺板块指数接口 ====================
+
+export interface ThsIndexRow {
+    ts_code: string;
+    name: string;
+    count: number;
+    exchange: string;
+    list_date: string;
+    type: string;
+}
+
+/** 获取同花顺概念/行业指数列表 */
+export async function getThsIndex(type: string = 'N', exchange: string = 'A'): Promise<ThsIndexRow[]> {
+    const rows = await tushareRequest(
+        'ths_index',
+        { type, exchange },
+        'ts_code,name,count,exchange,list_date,type',
+    );
+    return rows as ThsIndexRow[];
+}
+
+export interface ThsDailyRow {
+    ts_code: string;
+    trade_date: string;
+    close: number;
+    open: number;
+    high: number;
+    low: number;
+    pre_close: number;
+    change: number;
+    pct_change: number;
+    vol: number;
+    turnover_rate: number;
+    total_mv?: number;
+    float_mv?: number;
+}
+
+/** 获取同花顺板块指数日线行情 */
+export async function getThsDaily(tsCode: string, startDate: string, endDate?: string): Promise<ThsDailyRow[]> {
+    const params: Record<string, any> = { ts_code: tsCode, start_date: startDate };
+    if (endDate) params.end_date = endDate;
+    const rows = await tushareRequest(
+        'ths_daily',
+        params,
+        'ts_code,trade_date,close,open,high,low,pre_close,change,pct_change,vol,turnover_rate',
+    );
+    return rows as ThsDailyRow[];
+}
+
+export interface ThsMemberRow {
+    ts_code: string;
+    con_code: string;
+    con_name: string;
+    is_new: string;
+}
+
+/** 获取概念板块成分股列表 */
+export async function getThsMember(tsCode: string): Promise<ThsMemberRow[]> {
+    const rows = await tushareRequest(
+        'ths_member',
+        { ts_code: tsCode },
+        'ts_code,con_code,con_name,is_new',
+    );
+    return rows as ThsMemberRow[];
+}
