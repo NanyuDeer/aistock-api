@@ -18,6 +18,30 @@
       "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
       "merge_logs": true,
       "max_memory_restart": "512M"
+    },
+    {
+      "name": "crawler-eastmoney-monitor",
+      "script": "sources/eastmoney.com/crawler.py",
+      "interpreter": "/home/aistock/.local/bin/python3",
+      "cwd": "/home/aistock/aistock-api/crawlers",
+      "args": "--module monitor_event",
+      "instances": 1,
+      "exec_mode": "fork",
+      "watch": false,
+      "autorestart": true,
+      "max_restarts": 30,
+      "restart_delay": 10000,
+      "env": {
+        "USE_PROXY": "true",
+        "API_BASE_URL": "http://localhost:3000"
+      },
+      "error_file": "/home/aistock/logs/crawler-eastmoney-error.log",
+      "out_file": "/home/aistock/logs/crawler-eastmoney-out.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "max_memory_restart": "512M",
+      "kill_timeout": 15000,
+      "listen_timeout": 10000
     }
   ]
 }
