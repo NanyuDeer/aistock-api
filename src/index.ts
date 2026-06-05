@@ -30,10 +30,13 @@ import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
 import { HotSectorController } from './controllers/HotSectorController';
 import { TenxBatchService } from './services/TenxBatchService';
+import { StockMonitorService } from './services/StockMonitorService';
+import { isAShareTradingTime } from './utils/tradingTime';
 import { isValidAShareSymbol } from './utils/validator';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
+let stockMonitorScanning = false;
 
 const corsAllowOrigin = process.env.CORS_ALLOW_ORIGIN || '';
 const allowedOrigins = corsAllowOrigin.split(',').map(s => s.trim()).filter(Boolean);
@@ -320,6 +323,28 @@ cron.schedule('5 19 * * 1-5', async () => {
         console.error('[CapitalFlowCron] 批量预取失败:', err?.message || err);
     }
 });
+
+if (process.env.STOCK_MONITOR_CRON_ENABLED !== 'false') {
+    cron.schedule('* * * * 1-5', async () => {
+        if (stockMonitorScanning) return;
+        stockMonitorScanning = true;
+        try {
+            const isTrading = await isAShareTradingTime();
+            if (!isTrading) return;
+
+            const result = await StockMonitorService.scanAndDispatch();
+            if (result.inserted > 0 || result.failed > 0) {
+                console.log(
+                    `[StockMonitorCron] 完成: 抓取=${result.fetched}, 新增=${result.inserted}, 推送=${result.pushed}, 失败=${result.failed}`,
+                );
+            }
+        } catch (err: any) {
+            console.error('[StockMonitorCron] 主动扫描失败:', err?.message || err);
+        } finally {
+            stockMonitorScanning = false;
+        }
+    });
+}
 
 // 风口爆发股定时分析已迁移到 Python 后端（hot-sector-engine/app.py，每天凌晨3点执行）
 // TS 后端通过 POST /api/internal/hot-sectors 接收 Python 推送的数据

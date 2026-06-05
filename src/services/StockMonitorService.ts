@@ -1,15 +1,11 @@
 /**
  * 个股异动监测服务
  *
- * 职责：从数据源拉取全市场行情，计算异动指标，生成异动事件
- *
- * 当前状态：预留接口，返回空数据
- * 后续升级：接入东方财富全市场行情批量接口，实现主动监测引擎
+ * 职责：主动拉取东方财富盘口异动，入库并触发推送
  */
 
 import pool from '../db';
-import { EmQuoteService } from './EmQuoteService';
-import { EmService } from './EmInfoService';
+import { MonitorEvent, WechatPushService } from './WechatPushService';
 
 // 异动类型定义（与前端 mock/monitorEvents.js 对齐）
 export const CHANGE_TYPES: Record<string, string> = {
@@ -58,6 +54,164 @@ export const CHANGE_TYPE_CYCLES: Record<string, string> = {
     '8211': 'mid', '8212': 'mid', '8213': 'long', '8214': 'long',
 };
 
+const MONITOR_BASE_URL = process.env.EM_MONITOR_BASE_URL || 'https://push2ex.eastmoney.com/getAllStockChanges';
+const MONITOR_QUOTE_BASE_URL = process.env.EM_MONITOR_QUOTE_BASE_URL || 'https://push2.eastmoney.com/api/qt/ulist.np/get';
+const MONITOR_UT_TOKEN = process.env.EM_UT_TOKEN || '7eea3edcaed734bea9cbfc24409ed989';
+const MONITOR_DPT = process.env.EM_DPT || 'wzchanges';
+const MONITOR_PAGE_SIZE = Math.min(Math.max(parseInt(process.env.EM_PAGE_SIZE || '64', 10) || 64, 1), 200);
+const MONITOR_MAX_PAGES = Math.max(parseInt(process.env.EM_MONITOR_MAX_PAGES || '20', 10) || 20, 1);
+const MONITOR_REQUEST_TIMEOUT_MS = Math.max(parseInt(process.env.EM_MONITOR_TIMEOUT_MS || '10000', 10) || 10000, 1000);
+const MONITOR_PUSH_ENABLED = process.env.STOCK_MONITOR_PUSH_ENABLED !== 'false';
+const MONITOR_ENRICH_ENABLED = process.env.STOCK_MONITOR_ENRICH_ENABLED === 'true';
+const MONITOR_SCAN_ENRICH_ENABLED = process.env.STOCK_MONITOR_SCAN_ENRICH_ENABLED !== 'false';
+const MONITOR_ENABLED_TYPES = [
+    4, 8, 16, 32,
+    64, 128,
+    8193, 8194,
+    8201, 8202, 8203, 8204,
+    8207, 8208, 8209, 8210,
+    8211, 8212,
+    8213, 8214,
+    8215, 8216,
+];
+
+interface EastmoneyChangeItem {
+    c?: string;
+    n?: string;
+    tm?: number | string;
+    t?: number | string;
+    [key: string]: any;
+}
+
+interface EastmoneyChangeResponse {
+    data?: {
+        allstock?: EastmoneyChangeItem[];
+        tc?: number | string;
+    };
+}
+
+interface EastmoneyQuoteItem {
+    f2?: number | string;
+    f3?: number | string;
+    f8?: number | string;
+    f10?: number | string;
+    f12?: string;
+    f100?: string;
+}
+
+interface ActiveMonitorEvent extends MonitorEvent {
+    raw_data_json: Record<string, any>;
+}
+
+export interface StockMonitorScanResult {
+    fetched: number;
+    inserted: number;
+    pushed: number;
+    failed: number;
+}
+
+const chinaDateFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+function getChinaDateParts(date = new Date()): { dateKey: string; compact: string } {
+    const parts = chinaDateFormatter.formatToParts(date);
+    const values: Record<string, string> = {};
+    for (const part of parts) {
+        if (part.type !== 'literal') values[part.type] = part.value;
+    }
+    const dateKey = `${values.year}-${values.month}-${values.day}`;
+    return { dateKey, compact: dateKey.replace(/\D/g, '') };
+}
+
+function normalizeEventTime(tmValue: unknown, now = new Date()): { iso: string; timeKey: string } | null {
+    if (tmValue === undefined || tmValue === null || tmValue === '') return null;
+    const digits = String(tmValue).replace(/\D/g, '').padStart(6, '0').slice(-6);
+    const hour = digits.slice(0, 2);
+    const minute = digits.slice(2, 4);
+    const second = digits.slice(4, 6);
+    const { dateKey } = getChinaDateParts(now);
+    return {
+        iso: `${dateKey}T${hour}:${minute}:${second}+08:00`,
+        timeKey: `${hour}${minute}${second}`,
+    };
+}
+
+function getEventTypeByCycle(cycle: string): string {
+    if (cycle === 'mid') return '中线异动';
+    if (cycle === 'long') return '长线异动';
+    return '短线异动';
+}
+
+function inferSymbol(stockCode: string): string {
+    if (/^(60|68|90|50|51|52|56|58)/.test(stockCode)) return `SH${stockCode}`;
+    if (/^(43|83|87|92)/.test(stockCode)) return `BJ${stockCode}`;
+    return `SZ${stockCode}`;
+}
+
+function buildDetailUrl(stockCode: string): string {
+    if (/^(60|68|90|50|51|52|56|58)/.test(stockCode)) {
+        return `https://quote.eastmoney.com/sh${stockCode}.html`;
+    }
+    return `https://quote.eastmoney.com/sz${stockCode}.html`;
+}
+
+function parseJsonp(text: string): EastmoneyChangeResponse {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{')) return JSON.parse(trimmed);
+    const start = trimmed.indexOf('(');
+    const end = trimmed.lastIndexOf(')');
+    if (start < 0 || end <= start) throw new Error('东方财富异动接口返回格式异常');
+    return JSON.parse(trimmed.slice(start + 1, end));
+}
+
+function generateCallback(): string {
+    return `jQuery${Math.floor(100000 + Math.random() * 900000)}_${Date.now()}`;
+}
+
+function buildMonitorEvent(item: EastmoneyChangeItem): ActiveMonitorEvent | null {
+    const stockCode = String(item.c || '').trim();
+    const stockName = String(item.n || '').trim();
+    const changeType = String(item.t || '').trim();
+    const eventTime = normalizeEventTime(item.tm);
+    if (!stockCode || !stockName || !changeType || !eventTime) return null;
+
+    const { compact } = getChinaDateParts();
+    const cycle = CHANGE_TYPE_CYCLES[changeType] || 'short';
+    const eventType = getEventTypeByCycle(cycle);
+    const summary = CHANGE_TYPES[changeType] || `未知(${changeType})`;
+
+    return {
+        event_id: `${compact}_${eventTime.timeKey}_${stockCode}`,
+        symbol: inferSymbol(stockCode),
+        stock_code: stockCode,
+        stock_name: stockName,
+        股票异动: eventType,
+        event_type: eventType,
+        level: CHANGE_LEVELS[changeType] || 'L1',
+        summary,
+        event_time: eventTime.iso,
+        detail_url: buildDetailUrl(stockCode),
+        raw_data_json: {
+            source: 'eastmoney',
+            change_type: changeType,
+            change_type_name: summary,
+            cycle,
+            event_type: eventType,
+            raw: item,
+        },
+    };
+}
+
+function toNullableNumber(value: unknown): number | null {
+    if (value === undefined || value === null || value === '' || value === '-') return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+}
+
 export interface MonitorEventItem {
     event_id: string;
     symbol: string;
@@ -98,9 +252,9 @@ export class StockMonitorService {
         if (stock_code) {
             // 支持纯数字代码(如600519)和带市场前缀代码(如SH600519)
             if (/^\d{6}$/.test(stock_code)) {
-                conditions.push(`(symbol = $${paramIdx} OR symbol = $${paramIdx + 1} OR symbol = $${paramIdx + 2})`);
-                values.push(stock_code, `SH${stock_code}`, `SZ${stock_code}`);
-                paramIdx += 3;
+                conditions.push(`(symbol = $${paramIdx} OR symbol = $${paramIdx + 1} OR symbol = $${paramIdx + 2} OR symbol = $${paramIdx + 3})`);
+                values.push(stock_code, `SH${stock_code}`, `SZ${stock_code}`, `BJ${stock_code}`);
+                paramIdx += 4;
             } else {
                 conditions.push(`symbol = $${paramIdx++}`);
                 values.push(stock_code);
@@ -108,8 +262,13 @@ export class StockMonitorService {
         }
 
         if (change_type) {
-            conditions.push(`event_type = $${paramIdx++}`);
+            conditions.push(`(
+                raw_data_json->>'change_type' = $${paramIdx}
+                OR raw_data_json->'raw_data_json'->>'change_type' = $${paramIdx}
+                OR event_type = $${paramIdx}
+            )`);
             values.push(change_type);
+            paramIdx += 1;
         }
 
         // 日期过滤：只查当天的异动
@@ -144,9 +303,9 @@ export class StockMonitorService {
             return {
                 event_id: row.event_id,
                 symbol: row.symbol,
-                stock_code: row.symbol.replace(/^(SH|SZ)/, ''),
+                stock_code: row.symbol.replace(/^(SH|SZ|BJ)/, ''),
                 stock_name: row.stock_name,
-                industry: '',
+                industry: inner.industry || raw.industry || '',
                 change_type: changeType,
                 change_type_name: CHANGE_TYPES[changeType] || row.summary || '',
                 level: CHANGE_LEVELS[changeType] || row.level || 'L1',
@@ -159,62 +318,27 @@ export class StockMonitorService {
             };
         });
 
-        // 数据拼接：批量获取行情和行业信息
-        if (events.length > 0) {
-            // 收集去重后的股票代码（纯6位数字）
+        // 默认快速返回数据库事件；如需临时批量补全，可用 STOCK_MONITOR_ENRICH_ENABLED=true 开启。
+        if (MONITOR_ENRICH_ENABLED && events.length > 0) {
             const uniqueCodes = [...new Set(events.map(e => e.stock_code))];
             try {
-                // 批量获取行情（activity级别包含价格、涨跌幅、量比、换手率）
-                const quotes = await EmQuoteService.getBatchQuotes(uniqueCodes, 'activity');
-                const quoteMap = new Map<string, Record<string, any>>();
-                for (const q of quotes) {
-                    const code = q['股票代码'];
-                    if (code) quoteMap.set(String(code), q);
+                const quotes = await StockMonitorService.fetchBatchQuoteInfo(uniqueCodes);
+                const quoteMap = new Map<string, EastmoneyQuoteItem>();
+                for (const quote of quotes) {
+                    if (quote.f12) quoteMap.set(String(quote.f12), quote);
                 }
 
-                // 批量获取行业信息（去重后最多limit个不同股票）
-                const industryMap = new Map<string, string>();
-                const batchSize = 10;
-                for (let i = 0; i < uniqueCodes.length; i += batchSize) {
-                    const batch = uniqueCodes.slice(i, i + batchSize);
-                    const industryResults = await Promise.allSettled(
-                        batch.map(code => EmService.getStockInfo(code))
-                    );
-                    for (let j = 0; j < industryResults.length; j++) {
-                        const result = industryResults[j];
-                        if (result.status === 'fulfilled') {
-                            const industry = result.value['所属行业'] || result.value['行业板块'] || '';
-                            if (industry) industryMap.set(batch[j], String(industry));
-                        }
-                    }
-                }
-
-                // 合并行情和行业数据到事件列表
                 for (const event of events) {
                     const quote = quoteMap.get(event.stock_code);
-                    if (quote) {
-                        // 行情数据：优先使用实时行情
-                        if (quote['最新价'] != null && event.price == null) {
-                            event.price = Number(quote['最新价']);
-                        }
-                        if (quote['涨跌幅'] != null && event.change_pct == null) {
-                            event.change_pct = Number(quote['涨跌幅']);
-                        }
-                        if (quote['量比'] != null && event.volume_ratio == null) {
-                            event.volume_ratio = Number(quote['量比']);
-                        }
-                        if (quote['换手率'] != null && event.turnover_rate == null) {
-                            event.turnover_rate = Number(quote['换手率']);
-                        }
-                    }
-                    // 行业数据
-                    const industry = industryMap.get(event.stock_code);
-                    if (industry) {
-                        event.industry = industry;
-                    }
+                    if (!quote) continue;
+                    if (!event.industry) event.industry = quote.f100 || '';
+                    if (event.price == null) event.price = toNullableNumber(quote.f2);
+                    if (event.change_pct == null) event.change_pct = toNullableNumber(quote.f3);
+                    if (event.volume_ratio == null) event.volume_ratio = toNullableNumber(quote.f10);
+                    if (event.turnover_rate == null) event.turnover_rate = toNullableNumber(quote.f8);
                 }
             } catch (err) {
-                console.warn('[StockMonitorService] 数据拼接失败，返回原始数据:', err);
+                console.warn('[StockMonitorService] 列表临时补全失败，返回入库数据:', err);
             }
         }
 
@@ -277,16 +401,181 @@ export class StockMonitorService {
         };
     }
 
+    private static async enrichMonitorEvents(events: ActiveMonitorEvent[]): Promise<ActiveMonitorEvent[]> {
+        if (!MONITOR_SCAN_ENRICH_ENABLED || events.length === 0) return events;
+
+        const uniqueCodes = [...new Set(events.map(event => event.stock_code))];
+        const quoteMap = new Map<string, EastmoneyQuoteItem>();
+
+        try {
+            const quotes = await StockMonitorService.fetchBatchQuoteInfo(uniqueCodes);
+            for (const quote of quotes) {
+                const code = quote.f12;
+                if (code) quoteMap.set(String(code), quote);
+            }
+        } catch (err) {
+            console.warn('[StockMonitorService] 扫描行情/行业批量补全失败:', err);
+        }
+
+        for (const event of events) {
+            const quote = quoteMap.get(event.stock_code);
+            const enrich = {
+                industry: quote?.f100 || '',
+                price: toNullableNumber(quote?.f2),
+                change_pct: toNullableNumber(quote?.f3),
+                volume_ratio: toNullableNumber(quote?.f10),
+                turnover_rate: toNullableNumber(quote?.f8),
+            };
+
+            event.raw_data_json = {
+                ...event.raw_data_json,
+                ...enrich,
+                enriched_at: new Date().toISOString(),
+            };
+        }
+
+        return events;
+    }
+
+    private static async fetchBatchQuoteInfo(stockCodes: string[]): Promise<EastmoneyQuoteItem[]> {
+        if (stockCodes.length === 0) return [];
+
+        const url = new URL(MONITOR_QUOTE_BASE_URL);
+        url.searchParams.set('fltt', '2');
+        url.searchParams.set('invt', '2');
+        url.searchParams.set('fields', 'f2,f3,f8,f10,f12,f100');
+        url.searchParams.set('secids', stockCodes.map(code => {
+            const marketId = inferSymbol(code).startsWith('SH') ? '1' : '0';
+            return `${marketId}.${code}`;
+        }).join(','));
+        url.searchParams.set('_', String(Date.now()));
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), MONITOR_REQUEST_TIMEOUT_MS);
+        try {
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9',
+                    'Referer': 'https://quote.eastmoney.com/',
+                },
+                signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(`东方财富批量行情接口请求失败: ${response.status}`);
+
+            const json: any = await response.json();
+            return Array.isArray(json.data?.diff) ? json.data.diff : [];
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private static async fetchMonitorPage(changeType: number, pageIndex: number): Promise<{ events: ActiveMonitorEvent[]; total: number }> {
+        const url = new URL(MONITOR_BASE_URL);
+        url.searchParams.set('type', String(changeType));
+        url.searchParams.set('cb', generateCallback());
+        url.searchParams.set('ut', MONITOR_UT_TOKEN);
+        url.searchParams.set('pageindex', String(pageIndex));
+        url.searchParams.set('pagesize', String(MONITOR_PAGE_SIZE));
+        url.searchParams.set('dpt', MONITOR_DPT);
+        url.searchParams.set('_', String(Date.now()));
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), MONITOR_REQUEST_TIMEOUT_MS);
+        try {
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9',
+                    'Referer': 'https://data.eastmoney.com/',
+                },
+                signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(`东方财富异动接口请求失败: ${response.status}`);
+
+            const data = parseJsonp(await response.text());
+            const items = data.data?.allstock || [];
+            const events = items
+                .map(item => buildMonitorEvent(item))
+                .filter((event): event is ActiveMonitorEvent => Boolean(event));
+            return { events, total: Number(data.data?.tc || 0) };
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private static async upsertMonitorEvent(event: ActiveMonitorEvent): Promise<boolean> {
+        const result = await pool.query(
+            `INSERT INTO stock_monitor_events (
+                event_id,
+                symbol,
+                stock_name,
+                event_type,
+                level,
+                summary,
+                event_time,
+                detail_url,
+                raw_data_json
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9::jsonb)
+            ON CONFLICT(event_id) DO UPDATE SET
+                raw_data_json = stock_monitor_events.raw_data_json || EXCLUDED.raw_data_json,
+                detail_url = COALESCE(EXCLUDED.detail_url, stock_monitor_events.detail_url),
+                summary = EXCLUDED.summary
+            RETURNING (xmax = 0) AS inserted`,
+            [
+                event.event_id,
+                event.symbol,
+                event.stock_name,
+                event.event_type,
+                event.level,
+                event.summary,
+                event.event_time,
+                event.detail_url,
+                JSON.stringify(event.raw_data_json),
+            ],
+        );
+        return Boolean(result.rows[0]?.inserted);
+    }
+
     /**
-     * 主动扫描异动（预留）
-     * 后续实现：从东方财富批量行情接口拉取全市场数据，计算异动指标
+     * 主动扫描东方财富盘口异动。
      */
-    static async scanAndDispatch(): Promise<void> {
-        // TODO: 实现主动异动扫描引擎
-        // 1. 调用东方财富 push2 批量行情接口
-        // 2. 计算异动指标（涨停/跌停/火箭发射/加速下跌等）
-        // 3. 命中规则则生成 MonitorEvent
-        // 4. 存库 + 推送微信
-        console.log('[StockMonitorService] scanAndDispatch - not implemented yet');
+    static async scanAndDispatch(): Promise<StockMonitorScanResult> {
+        const summary: StockMonitorScanResult = { fetched: 0, inserted: 0, pushed: 0, failed: 0 };
+
+        for (const changeType of MONITOR_ENABLED_TYPES) {
+            for (let pageIndex = 0; pageIndex < MONITOR_MAX_PAGES; pageIndex++) {
+                const { events, total } = await StockMonitorService.fetchMonitorPage(changeType, pageIndex);
+                if (events.length === 0) break;
+
+                summary.fetched += events.length;
+                const enrichedEvents = await StockMonitorService.enrichMonitorEvents(events);
+                for (const event of enrichedEvents) {
+                    try {
+                        const inserted = await StockMonitorService.upsertMonitorEvent(event);
+                        if (inserted) summary.inserted += 1;
+
+                        if (inserted && MONITOR_PUSH_ENABLED) {
+                            const pushResult = await WechatPushService.dispatchMonitorEvent(event);
+                            summary.pushed += pushResult?.sent || 0;
+                        }
+                    } catch (err: any) {
+                        summary.failed += 1;
+                        if (summary.failed <= 5) {
+                            console.error('[StockMonitorService] 异动事件处理失败:', err?.message || err);
+                        }
+                    }
+                }
+
+                if (total > 0 && (pageIndex + 1) * MONITOR_PAGE_SIZE >= total) break;
+            }
+        }
+
+        return summary;
     }
 }
