@@ -1085,8 +1085,6 @@ async function selectStocksFromIndustry(
         if (stocks.some(s => s.code === stock.code)) continue;
 
         const changePct = stock.change_pct || 0;
-        const turnover = stock.turnover_rate || 0;
-        const netInflowEm = stock.net_inflow || 0;  // 东方财富净流入
 
         // Tushare增强数据
         const tsCode = toTsCodeFromEm(stock.code);
@@ -1094,10 +1092,16 @@ async function selectStocksFromIndustry(
         const dbData = enhancement?.dailyBasicMap.get(tsCode);
         const histData = enhancement?.dailyHistMap.get(tsCode);
 
+        // 换手率：优先用Tushare数据，回退到同花顺HTML解析值
+        const turnover = dbData?.turnover_rate || stock.turnover_rate || 0;
+
         // Tushare资金净流入（万元）
         const netMfAmount = mfData?.net_mf_amount || 0;
         // 大单+特大单净买入（万元）
         const bigNetAmount = mfData ? ((mfData.buy_lg_amount || 0) - (mfData.sell_lg_amount || 0) + (mfData.buy_elg_amount || 0) - (mfData.sell_elg_amount || 0)) : 0;
+
+        // 资金净流入（元）：优先用Tushare数据（万元→元），回退到同花顺HTML解析值
+        const netInflowEm = netMfAmount ? netMfAmount * 10000 : (stock.net_inflow || 0);
         // 量比
         const volumeRatio = dbData?.volume_ratio || 0;
         // 流通市值（万元）

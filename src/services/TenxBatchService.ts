@@ -108,6 +108,12 @@ export class TenxBatchService {
 
                 success++;
                 console.log(`[TenxBatch] ${symbol} 评分完成: ${scoreResult.score}`);
+
+                // 更新 stocks 表的 industry 字段
+                if (scoreResult.rawData?.industry?.industry_name) {
+                    pool.query('UPDATE stocks SET industry = $1 WHERE symbol = $2', [scoreResult.rawData.industry.industry_name, symbol]).catch(() => {});
+                }
+
                 await this.sleep(this.BATCH_DELAY_MS);
             } catch (err: any) {
                 failed++;

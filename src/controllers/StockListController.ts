@@ -50,7 +50,7 @@ export class StockListController {
             const offset = (page - 1) * pageSize;
 
             let countQuery = 'SELECT COUNT(*) as total FROM stocks';
-            let dataQuery = 'SELECT symbol, name, market FROM stocks';
+            let dataQuery = 'SELECT symbol, name, market, industry FROM stocks';
             const whereConditions: string[] = [];
             const countParams: any[] = [];
             const dataParams: any[] = [];
@@ -94,6 +94,7 @@ export class StockListController {
                 '股票代码': stock.symbol,
                 '股票简称': stock.name,
                 '市场代码': stock.market,
+                '所属行业': stock.industry || '',
             }));
 
             createResponse(res, 200, 'success', {

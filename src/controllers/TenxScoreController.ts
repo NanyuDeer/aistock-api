@@ -277,7 +277,8 @@ export class TenxScoreController {
             const result = await pool.query(`
                 SELECT t.symbol, t.score, t.label, t.expected_multiple, t.score_date,
                        t.dim_scores, t.description,
-                       COALESCE(s.name, '') as name
+                       COALESCE(s.name, '') as name,
+                       COALESCE(s.industry, '') as industry
                 FROM tenx_scores t
                 LEFT JOIN stocks s ON t.symbol = s.symbol
                 WHERE t.score_date = (
@@ -291,6 +292,7 @@ export class TenxScoreController {
             const items = result.rows.map((r: any) => ({
                 symbol: r.symbol,
                 name: r.name,
+                industry: r.industry,
                 score: Number(r.score),
                 label: r.label,
                 expectedMultiple: r.expected_multiple,

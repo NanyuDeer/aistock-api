@@ -75,7 +75,7 @@ export interface FinaIndicatorRow {
     ts_code: string; ann_date: string; end_date: string;
     roe: number; roic: number; grossprofit_margin: number;
     netprofit_margin: number; current_ratio: number; quick_ratio: number;
-    debt_to_assets: number;
+    debt_to_assets: number; ocfps: number; eps: number;
 }
 
 export async function getFinaIndicator(symbol: string, startDate?: string): Promise<FinaIndicatorRow[]> {
@@ -84,7 +84,7 @@ export async function getFinaIndicator(symbol: string, startDate?: string): Prom
     const rows = await tushareRequest(
         'fina_indicator',
         params,
-        'ts_code,ann_date,end_date,roe,roe_dt,roic,grossprofit_margin,netprofit_margin,current_ratio,quick_ratio,debt_to_assets',
+        'ts_code,ann_date,end_date,roe,roe_dt,roic,grossprofit_margin,netprofit_margin,current_ratio,quick_ratio,debt_to_assets,ocfps,eps',
     );
     return rows as FinaIndicatorRow[];
 }
@@ -474,7 +474,7 @@ export async function getInstitutionalHold(symbol: string, startDate?: string): 
  */
 export interface HkHoldRow {
     ts_code: string; trade_date: string; vol: number;
-    amount: number; hold_ratio: number; hold_change: number;
+    amount: number; ratio: number; hold_change: number;
 }
 
 export async function getHkHold(symbol: string, startDate?: string): Promise<HkHoldRow[]> {
@@ -486,7 +486,7 @@ export async function getHkHold(symbol: string, startDate?: string): Promise<HkH
         const rows = await tushareRequest(
             'hk_hold',
             params,
-            'ts_code,trade_date,vol,amount,hold_ratio,hold_change',
+            'ts_code,trade_date,vol,amount,ratio',
         );
         if (rows.length > 0) return rows as HkHoldRow[];
     } catch {}
@@ -506,7 +506,7 @@ export async function getHkHold(symbol: string, startDate?: string): Promise<HkH
             const rows = await tushareRequest(
                 'hk_hold',
                 params,
-                'ts_code,trade_date,vol,amount,hold_ratio,hold_change',
+                'ts_code,trade_date,vol,amount,ratio',
             );
             const filtered = rows.filter((r: any) => r.ts_code === tsCode);
             if (filtered.length > 0) return filtered as HkHoldRow[];

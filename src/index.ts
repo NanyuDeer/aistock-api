@@ -359,6 +359,13 @@ async function start() {
     }
 
     try {
+        await pool.query(`ALTER TABLE stocks ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT ''`);
+        console.log('[DB] stocks.industry column ready');
+    } catch (err: any) {
+        console.warn('[DB] stocks.industry column check:', err.message);
+    }
+
+    try {
         await redis.ping();
         console.log('[Redis] Connected successfully');
     } catch (err: any) {

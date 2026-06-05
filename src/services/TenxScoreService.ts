@@ -76,7 +76,7 @@ function scoreByRangeLowBetter(value: number, ranges: [number, number][]): numbe
     return ranges[ranges.length - 1][1];
 }
 
-const LOW_BETTER_KEYS = new Set(['peg', 'market_cap', 'holder_change_rate']);
+const LOW_BETTER_KEYS = new Set(['peg', 'market_cap', 'holder_change_rate', 'industry_penetration']);
 
 /**
  * 百分制评分映射表
@@ -364,10 +364,13 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
     if (hkHold.length > 0) {
         const sorted = hkHold.sort((a, b) => b.trade_date.localeCompare(a.trade_date));
         const latest = sorted[0];
-        hkHoldRatio = latest.hold_ratio;
+        hkHoldRatio = (latest as any).ratio ?? (latest as any).hold_ratio ?? null;
         if (sorted.length >= 2) {
             const prev = sorted[Math.min(sorted.length - 1, 19)];
-            hkHoldChange = latest.hold_ratio - prev.hold_ratio;
+            const prevRatio = (prev as any).ratio ?? (prev as any).hold_ratio ?? 0;
+            if (hkHoldRatio != null) {
+                hkHoldChange = hkHoldRatio - prevRatio;
+            }
         }
     }
 
@@ -387,10 +390,10 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
         const avgAmount = recentPrices.length > 0
             ? recentPrices.reduce((s, r) => s + (r.amount || 0), 0) / recentPrices.length
             : 0;
-        // 换手率评分：日均换手率3%以上为高活跃
-        const turnoverScore = Math.min(avgTurnover / 3, 1) * 60;
-        // 成交额评分：日均成交额5亿以上为高关注
-        const amountScore = Math.min(avgAmount / 50000, 1) * 40;
+        // 换手率评分：日均换手率8%以上为高活跃
+        const turnoverScore = Math.min(avgTurnover / 8, 1) * 60;
+        // 成交额评分：日均成交额10亿以上为高关注
+        const amountScore = Math.min(avgAmount / 100000, 1) * 40;
         tradingActivityScore = turnoverScore + amountScore;
     }
 
@@ -404,6 +407,7 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
     // 综合计算市场认可度
     let score = 0;
     let weight = 0;
+    const hasCoreData = instHoldRatio != null || hkHoldRatio != null;
 
     // 机构持股比例贡献（权重30%）
     if (instHoldRatio != null) {
@@ -427,10 +431,11 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
         weight += 0.2;
     }
 
-    // 交易活跃度贡献（权重20%）- 替代指标
+    // 交易活跃度贡献 - 有核心数据时权重20%，无核心数据时降权到10%
+    const tradingWeight = hasCoreData ? 0.2 : 0.1;
     if (tradingActivityScore != null) {
-        score += tradingActivityScore * 0.2;
-        weight += 0.2;
+        score += tradingActivityScore * tradingWeight;
+        weight += tradingWeight;
     }
 
     // 业绩预告关注度贡献（权重10%）- 替代指标
@@ -641,6 +646,15 @@ function calcProfitQuality(data: PrefetchedData): RawIndicators {
         const profit = annualIncome[0].n_income_attr_p || 0;
         if (profit !== 0) {
             ocf_to_profit = ocf / profit;
+        }
+    }
+
+    // 回退：用 fina_indicator 的 ocfps/eps 近似计算
+    if (ocf_to_profit == null) {
+        const annualFina = (fina as any[]).filter(r => r.end_date && r.end_date.endsWith('1231') && r.ocfps != null && r.eps != null && r.eps !== 0)
+            .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 1);
+        if (annualFina.length > 0) {
+            ocf_to_profit = annualFina[0].ocfps / annualFina[0].eps;
         }
     }
 
