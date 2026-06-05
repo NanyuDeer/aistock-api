@@ -698,3 +698,223 @@ export async function getThsMember(tsCode: string): Promise<ThsMemberRow[]> {
     );
     return rows as ThsMemberRow[];
 }
+
+// ==================== 打板专题 & THS增强接口 ====================
+
+/** 涨停板块统计 - 每天涨停股最多的概念板块 */
+export interface LimitCptListRow {
+    trade_date: string;       // 交易日期
+    ts_code: string;          // 概念代码
+    name: string;             // 概念名称
+    up_stat: string;          // 涨跌统计 涨/平/跌
+    limit_times: number;      // 涨停家数
+    con_up_stat: string;      // 连板统计 连板/涨停
+    up_type: string;          // 涨停类型
+    limit: number;            // 涨停数量
+}
+
+/** 获取涨停板块统计（替代同花顺概念涨幅排序爬虫）
+ * 频率限制：500次/分钟，单次最大2000行
+ */
+export async function getLimitCptList(tradeDate: string): Promise<LimitCptListRow[]> {
+    const rows = await tushareRequest(
+        'limit_cpt_list',
+        { trade_date: tradeDate },
+        'trade_date,ts_code,name,up_stat,limit_times,con_up_stat,up_type,limit',
+    );
+    return rows as LimitCptListRow[];
+}
+
+/** 同花顺热榜 */
+export interface ThsHotRow {
+    ts_code: string;          // 股票代码
+    name: string;             // 股票名称
+    hot_type: string;         // 热度类型
+    hot_rank: number;         // 热度排名
+    hot_score: number;        // 热度值
+    concept_tag: string;      // 概念标签
+    industry_tag: string;     // 行业标签
+    trade_date: string;       // 交易日期
+}
+
+/** 获取同花顺热榜数据
+ * 频率限制：2000条/次
+ */
+export async function getThsHot(tradeDate: string, hotType?: string): Promise<ThsHotRow[]> {
+    const params: Record<string, any> = { trade_date: tradeDate };
+    if (hotType) params.hot_type = hotType;
+    const rows = await tushareRequest(
+        'ths_hot',
+        params,
+        'ts_code,name,hot_type,hot_rank,hot_score,concept_tag,industry_tag,trade_date',
+    );
+    return rows as ThsHotRow[];
+}
+
+/** 涨跌停板块 - 涨停池/连板池/炸板池 */
+export interface LimitListThsRow {
+    trade_date: string;       // 交易日期
+    ts_code: string;          // 股票代码
+    name: string;             // 股票名称
+    close: number;            // 收盘价
+    pct_chg: number;          // 涨跌幅
+    amp: number;              // 振幅
+    fc_ratio: number;         // 封板率
+    fl_ratio: number;         // 炸板率
+    fd_amount: number;        // 封单金额（元）
+    limit_times: number;      // 连板数
+    first_time: string;       // 首次涨停时间
+    last_time: string;        // 最后涨停时间
+    limit_reason: string;     // 涨停原因
+    up_stat: string;          // 涨跌统计
+    con_tag: string;          // 概念标签
+}
+
+/** 获取涨跌停榜单
+ * limit_type: '涨停池'|'连板池'|'炸板池'|'跌停池'
+ * 频率限制：500次/分钟，单次最大4000条
+ */
+export async function getLimitListThs(tradeDate: string, limitType?: string): Promise<LimitListThsRow[]> {
+    const params: Record<string, any> = { trade_date: tradeDate };
+    if (limitType) params.limit_type = limitType;
+    const rows = await tushareRequest(
+        'limit_list_ths',
+        params,
+        'trade_date,ts_code,name,close,pct_chg,amp,fc_ratio,fl_ratio,fd_amount,limit_times,first_time,last_time,limit_reason,up_stat,con_tag',
+    );
+    return rows as LimitListThsRow[];
+}
+
+/** 连板天梯 */
+export interface LimitStepRow {
+    trade_date: string;       // 交易日期
+    ts_code: string;          // 股票代码
+    name: string;             // 股票名称
+    close: number;            // 收盘价
+    pct_chg: number;          // 涨跌幅
+    limit_times: number;      // 连板数
+    up_stat: string;          // 涨跌统计
+    con_tag: string;          // 概念标签
+}
+
+/** 获取连板天梯
+ * 频率限制：500次/分钟，单次最大2000行
+ */
+export async function getLimitStep(tradeDate: string): Promise<LimitStepRow[]> {
+    const rows = await tushareRequest(
+        'limit_step',
+        { trade_date: tradeDate },
+        'trade_date,ts_code,name,close,pct_chg,limit_times,up_stat,con_tag',
+    );
+    return rows as LimitStepRow[];
+}
+
+/** 同花顺概念板块资金流向 */
+export interface MoneyflowCntThsRow {
+    trade_date: string;       // 交易日期
+    ts_code: string;          // 概念代码
+    name: string;             // 概念名称
+    buy_sm_amount: number;    // 小单买入（万元）
+    buy_md_amount: number;    // 中单买入（万元）
+    buy_lg_amount: number;    // 大单买入（万元）
+    buy_elg_amount: number;   // 特大单买入（万元）
+    sell_sm_amount: number;   // 小单卖出（万元）
+    sell_md_amount: number;   // 中单卖出（万元）
+    sell_lg_amount: number;   // 大单卖出（万元）
+    sell_elg_amount: number;  // 特大单卖出（万元）
+    net_mf_amount: number;    // 净流入（万元）
+    net_mf_vol: number;       // 净流入量（手）
+    lead_stock: string;       // 领涨股
+    lead_pct_chg: number;     // 领涨股涨跌幅
+}
+
+/** 获取概念板块资金流向（替代同花顺资金流向爬虫）
+ * 频率限制：5000条/次
+ */
+export async function getMoneyflowCntThs(tradeDate: string): Promise<MoneyflowCntThsRow[]> {
+    const rows = await tushareRequest(
+        'moneyflow_cnt_ths',
+        { trade_date: tradeDate },
+        'trade_date,ts_code,name,buy_sm_amount,buy_md_amount,buy_lg_amount,buy_elg_amount,sell_sm_amount,sell_md_amount,sell_lg_amount,sell_elg_amount,net_mf_amount,net_mf_vol,lead_stock,lead_pct_chg',
+    );
+    return rows as MoneyflowCntThsRow[];
+}
+
+/** 同花顺个股资金流向（增强版） */
+export interface MoneyflowThsRow {
+    ts_code: string;          // 股票代码
+    trade_date: string;       // 交易日期
+    buy_sm_amount: number;    // 小单买入（万元）
+    buy_md_amount: number;    // 中单买入（万元）
+    buy_lg_amount: number;    // 大单买入（万元）
+    buy_elg_amount: number;   // 特大单买入（万元）
+    sell_sm_amount: number;   // 小单卖出（万元）
+    sell_md_amount: number;   // 中单卖出（万元）
+    sell_lg_amount: number;   // 大单卖出（万元）
+    sell_elg_amount: number;  // 特大单卖出（万元）
+    net_mf_amount: number;    // 净流入（万元）
+    net_mf_vol: number;       // 净流入量（手）
+    buy_sm_ratio: number;     // 小单买入占比
+    buy_md_ratio: number;     // 中单买入占比
+    buy_lg_ratio: number;     // 大单买入占比
+    buy_elg_ratio: number;    // 特大单买入占比
+    sell_sm_ratio: number;    // 小单卖出占比
+    sell_md_ratio: number;    // 中单卖出占比
+    sell_lg_ratio: number;    // 大单卖出占比
+    sell_elg_ratio: number;   // 特大单卖出占比
+    net_mf_ratio: number;     // 净流入占比
+    mf_5day: number;          // 5日主力净额（万元）
+}
+
+/** 获取同花顺个股资金流向（增强版，替代moneyflow）
+ * 频率限制：6000条/次
+ * 注意：按ts_code查询时单次返回1条，按trade_date查询返回全市场
+ */
+export async function getMoneyflowThs(tsCode: string, startDate?: string, endDate?: string): Promise<MoneyflowThsRow[]> {
+    const params: Record<string, any> = { ts_code: tsCode };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    const rows = await tushareRequest(
+        'moneyflow_ths',
+        params,
+        'ts_code,trade_date,buy_sm_amount,buy_md_amount,buy_lg_amount,buy_elg_amount,sell_sm_amount,sell_md_amount,sell_lg_amount,sell_elg_amount,net_mf_amount,net_mf_vol,buy_sm_ratio,buy_md_ratio,buy_lg_ratio,buy_elg_ratio,sell_sm_ratio,sell_md_ratio,sell_lg_ratio,sell_elg_ratio,net_mf_ratio,mf_5day',
+    );
+    return rows as MoneyflowThsRow[];
+}
+
+/** 获取单日全市场同花顺资金流向（用于批量选股） */
+export async function getMoneyflowThsByDate(tradeDate: string): Promise<MoneyflowThsRow[]> {
+    const rows = await tushareRequest(
+        'moneyflow_ths',
+        { trade_date: tradeDate },
+        'ts_code,trade_date,buy_lg_amount,buy_elg_amount,sell_lg_amount,sell_elg_amount,net_mf_amount,net_mf_ratio,mf_5day',
+    );
+    return rows as MoneyflowThsRow[];
+}
+
+/** 开盘啦概念题材成分股 */
+export interface KplConceptConsRow {
+    ts_code: string;          // 题材ID（如 000111.KP）
+    name: string;             // 题材名称
+    con_code: string;         // 股票代码（如 600657.SH）
+    con_name: string;         // 股票名称
+    trade_date: string;       // 交易日期
+    hot_num: number;          // 人气值
+    desc: string;             // 描述
+}
+
+/** 获取开盘啦概念题材成分股
+ * 支持三种查询方式：
+ *   - trade_date: 按日期获取所有概念成分股
+ *   - ts_code: 按概念代码获取成分股（xxxxxx.KP格式）
+ *   - con_code: 按股票代码获取所属概念（xxxxxx.SH格式）
+ * 频率限制：3000条/次
+ */
+export async function getKplConceptCons(params: { con_code?: string; ts_code?: string; trade_date?: string }): Promise<KplConceptConsRow[]> {
+    const rows = await tushareRequest(
+        'kpl_concept_cons',
+        params,
+        'ts_code,name,con_code,con_name,trade_date,hot_num,desc',
+    );
+    return rows as KplConceptConsRow[];
+}

@@ -1,4 +1,4 @@
-import { TenxScoreService, IndustryCache, VetoError, vetoCheck } from './TenxScoreService';
+import { TenxScoreService, IndustryCache, VetoError, vetoCheck, preloadThsEnhanceCache } from './TenxScoreService';
 import * as TushareService from './TushareService';
 import pool from '../db';
 
@@ -31,6 +31,10 @@ export class TenxBatchService {
 
         const industryCache = await this.preloadIndustryData(symbols);
         console.log(`[TenxBatch] 行业数据缓存完成, 共${Object.keys(industryCache).length}个行业`);
+
+        // 预加载THS增强数据（全市场接口，仅调用1次）
+        await preloadThsEnhanceCache();
+        console.log('[TenxBatch] THS增强数据缓存完成');
 
         let success = 0;
         let skipped = 0;

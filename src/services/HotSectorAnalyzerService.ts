@@ -23,12 +23,24 @@ import {
     getThsIndex,
     getThsDaily,
     getThsMember,
+    getLimitCptList,
+    getThsHot,
+    getLimitListThs,
+    getLimitStep,
+    getMoneyflowCntThs,
+    getMoneyflowThsByDate,
     type MoneyflowRow,
     type DailyBasicFullRow,
     type DailyPriceRow,
     type ThsIndexRow,
     type ThsDailyRow,
     type ThsMemberRow,
+    type LimitCptListRow,
+    type ThsHotRow,
+    type LimitListThsRow,
+    type LimitStepRow,
+    type MoneyflowCntThsRow,
+    type MoneyflowThsRow,
 } from './TushareService';
 
 // ==================== 缓存 ====================
@@ -455,14 +467,159 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
         return cached;
     }
 
-    // 获取概念板块列表（同花顺HTML）
+    // ===== 优先使用Tushare打板专题接口 =====
+    const today = new Date();
+    const tradeDateStr = formatDate(today);
+
+    // 1. 获取涨停板块统计（limit_cpt_list）—— 1次调用
+    let limitCptData: LimitCptListRow[] = [];
+    try {
+        limitCptData = await getLimitCptList(tradeDateStr);
+        // 非交易日无数据，尝试前一个交易日
+        if (limitCptData.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            limitCptData = await getLimitCptList(formatDate(yesterday));
+        }
+        console.log(`[HotSectorAnalyzer] limit_cpt_list获取成功: ${limitCptData.length}条`);
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] limit_cpt_list获取失败:', (err as Error).message);
+    }
+
+    // 2. 获取同花顺热榜（ths_hot）—— 1次调用
+    let thsHotData: ThsHotRow[] = [];
+    try {
+        thsHotData = await getThsHot(tradeDateStr);
+        if (thsHotData.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            thsHotData = await getThsHot(formatDate(yesterday));
+        }
+        console.log(`[HotSectorAnalyzer] ths_hot获取成功: ${thsHotData.length}条`);
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] ths_hot获取失败:', (err as Error).message);
+    }
+
+    // 3. 获取概念板块资金流向（moneyflow_cnt_ths）—— 1次调用
+    let mfCntData: MoneyflowCntThsRow[] = [];
+    try {
+        mfCntData = await getMoneyflowCntThs(tradeDateStr);
+        if (mfCntData.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            mfCntData = await getMoneyflowCntThs(formatDate(yesterday));
+        }
+        console.log(`[HotSectorAnalyzer] moneyflow_cnt_ths获取成功: ${mfCntData.length}条`);
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] moneyflow_cnt_ths获取失败:', (err as Error).message);
+    }
+
+    // 构建资金流向Map（概念名称→净流入）
+    const mfCntMap = new Map<string, MoneyflowCntThsRow>();
+    for (const row of mfCntData) {
+        mfCntMap.set(row.name, row);
+    }
+
+    // 构建热榜Map（概念标签→热度排名/热度值）
+    const hotConceptMap = new Map<string, ThsHotRow[]>();
+    for (const row of thsHotData) {
+        if (row.concept_tag) {
+            const tags = row.concept_tag.split(';').filter(Boolean);
+            for (const tag of tags) {
+                const list = hotConceptMap.get(tag) || [];
+                list.push(row);
+                hotConceptMap.set(tag, list);
+            }
+        }
+    }
+
+    // ===== 如果Tushare打板数据可用，优先使用 =====
+    if (limitCptData.length > 0) {
+        const candidates: HotConcept[] = [];
+
+        for (const cpt of limitCptData) {
+            // 从涨停板块统计提取数据
+            const upStatParts = (cpt.up_stat || '').split('/');
+            const upCount = parseInt(upStatParts[0]) || 0;
+            const downCount = parseInt(upStatParts[2]) || 0;
+
+            // 资金流向
+            const mfRow = mfCntMap.get(cpt.name);
+            const netInflow = mfRow ? (mfRow.net_mf_amount || 0) * 10000 : 0; // 万元→元
+
+            // 热度值
+            const hotRows = hotConceptMap.get(cpt.name);
+            const hotScore = hotRows && hotRows.length > 0
+                ? Math.max(...hotRows.map(r => r.hot_score || 0))
+                : 0;
+
+            // 领涨股
+            const leadStock = mfRow?.lead_stock || '--';
+            const leadPctChg = mfRow?.lead_pct_chg || 0;
+
+            // 连板信息
+            const conUpStat = cpt.con_up_stat || '';
+
+            candidates.push({
+                code: cpt.ts_code || '',
+                name: cpt.name,
+                type: 'concept',
+                frequency: cpt.limit_times || 1,  // 涨停家数作为频次
+                avg_change: 0,  // 用涨停家数替代，不再需要平均涨幅
+                today_change: 0,  // limit_cpt_list无涨幅，后续补充
+                amount_trend: hotScore,  // 热度值替代资金趋势
+                net_inflow: netInflow,
+                driver: conUpStat,  // 连板统计作为驱动描述
+                leading_stock: leadStock,
+                leading_change: Math.round((leadPctChg || 0) * 100) / 100,
+                up_count: upCount,
+                down_count: downCount,
+                score: 0,
+            });
+        }
+
+        // 综合评分：涨停家数35% + 热度值25% + 资金净流入25% + 连板统计15%
+        for (const s of candidates) {
+            const limitScore = Math.min(10, (s.frequency || 0) * 1.5);
+            const hotScoreVal = Math.min(10, (s.amount_trend || 0) / 10);
+            const inflowScore = Math.min(10, Math.abs(s.net_inflow) / 100000000 * 2);
+            const conScore = s.driver ? Math.min(10, 5) : 0; // 有连板统计加分
+            s.score = Math.round((limitScore * 3.5 + hotScoreVal * 2.5 + inflowScore * 2.5 + conScore * 1.5) * 100) / 100;
+        }
+
+        candidates.sort((a, b) => b.score - a.score);
+        const result = candidates.slice(0, topN);
+
+        // 补充今日涨幅（通过ths_daily获取，仅对topN概念）
+        const thsIndexMap = await getThsIndexNameMap();
+        for (const concept of result) {
+            if (concept.today_change === 0) {
+                const tsCode = thsIndexMap.get(concept.name) || concept.code;
+                if (tsCode) {
+                    try {
+                        const startDate = new Date();
+                        startDate.setDate(startDate.getDate() - 3);
+                        const hist = await getThsDaily(tsCode, formatDate(startDate));
+                        if (hist.length > 0) {
+                            const latest = hist.sort((a, b) => String(b.trade_date).localeCompare(String(a.trade_date)))[0];
+                            concept.today_change = Math.round((Number(latest.pct_change) || 0) * 100) / 100;
+                        }
+                    } catch { /* ignore */ }
+                }
+            }
+        }
+
+        cacheSet(cacheKey, result);
+        return result;
+    }
+
+    // ===== Fallback：使用同花顺HTML爬虫（原逻辑） =====
+    console.log('[HotSectorAnalyzer] Tushare打板数据不可用，回退到同花顺HTML爬虫');
     const concepts = await getConceptBoards();
     if (concepts.length === 0) return [];
 
-    // 获取Tushare概念指数 名称→ts_code 映射
     const thsIndexMap = await getThsIndexNameMap();
 
-    // 取涨幅最高的前30个概念
     const topConcepts = concepts
         .sort((a, b) => Math.abs(b.change || 0) - Math.abs(a.change || 0))
         .slice(0, 30);
@@ -479,22 +636,18 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
         let avgChange = todayChange;
         let amountTrend = 0;
 
-        // 通过Tushare ths_daily获取历史行情
         const tsCode = thsIndexMap.get(concept.name);
         if (tsCode) {
             try {
                 const hist = await getThsDaily(tsCode, startDateStr);
                 if (hist.length >= 3) {
-                    // 取最近days个交易日
                     const recentHist = hist
                         .sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)))
                         .slice(-days);
 
-                    // 上榜频次：涨幅>1%的天数
                     upDays = recentHist.filter(h => Math.abs(Number(h.pct_change)) > 1.0).length;
                     avgChange = recentHist.reduce((sum, h) => sum + Number(h.pct_change), 0) / recentHist.length;
 
-                    // 资金趋势：近5日成交量均值 vs 前5日
                     if (recentHist.length >= 5) {
                         const recentVol = recentHist.slice(-5).reduce((s, h) => s + Number(h.vol), 0) / 5;
                         const earlyVol = recentHist.slice(0, 5).reduce((s, h) => s + Number(h.vol), 0) / 5;
@@ -509,12 +662,10 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
             }
         }
 
-        // 如果Tushare未获取到历史数据，使用当天数据
         if (upDays === 0 && todayChange > 1.0) {
             upDays = 1;
         }
 
-        // 板块主力净流入
         const netInflow = concept.net_inflow || 0;
 
         candidates.push({
@@ -535,22 +686,16 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
         });
     }
 
-    // 筛选上榜频次 >= minFrequency
     let hotConcepts = candidates.filter(c => c.frequency >= minFrequency);
-
-    // 如果筛选后太少，降低条件
     if (hotConcepts.length < topN) {
         hotConcepts = candidates.filter(c => c.frequency >= Math.max(1, minFrequency - 1));
     }
-
-    // 如果仍然太少，直接用当天涨幅排序取topN
     if (hotConcepts.length < topN) {
         hotConcepts = candidates
             .sort((a, b) => Math.abs(b.today_change) - Math.abs(a.today_change))
             .slice(0, topN);
     }
 
-    // 综合评分：频次35% + 平均涨幅25% + 资金趋势15% + 主力净流入25%
     for (const s of hotConcepts) {
         const inflowScore = Math.min(10, Math.abs(s.net_inflow) / 100000000 * 2);
         s.score = Math.round((s.frequency * 3.5 + s.avg_change * 2.5 + s.amount_trend * 0.15 + inflowScore * 2.5) * 100) / 100;
@@ -559,7 +704,6 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
     hotConcepts.sort((a, b) => b.score - a.score);
     const result = hotConcepts.slice(0, topN);
 
-    // 筛选后再获取领涨股（减少请求量）
     for (const concept of result) {
         try {
             const topStocks = await getBoardTopStocks(concept.code, 1);
@@ -981,35 +1125,92 @@ function toTsCodeFromEm(emCode: string): string {
 /** 批量获取Tushare增强数据（资金流向+每日指标），返回Map<ts_code, data> */
 async function fetchTushareEnhancement(stockCodes: string[]): Promise<{
     moneyflowMap: Map<string, MoneyflowRow>;
+    moneyflowThsMap: Map<string, MoneyflowThsRow>;
     dailyBasicMap: Map<string, DailyBasicFullRow>;
     dailyHistMap: Map<string, DailyPriceRow[]>;
+    limitListMap: Map<string, LimitListThsRow>;
+    limitStepData: LimitStepRow[];
 }> {
     const moneyflowMap = new Map<string, MoneyflowRow>();
+    const moneyflowThsMap = new Map<string, MoneyflowThsRow>();
     const dailyBasicMap = new Map<string, DailyBasicFullRow>();
     const dailyHistMap = new Map<string, DailyPriceRow[]>();
+    const limitListMap = new Map<string, LimitListThsRow>();
+    const limitStepData: LimitStepRow[] = [];
 
-    // 获取最近交易日（Tushare需要trade_date参数）
     const today = new Date();
-    const tradeDateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const tradeDateStr = formatDate(today);
 
-    // 批量获取单日全市场资金流向
+    // 优先获取同花顺增强版资金流向（moneyflow_ths）—— 1次调用
     try {
-        const mfRows = await getMoneyflowByDate(tradeDateStr);
-        for (const row of mfRows) {
-            moneyflowMap.set(row.ts_code, row);
+        const mfThsRows = await getMoneyflowThsByDate(tradeDateStr);
+        for (const row of mfThsRows) {
+            moneyflowThsMap.set(row.ts_code, row);
         }
-        // 如果当天没数据（非交易日），尝试前一个交易日
-        if (mfRows.length === 0) {
+        if (mfThsRows.length === 0) {
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
-            const ydStr = yesterday.toISOString().slice(0, 10).replace(/-/g, '');
-            const ydRows = await getMoneyflowByDate(ydStr);
+            const ydRows = await getMoneyflowThsByDate(formatDate(yesterday));
             for (const row of ydRows) {
-                moneyflowMap.set(row.ts_code, row);
+                moneyflowThsMap.set(row.ts_code, row);
             }
         }
+        console.log(`[HotSectorAnalyzer] moneyflow_ths获取成功: ${moneyflowThsMap.size}只`);
     } catch (err) {
-        console.warn('[HotSectorAnalyzer] Tushare资金流向获取失败:', err);
+        console.warn('[HotSectorAnalyzer] moneyflow_ths获取失败，回退到moneyflow:', (err as Error).message);
+    }
+
+    // 如果moneyflow_ths无数据，回退到原有moneyflow
+    if (moneyflowThsMap.size === 0) {
+        try {
+            const mfRows = await getMoneyflowByDate(tradeDateStr);
+            for (const row of mfRows) {
+                moneyflowMap.set(row.ts_code, row);
+            }
+            if (mfRows.length === 0) {
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const ydRows = await getMoneyflowByDate(formatDate(yesterday));
+                for (const row of ydRows) {
+                    moneyflowMap.set(row.ts_code, row);
+                }
+            }
+        } catch (err) {
+            console.warn('[HotSectorAnalyzer] Tushare资金流向获取失败:', err);
+        }
+    }
+
+    // 获取涨跌停数据（limit_list_ths + limit_step）—— 2次调用
+    try {
+        const limitRows = await getLimitListThs(tradeDateStr);
+        for (const row of limitRows) {
+            limitListMap.set(row.ts_code, row);
+        }
+        if (limitRows.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const ydRows = await getLimitListThs(formatDate(yesterday));
+            for (const row of ydRows) {
+                limitListMap.set(row.ts_code, row);
+            }
+        }
+        console.log(`[HotSectorAnalyzer] limit_list_ths获取成功: ${limitListMap.size}只`);
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] limit_list_ths获取失败:', (err as Error).message);
+    }
+
+    try {
+        const stepRows = await getLimitStep(tradeDateStr);
+        if (stepRows.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            limitStepData.push(...await getLimitStep(formatDate(yesterday)));
+        } else {
+            limitStepData.push(...stepRows);
+        }
+        console.log(`[HotSectorAnalyzer] limit_step获取成功: ${limitStepData.length}只`);
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] limit_step获取失败:', (err as Error).message);
     }
 
     // 批量获取单日全市场每日指标
@@ -1021,8 +1222,7 @@ async function fetchTushareEnhancement(stockCodes: string[]): Promise<{
         if (dbRows.length === 0) {
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
-            const ydStr = yesterday.toISOString().slice(0, 10).replace(/-/g, '');
-            const ydRows = await getDailyBasicByDate(ydStr);
+            const ydRows = await getDailyBasicByDate(formatDate(yesterday));
             for (const row of ydRows) {
                 dailyBasicMap.set(row.ts_code, row);
             }
@@ -1045,7 +1245,7 @@ async function fetchTushareEnhancement(stockCodes: string[]): Promise<{
         await Promise.all(promises);
     }
 
-    return { moneyflowMap, dailyBasicMap, dailyHistMap };
+    return { moneyflowMap, moneyflowThsMap, dailyBasicMap, dailyHistMap, limitListMap, limitStepData };
 }
 
 /** 计算连续上涨天数（从最近一天往前数） */
@@ -1066,8 +1266,11 @@ async function selectStocksFromIndustry(
     maxStocks: number = 3,
     enhancement?: {
         moneyflowMap: Map<string, MoneyflowRow>;
+        moneyflowThsMap: Map<string, MoneyflowThsRow>;
         dailyBasicMap: Map<string, DailyBasicFullRow>;
         dailyHistMap: Map<string, DailyPriceRow[]>;
+        limitListMap: Map<string, LimitListThsRow>;
+        limitStepData: LimitStepRow[];
     },
 ): Promise<SelectedStock[]> {
     const stocks: SelectedStock[] = [];
@@ -1089,16 +1292,22 @@ async function selectStocksFromIndustry(
         // Tushare增强数据
         const tsCode = toTsCodeFromEm(stock.code);
         const mfData = enhancement?.moneyflowMap.get(tsCode);
+        const mfThsData = enhancement?.moneyflowThsMap.get(tsCode);
         const dbData = enhancement?.dailyBasicMap.get(tsCode);
         const histData = enhancement?.dailyHistMap.get(tsCode);
+        const limitData = enhancement?.limitListMap.get(tsCode);
 
         // 换手率：优先用Tushare数据，回退到同花顺HTML解析值
         const turnover = dbData?.turnover_rate || stock.turnover_rate || 0;
 
-        // Tushare资金净流入（万元）
-        const netMfAmount = mfData?.net_mf_amount || 0;
+        // 资金净流入：优先用moneyflow_ths（更精准，含占比和5日数据），回退到moneyflow
+        const netMfAmount = mfThsData?.net_mf_amount || mfData?.net_mf_amount || 0;
+        const netMfRatio = mfThsData?.net_mf_ratio || 0;  // 净流入占比
+        const mf5day = mfThsData?.mf_5day || 0;  // 5日主力净额（万元）
         // 大单+特大单净买入（万元）
-        const bigNetAmount = mfData ? ((mfData.buy_lg_amount || 0) - (mfData.sell_lg_amount || 0) + (mfData.buy_elg_amount || 0) - (mfData.sell_elg_amount || 0)) : 0;
+        const bigNetAmount = mfThsData
+            ? ((mfThsData.buy_lg_amount || 0) - (mfThsData.sell_lg_amount || 0) + (mfThsData.buy_elg_amount || 0) - (mfThsData.sell_elg_amount || 0))
+            : (mfData ? ((mfData.buy_lg_amount || 0) - (mfData.sell_lg_amount || 0) + (mfData.buy_elg_amount || 0) - (mfData.sell_elg_amount || 0)) : 0);
 
         // 资金净流入（元）：优先用Tushare数据（万元→元），回退到同花顺HTML解析值
         const netInflowEm = netMfAmount ? netMfAmount * 10000 : (stock.net_inflow || 0);
@@ -1110,6 +1319,11 @@ async function selectStocksFromIndustry(
         const turnoverF = dbData?.turnover_rate_f || 0;
         // 连续上涨天数
         const consecutiveUpDays = histData ? calcConsecutiveUpDays(histData) : 0;
+        // 涨停数据
+        const isLimitUp = limitData != null;  // 是否涨停
+        const limitTimes = limitData?.limit_times || 0;  // 连板数
+        const limitReason = limitData?.limit_reason || '';  // 涨停原因
+        const fcRatio = limitData?.fc_ratio || 0;  // 封板率
 
         // 市值过滤：流通市值 < 20亿 的跳过（容易被操纵）
         if (circMv > 0 && circMv < 200000) {
@@ -1125,7 +1339,27 @@ async function selectStocksFromIndustry(
         // 连续上涨加分（独立于其他条件）
         const consecutiveBonus = consecutiveUpDays >= 3 ? (consecutiveUpDays - 2) * 5 : 0;
 
-        if (changePct > 5 && turnover > 5) {
+        // 涨停加分（来自limit_list_ths）
+        const limitUpBonus = isLimitUp
+            ? Math.min(15, 5 + limitTimes * 5 + Math.min(fcRatio / 10, 5))
+            : 0;
+
+        // 5日主力净额加分（来自moneyflow_ths）
+        const mf5dayBonus = mf5day > 0 ? Math.min(8, mf5day / 5000) : 0;
+
+        if (isLimitUp && limitTimes >= 2) {
+            // 连板股（来自limit_list_ths）
+            baseScore = Math.min(92, 60 + limitTimes * 8 + fcRatio * 0.1 + turnover * 0.5);
+            reason = `${limitTimes}连板，封板率${fcRatio.toFixed(0)}%${limitReason ? '，' + limitReason : ''}`;
+            reasonTag = `${limitTimes}连板`;
+            reasonTagClass = 'tag-bullish';
+        } else if (isLimitUp) {
+            // 首板涨停
+            baseScore = Math.min(88, 55 + fcRatio * 0.1 + turnover * 0.5 + Math.min(Math.abs(netInflowEm) / 100000000, 10) * 2);
+            reason = `涨停，封板率${fcRatio.toFixed(0)}%${limitReason ? '，' + limitReason : ''}`;
+            reasonTag = '涨停';
+            reasonTagClass = 'tag-bullish';
+        } else if (changePct > 5 && turnover > 5) {
             // 量价齐升
             baseScore = Math.min(90, Math.abs(changePct) * 5 + turnover * 2 + Math.min(Math.abs(netInflowEm) / 100000000, 10) * 3);
             reason = `量价齐升，涨幅${changePct.toFixed(1)}%`;
@@ -1190,7 +1424,7 @@ async function selectStocksFromIndustry(
             reasonTagClass = 'tag-bullish';
         }
 
-        const totalScore = baseScore + consecutiveBonus + volumeRatioBonus + conceptBonus;
+        const totalScore = baseScore + consecutiveBonus + volumeRatioBonus + conceptBonus + limitUpBonus + mf5dayBonus;
 
         stocks.push({
             code: stock.code,
@@ -1469,7 +1703,7 @@ export class HotSectorAnalyzerService {
         // 批量获取Tushare增强数据（资金流向+每日指标+近10日日线）
         console.log(`[HotSectorAnalyzer] 批量获取Tushare增强数据，共${allCandidateCodes.length}只候选股...`);
         const enhancement = await fetchTushareEnhancement(allCandidateCodes);
-        console.log(`[HotSectorAnalyzer] Tushare增强数据获取完成：资金流向${enhancement.moneyflowMap.size}只，每日指标${enhancement.dailyBasicMap.size}只，日线${enhancement.dailyHistMap.size}只`);
+        console.log(`[HotSectorAnalyzer] Tushare增强数据获取完成：资金流向${enhancement.moneyflowMap.size}只，THS资金${enhancement.moneyflowThsMap.size}只，每日指标${enhancement.dailyBasicMap.size}只，涨停${enhancement.limitListMap.size}只`);
 
         // 清除概念板块和行业映射的缓存，让后续调用重新获取（因为前面已经获取过一次了）
         // 不清除，因为缓存TTL=1小时，同一次分析内复用是合理的

@@ -1,6 +1,102 @@
 import * as TushareService from './TushareService';
 import { TushareInfoService } from './TushareInfoService';
 
+// ==================== THS增强数据全局缓存 ====================
+// 批量评分时，limit_list_ths/ths_hot/moneyflow_ths是全市场接口，
+// 只需调用1次即可覆盖所有股票，避免每只股票重复调用
+
+interface ThsEnhanceCache {
+    limitListMap: Map<string, TushareService.LimitListThsRow>;
+    thsHotMap: Map<string, TushareService.ThsHotRow>;
+    moneyflowThsMap: Map<string, TushareService.MoneyflowThsRow>;
+    loadedAt: string;  // 加载时的交易日期
+}
+
+let _thsCache: ThsEnhanceCache | null = null;
+let _thsCacheDate = '';
+
+// kpl_concept_cons缓存（同行业代码共享，避免重复调用）
+const _kplConceptCache = new Map<string, TushareService.KplConceptConsRow[]>();
+
+function getThsEnhanceCache(): ThsEnhanceCache {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    if (_thsCache && _thsCacheDate === today) return _thsCache;
+
+    // 首次访问时初始化空缓存，异步加载
+    if (!_thsCache) {
+        _thsCache = {
+            limitListMap: new Map(),
+            thsHotMap: new Map(),
+            moneyflowThsMap: new Map(),
+            loadedAt: '',
+        };
+    }
+    return _thsCache;
+}
+
+/** 异步预加载THS增强数据（批量评分开始前调用1次） */
+export async function preloadThsEnhanceCache(): Promise<void> {
+    const today = new Date();
+    const tradeDateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+
+    if (_thsCache && _thsCacheDate === tradeDateStr && _thsCache.loadedAt === tradeDateStr) {
+        console.log('[TenxScore] THS增强缓存已存在，跳过加载');
+        return;
+    }
+
+    const cache: ThsEnhanceCache = {
+        limitListMap: new Map(),
+        thsHotMap: new Map(),
+        moneyflowThsMap: new Map(),
+        loadedAt: tradeDateStr,
+    };
+
+    // limit_list_ths：全市场涨停数据（1次调用）
+    try {
+        let limitRows = await TushareService.getLimitListThs(tradeDateStr);
+        if (limitRows.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            limitRows = await TushareService.getLimitListThs(yesterday.toISOString().slice(0, 10).replace(/-/g, ''));
+        }
+        for (const row of limitRows) {
+            cache.limitListMap.set(row.ts_code, row);
+        }
+        console.log(`[TenxScore] THS缓存: limit_list_ths=${cache.limitListMap.size}只`);
+    } catch (e) { console.warn('[TenxScore] limit_list_ths缓存失败:', (e as Error).message); }
+
+    // ths_hot：全市场热度数据（1次调用）
+    try {
+        let hotRows = await TushareService.getThsHot(tradeDateStr);
+        if (hotRows.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            hotRows = await TushareService.getThsHot(yesterday.toISOString().slice(0, 10).replace(/-/g, ''));
+        }
+        for (const row of hotRows) {
+            cache.thsHotMap.set(row.ts_code, row);
+        }
+        console.log(`[TenxScore] THS缓存: ths_hot=${cache.thsHotMap.size}只`);
+    } catch (e) { console.warn('[TenxScore] ths_hot缓存失败:', (e as Error).message); }
+
+    // moneyflow_ths：全市场资金流向（1次调用）
+    try {
+        let mfRows = await TushareService.getMoneyflowThsByDate(tradeDateStr);
+        if (mfRows.length === 0) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            mfRows = await TushareService.getMoneyflowThsByDate(yesterday.toISOString().slice(0, 10).replace(/-/g, ''));
+        }
+        for (const row of mfRows) {
+            cache.moneyflowThsMap.set(row.ts_code, row);
+        }
+        console.log(`[TenxScore] THS缓存: moneyflow_ths=${cache.moneyflowThsMap.size}只`);
+    } catch (e) { console.warn('[TenxScore] moneyflow_ths缓存失败:', (e as Error).message); }
+
+    _thsCache = cache;
+    _thsCacheDate = tradeDateStr;
+}
+
 /**
  * 十倍股评分体系 v4：前瞻爆发版（百分制）
  * 
@@ -197,6 +293,11 @@ interface PrefetchedData {
     survival: TushareService.StkSurvivalRow[];
     analystRating: TushareService.AnalystRatingRow[];
     industry: { ts_code: string; industry_name: string; industry_code: string } | null;
+    // THS增强数据
+    limitListThs: TushareService.LimitListThsRow | null;
+    thsHot: TushareService.ThsHotRow | null;
+    moneyflowThs: TushareService.MoneyflowThsRow | null;
+    kplConceptCons: TushareService.KplConceptConsRow[];
 }
 
 async function prefetchAllData(symbol: string): Promise<PrefetchedData> {
@@ -225,9 +326,33 @@ async function prefetchAllData(symbol: string): Promise<PrefetchedData> {
     ]);
     const industry = await TushareService.getStockIndustry(symbol).catch(e => { console.warn('[TenxScore] getStockIndustry failed:', e?.message); return null; }) as any;
 
-    console.log(`[TenxScore] ${symbol} 数据获取: income=${income.length}, fina=${fina.length}, cashflow=${cashflow.length}, balance=${balance.length}, daily=${daily.length}, prices=${prices.length}, forecast=${forecast.length}, holderNumber=${holderNumber.length}, instHold=${institutionalHold.length}, hkHold=${hkHold.length}, survival=${survival.length}, analyst=${analystRating.length}, industry=${industry ? industry.industry_name : 'null'}`);
+    // THS增强数据（使用全局缓存，避免每只股票重复调用全市场接口）
+    // 如果缓存未加载，自动触发一次加载
+    if (!_thsCache || (_thsCache.limitListMap.size === 0 && _thsCache.thsHotMap.size === 0 && _thsCache.moneyflowThsMap.size === 0)) {
+        await preloadThsEnhanceCache();
+    }
+    const thsCache = getThsEnhanceCache();
+    const tsCode = symbol.includes('.') ? symbol : (symbol.startsWith('6') || symbol.startsWith('9') ? symbol + '.SH' : symbol + '.SZ');
+    const limitListThs = thsCache.limitListMap.get(tsCode) || null;
+    const thsHot = thsCache.thsHotMap.get(tsCode) || null;
+    const moneyflowThs = thsCache.moneyflowThsMap.get(tsCode) || null;
 
-    return { income: income as any[], fina: fina as any[], cashflow: cashflow as any[], balance: balance as any[], daily: daily as any[], prices: prices as any[], forecast: forecast as any[], holderNumber: holderNumber as any[], institutionalHold: institutionalHold as any[], hkHold: hkHold as any[], survival: survival as any[], analystRating: analystRating as any[], industry };
+    // kpl_concept_cons：按股票代码查询所属概念（带缓存）
+    let kplConceptCons: TushareService.KplConceptConsRow[] = [];
+    {
+        if (_kplConceptCache.has(tsCode)) {
+            kplConceptCons = _kplConceptCache.get(tsCode)!;
+        } else {
+            try {
+                kplConceptCons = await TushareService.getKplConceptCons({ con_code: tsCode });
+                _kplConceptCache.set(tsCode, kplConceptCons);
+            } catch (e) { console.warn('[TenxScore] kpl_concept_cons failed:', (e as Error).message); }
+        }
+    }
+
+    console.log(`[TenxScore] ${symbol} 数据获取: income=${income.length}, fina=${fina.length}, cashflow=${cashflow.length}, balance=${balance.length}, daily=${daily.length}, prices=${prices.length}, forecast=${forecast.length}, holderNumber=${holderNumber.length}, instHold=${institutionalHold.length}, hkHold=${hkHold.length}, survival=${survival.length}, analyst=${analystRating.length}, industry=${industry ? industry.industry_name : 'null'}, limitList=${limitListThs ? 'Y' : 'N'}, thsHot=${thsHot ? 'Y' : 'N'}, mfThs=${moneyflowThs ? 'Y' : 'N'}, kplCons=${kplConceptCons.length}`);
+
+    return { income: income as any[], fina: fina as any[], cashflow: cashflow as any[], balance: balance as any[], daily: daily as any[], prices: prices as any[], forecast: forecast as any[], holderNumber: holderNumber as any[], institutionalHold: institutionalHold as any[], hkHold: hkHold as any[], survival: survival as any[], analystRating: analystRating as any[], industry, limitListThs, thsHot, moneyflowThs, kplConceptCons };
 }
 
 async function prefetchDynamicData(symbol: string, cached: PrefetchedData): Promise<PrefetchedData> {
@@ -252,6 +377,8 @@ async function prefetchDynamicData(symbol: string, cached: PrefetchedData): Prom
         holderNumber: holderNumber as any[], industry: cached.industry,
         institutionalHold: institutionalHold as any[], hkHold: hkHold as any[],
         survival: survival as any[], analystRating: analystRating as any[],
+        limitListThs: cached.limitListThs, thsHot: cached.thsHot, moneyflowThs: cached.moneyflowThs,
+        kplConceptCons: cached.kplConceptCons,
     };
 }
 
@@ -404,44 +531,84 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
         forecastAttentionScore = Math.min(positiveTypes.length, 3) / 3 * 100;
     }
 
+    // 1f. THS热榜热度（来自ths_hot，新增增强维度）
+    let thsHotScore: number | null = null;
+    if (data.thsHot) {
+        // 热度排名越靠前越好（排名前10→100, 前50→80, 前100→60, 前200→40, 其他→20）
+        const rank = data.thsHot.hot_rank || 9999;
+        if (rank <= 10) thsHotScore = 100;
+        else if (rank <= 50) thsHotScore = 80;
+        else if (rank <= 100) thsHotScore = 60;
+        else if (rank <= 200) thsHotScore = 40;
+        else thsHotScore = 20;
+        // 热度值额外加分
+        const hotVal = data.thsHot.hot_score || 0;
+        if (hotVal > 0) thsHotScore = Math.min(100, (thsHotScore || 0) + Math.min(hotVal / 10, 10));
+    }
+
+    // 1g. THS资金流向热度（来自moneyflow_ths，新增增强维度）
+    let mfThsScore: number | null = null;
+    if (data.moneyflowThs) {
+        const netRatio = data.moneyflowThs.net_mf_ratio || 0;  // 净流入占比
+        const mf5day = data.moneyflowThs.mf_5day || 0;  // 5日主力净额（万元）
+        // 净流入占比评分
+        const ratioScore = Math.min(Math.abs(netRatio) / 5, 1) * 50;
+        // 5日主力净额评分
+        const mf5Score = mf5day > 0 ? Math.min(mf5day / 10000, 1) * 50 : 0;
+        mfThsScore = ratioScore + mf5Score;
+    }
+
     // 综合计算市场认可度
     let score = 0;
     let weight = 0;
     const hasCoreData = instHoldRatio != null || hkHoldRatio != null;
+    const hasThsData = thsHotScore != null || mfThsScore != null;
 
-    // 机构持股比例贡献（权重30%）
+    // 机构持股比例贡献（权重25%）
     if (instHoldRatio != null) {
-        score += Math.min(instHoldRatio, 60) / 60 * 100 * 0.3;
-        weight += 0.3;
+        score += Math.min(instHoldRatio, 60) / 60 * 100 * 0.25;
+        weight += 0.25;
     }
 
-    // 北向资金持股比例贡献（权重20%）
+    // 北向资金持股比例贡献（权重15%）
     if (hkHoldRatio != null) {
-        score += Math.min(hkHoldRatio, 15) / 15 * 100 * 0.2;
+        score += Math.min(hkHoldRatio, 15) / 15 * 100 * 0.15;
         if (hkHoldChange != null && hkHoldChange > 0) {
             score += Math.min(hkHoldChange * 10, 15);
         }
-        weight += 0.2;
+        weight += 0.15;
     }
 
-    // 分析师覆盖贡献（权重20%）
+    // 分析师覆盖贡献（权重15%）
     if (analystCount > 0) {
         const analystScore = Math.min(analystCount, 20) / 20 * 100;
-        score += analystScore * 0.2;
-        weight += 0.2;
+        score += analystScore * 0.15;
+        weight += 0.15;
     }
 
-    // 交易活跃度贡献 - 有核心数据时权重20%，无核心数据时降权到10%
-    const tradingWeight = hasCoreData ? 0.2 : 0.1;
+    // THS热榜热度贡献（权重15%，新增）
+    if (thsHotScore != null) {
+        score += thsHotScore * 0.15;
+        weight += 0.15;
+    }
+
+    // THS资金流向热度贡献（权重10%，新增）
+    if (mfThsScore != null) {
+        score += mfThsScore * 0.1;
+        weight += 0.1;
+    }
+
+    // 交易活跃度贡献 - 有核心/THS数据时权重15%，无数据时降权到10%
+    const tradingWeight = (hasCoreData || hasThsData) ? 0.15 : 0.1;
     if (tradingActivityScore != null) {
         score += tradingActivityScore * tradingWeight;
         weight += tradingWeight;
     }
 
-    // 业绩预告关注度贡献（权重10%）- 替代指标
+    // 业绩预告关注度贡献（权重5%）- 替代指标
     if (forecastAttentionScore != null) {
-        score += forecastAttentionScore * 0.1;
-        weight += 0.1;
+        score += forecastAttentionScore * 0.05;
+        weight += 0.05;
     }
 
     if (weight > 0) {
@@ -456,6 +623,23 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
     if (industryName) {
         for (const [keyword, score] of Object.entries(policyTrendMap)) {
             if (industryName.includes(keyword)) { policy_trend_score = score; break; }
+        }
+    }
+
+    // ③b. 概念人气值增强（来自kpl_concept_cons，新增增强维度）
+    // 如果该股票所在概念板块有高人气成分股，提升赛道景气度
+    if (data.kplConceptCons.length > 0) {
+        const avgPopularity = data.kplConceptCons.reduce((s, r) => s + (r.hot_num || 0), 0) / data.kplConceptCons.length;
+        // 人气值>50→加分，>100→显著加分
+        const popularityBoost = Math.min(avgPopularity / 50, 1);  // 0-1
+        if (policy_trend_score != null) {
+            // 有政策趋势数据时，人气值作为加分项
+            policy_trend_score = Math.min(5, policy_trend_score + popularityBoost * 0.5);
+        } else {
+            // 无政策趋势数据时，人气值直接映射为趋势强度
+            if (avgPopularity > 100) policy_trend_score = 4;
+            else if (avgPopularity > 50) policy_trend_score = 3;
+            else policy_trend_score = 2;
         }
     }
 
@@ -816,10 +1000,18 @@ function calcNewsCatalyst(data: PrefetchedData): RawIndicators {
         if (recentVisits.length >= 5) visitSignal = 1;
     }
 
+    // 3d. 涨停催化信号（来自limit_list_ths，新增增强维度）
+    let limitUpSignal = 0; // 0=无, 1=有涨停, 2=连板
+    if (data.limitListThs) {
+        const limitTimes = data.limitListThs.limit_times || 0;
+        if (limitTimes >= 2) limitUpSignal = 2;
+        else if (limitTimes >= 1) limitUpSignal = 1;
+    }
+
     // 综合判断
-    const totalSignal = forecastSignal + analystSignal + visitSignal;
-    if (totalSignal >= 3) hard_catalyst = 5;
-    else if (totalSignal >= 2) hard_catalyst = 4;
+    const totalSignal = forecastSignal + analystSignal + visitSignal + limitUpSignal;
+    if (totalSignal >= 4) hard_catalyst = 5;
+    else if (totalSignal >= 3) hard_catalyst = 4;
     else if (totalSignal >= 1) hard_catalyst = 3;
     else if (totalSignal === 0) hard_catalyst = 2;
     else hard_catalyst = 1;
