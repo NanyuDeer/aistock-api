@@ -23,6 +23,7 @@ import {
     getThsIndex,
     getThsDaily,
     getThsMember,
+    getDailyByDate,
     getLimitCptList,
     getThsHot,
     getLimitListThs,
@@ -41,6 +42,8 @@ import {
     type LimitStepRow,
     type MoneyflowCntThsRow,
     type MoneyflowThsRow,
+    getStockCompany,
+    type StockCompanyRow,
 } from './TushareService';
 
 // ==================== 缓存 ====================
@@ -132,11 +135,33 @@ async function fetchThsJson(url: string): Promise<any> {
     return response.json();
 }
 
-/** 获取同花顺概念板块列表（从概念页面隐藏的#gnSection元素提取） */
+/** 获取同花顺概念板块列表（优先使用Tushare ths_index，回退到HTML爬虫） */
 async function getConceptBoards(): Promise<any[]> {
     const cacheKey = 'ths_concept_boards';
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
+
+    // ===== 优先使用Tushare ths_index =====
+    try {
+        const conceptIndices = await getThsIndex('N', 'A');
+        if (conceptIndices.length > 0) {
+            const result = conceptIndices.map(idx => ({
+                code: idx.ts_code,
+                name: idx.name,
+                change: 0,  // 涨跌幅在identifyHotConcepts中通过ths_daily获取
+                price: 0,
+                up_count: 0,
+                down_count: 0,
+                net_inflow: 0,
+            }));
+            console.log(`[HotSectorAnalyzer] Tushare概念板块获取成功: ${result.length}个`);
+            cacheSet(cacheKey, result);
+            saveDailySnapshot('concept', result);
+            return result;
+        }
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] Tushare概念板块获取失败:', (err as Error).message);
+    }
 
     try {
         const html = await fetchThsHtml('https://q.10jqka.com.cn/gn/');
@@ -198,12 +223,36 @@ async function getConceptBoards(): Promise<any[]> {
     return [];
 }
 
-/** 获取同花顺行业板块列表 */
+/** 获取同花顺行业板块列表（优先使用Tushare ths_index，回退到HTML爬虫） */
 async function getIndustryBoards(): Promise<any[]> {
     const cacheKey = 'ths_industry_boards';
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
 
+    // ===== 优先使用Tushare ths_index =====
+    try {
+        const industryIndices = await getThsIndex('I', 'A');
+        if (industryIndices.length > 0) {
+            const industries = industryIndices.map(idx => ({
+                code: idx.ts_code,
+                name: idx.name,
+                change: 0,  // 涨跌幅在选股时按需获取
+                price: 0,
+                up_count: 0,
+                down_count: 0,
+                net_inflow: 0,
+                leading_stock: '--',
+            }));
+
+            console.log(`[HotSectorAnalyzer] Tushare行业板块获取成功: ${industries.length}个`);
+            cacheSet(cacheKey, industries);
+            return industries;
+        }
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] Tushare行业板块获取失败:', (err as Error).message);
+    }
+
+    // ===== Fallback：HTML爬虫 =====
     try {
         const html = await fetchThsHtml('https://q.10jqka.com.cn/thshy/');
         const $ = cheerio.load(html);
@@ -298,14 +347,104 @@ async function getBoardHistory(boardName: string, days: number = 10): Promise<an
     }
 }
 
-/** 获取板块成分股（概念板块和行业板块均使用HTML解析） */
+/** 全市场日线行情缓存（按日期，1次调用获取全市场） */
+let dailyByDateCache: { date: string; data: Map<string, DailyPriceRow> } | null = null;
+
+async function getDailyByDateCached(tradeDate: string): Promise<Map<string, DailyPriceRow>> {
+    if (dailyByDateCache && dailyByDateCache.date === tradeDate) {
+        return dailyByDateCache.data;
+    }
+    const rows = await getDailyByDate(tradeDate);
+    const map = new Map<string, DailyPriceRow>();
+    for (const row of rows) {
+        map.set(row.ts_code, row);
+    }
+    if (map.size > 0) {
+        dailyByDateCache = { date: tradeDate, data: map };
+        console.log(`[HotSectorAnalyzer] 全市场日线行情缓存: ${map.size}只 (${tradeDate})`);
+    } else {
+        console.log(`[HotSectorAnalyzer] ${tradeDate} 无行情数据（可能非交易日）`);
+    }
+    return map;
+}
+
+/** 获取最近交易日的全市场行情（自动跳过非交易日） */
+async function getLatestDailyMap(): Promise<{ date: string; data: Map<string, DailyPriceRow> }> {
+    // 如果已有缓存，直接返回
+    if (dailyByDateCache && dailyByDateCache.data.size > 0) {
+        return { date: dailyByDateCache.date, data: dailyByDateCache.data };
+    }
+
+    // 尝试最近3天
+    for (let offset = 0; offset < 3; offset++) {
+        const d = new Date();
+        d.setDate(d.getDate() - offset);
+        const dateStr = formatDate(d);
+        const map = await getDailyByDateCached(dateStr);
+        if (map.size > 0) {
+            return { date: dateStr, data: map };
+        }
+    }
+    return { date: '', data: new Map() };
+}
+
+/** 获取板块成分股（优先使用Tushare ths_member + daily，回退到HTML爬虫） */
 async function getBoardConstituents(boardCode: string, boardType: 'concept' | 'industry' = 'concept', pageSize: number = 100): Promise<any[]> {
     const cacheKey = `board_cons_${boardType}_${boardCode}`;
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
 
+    // ===== 优先使用Tushare ths_member + daily =====
+    try {
+        // boardCode可能是6位数字（同花顺代码）或带后缀的ts_code（如881101.TI）
+        let tsCode = boardCode;
+        if (!boardCode.includes('.')) {
+            // 无后缀，需要查找对应的ts_code
+            const indexMap = await getThsIndexNameMap();
+            for (const [, code] of indexMap.entries()) {
+                if (code.startsWith(boardCode + '.')) {
+                    tsCode = code;
+                    break;
+                }
+            }
+        }
+
+        // 获取成分股列表
+        const members = await getThsMember(tsCode);
+        if (members.length > 0) {
+            // 获取当日行情（全市场缓存，自动跳过非交易日）
+            const { data: dailyMap } = await getLatestDailyMap();
+
+            // 组装成分股数据（含涨幅）
+            const result: any[] = [];
+            for (const m of members) {
+                if (m.is_new === 'N') continue;  // 跳过已剔除的
+                const dailyRow = dailyMap.get(m.con_code);
+                const code6 = m.con_code.replace(/\.(SZ|SH|BJ)$/, '');
+                result.push({
+                    code: code6,
+                    name: m.con_name,
+                    price: dailyRow?.close || 0,
+                    change_pct: dailyRow?.pct_chg || 0,
+                    industry: '',
+                });
+            }
+
+            // 按涨幅降序排序
+            result.sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+
+            console.log(`[HotSectorAnalyzer] Tushare ${boardType} ${boardCode} 成分股: ${result.length}只`);
+            if (result.length > 0) {
+                cacheSet(cacheKey, result);
+                return result.slice(0, pageSize);
+            }
+        }
+    } catch (err) {
+        console.warn(`[HotSectorAnalyzer] Tushare ${boardType} ${boardCode} 成分股获取失败:`, (err as Error).message);
+    }
+
+    // ===== Fallback：HTML爬虫 =====
     if (boardType === 'concept') {
-        // 概念板块: 使用 /index/index/board/all/ 接口（按涨跌幅排序的成分股列表）
         try {
             const result = await parseConceptConstituents(boardCode, pageSize);
             if (result.length > 0) {
@@ -315,9 +454,7 @@ async function getBoardConstituents(boardCode: string, boardType: 'concept' | 'i
         } catch (err) {
             console.warn(`[HotSectorAnalyzer] 概念${boardCode}成分股获取失败:`, (err as Error).message);
         }
-        return [];
     } else {
-        // 行业板块: HTML解析行业详情页
         try {
             const result = await parseIndustryConstituents(boardCode, pageSize);
             if (result.length > 0) {
@@ -326,9 +463,9 @@ async function getBoardConstituents(boardCode: string, boardType: 'concept' | 'i
             return result;
         } catch (err) {
             console.warn(`[HotSectorAnalyzer] 行业${boardCode}成分股HTML解析失败:`, (err as Error).message);
-            return [];
         }
     }
+    return [];
 }
 
 /** 解析概念板块成分股（使用同花顺board/all接口） */
@@ -486,16 +623,37 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
         console.warn('[HotSectorAnalyzer] limit_cpt_list获取失败:', (err as Error).message);
     }
 
-    // 2. 获取同花顺热榜（ths_hot）—— 1次调用
-    let thsHotData: ThsHotRow[] = [];
+    // 2. 获取同花顺热榜（ths_hot）—— 10天概念板块热榜，用于计算概念上榜频次
+    // 概念→10天内上榜天数
+    const conceptHotDaysMap = new Map<string, number>();
     try {
-        thsHotData = await getThsHot(tradeDateStr);
-        if (thsHotData.length === 0) {
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            thsHotData = await getThsHot(formatDate(yesterday));
+        // 获取最近10个交易日的概念板块热榜，统计每个概念的上榜天数
+        const hotDates: string[] = [];
+        for (let i = 0; i < days * 2; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            hotDates.push(formatDate(d));
         }
-        console.log(`[HotSectorAnalyzer] ths_hot获取成功: ${thsHotData.length}条`);
+        // 逐日获取概念板块热榜（最多10天）
+        let fetchedDays = 0;
+        for (const dt of hotDates) {
+            if (fetchedDays >= days) break;
+            try {
+                // 使用 market='概念板块' 直接获取概念板块热榜，更精准高效
+                const dayData = await getThsHot(dt, '概念板块');
+                if (dayData.length > 0) {
+                    fetchedDays++;
+                    // 概念板块热榜每行就是一个概念板块
+                    for (const row of dayData) {
+                        const conceptName = row.ts_name || '';
+                        if (conceptName) {
+                            conceptHotDaysMap.set(conceptName, (conceptHotDaysMap.get(conceptName) || 0) + 1);
+                        }
+                    }
+                }
+            } catch { /* 跳过无数据日期 */ }
+        }
+        console.log(`[HotSectorAnalyzer] ths_hot概念板块获取成功: ${fetchedDays}天, ${conceptHotDaysMap.size}个概念`);
     } catch (err) {
         console.warn('[HotSectorAnalyzer] ths_hot获取失败:', (err as Error).message);
     }
@@ -520,22 +678,12 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
         mfCntMap.set(row.name, row);
     }
 
-    // 构建热榜Map（概念标签→热度排名/热度值）
-    const hotConceptMap = new Map<string, ThsHotRow[]>();
-    for (const row of thsHotData) {
-        if (row.concept_tag) {
-            const tags = row.concept_tag.split(';').filter(Boolean);
-            for (const tag of tags) {
-                const list = hotConceptMap.get(tag) || [];
-                list.push(row);
-                hotConceptMap.set(tag, list);
-            }
-        }
-    }
-
     // ===== 如果Tushare打板数据可用，优先使用 =====
     if (limitCptData.length > 0) {
-        const candidates: HotConcept[] = [];
+        let candidates: HotConcept[] = [];
+
+        // 获取概念指数名称映射（用于查询历史行情）
+        const thsIndexMap = await getThsIndexNameMap();
 
         for (const cpt of limitCptData) {
             // 从涨停板块统计提取数据
@@ -547,12 +695,6 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
             const mfRow = mfCntMap.get(cpt.name);
             const netInflow = mfRow ? (mfRow.net_mf_amount || 0) * 10000 : 0; // 万元→元
 
-            // 热度值
-            const hotRows = hotConceptMap.get(cpt.name);
-            const hotScore = hotRows && hotRows.length > 0
-                ? Math.max(...hotRows.map(r => r.hot_score || 0))
-                : 0;
-
             // 领涨股
             const leadStock = mfRow?.lead_stock || '--';
             const leadPctChg = mfRow?.lead_pct_chg || 0;
@@ -560,14 +702,66 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
             // 连板信息
             const conUpStat = cpt.con_up_stat || '';
 
+            // 通过ths_daily获取10日历史行情，计算平均涨幅和5日涨幅
+            let avgChange = 0;
+            let amountTrend = 0;
+            let todayChange = 0;
+            let change5day = 0; // 5日累计涨幅
+
+            const tsCode = thsIndexMap.get(cpt.name) || cpt.ts_code;
+            if (tsCode) {
+                try {
+                    const startDate = new Date();
+                    startDate.setDate(startDate.getDate() - days * 2);
+                    const hist = await getThsDaily(tsCode, formatDate(startDate));
+
+                    if (hist.length >= 3) {
+                        const recentHist = hist
+                            .sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)))
+                            .slice(-days);
+
+                        // 平均涨幅
+                        avgChange = recentHist.reduce((sum, h) => sum + Number(h.pct_change), 0) / recentHist.length;
+
+                        // 5日累计涨幅
+                        const last5 = recentHist.slice(-5);
+                        change5day = last5.reduce((sum, h) => sum + Number(h.pct_change), 0);
+
+                        // 资金趋势：近5日成交量均值 vs 前5日
+                        if (recentHist.length >= 5) {
+                            const recentVol = recentHist.slice(-5).reduce((s, h) => s + Number(h.vol), 0) / 5;
+                            const earlyVol = recentHist.slice(0, 5).reduce((s, h) => s + Number(h.vol), 0) / 5;
+                            amountTrend = earlyVol > 0 ? (recentVol / earlyVol - 1) * 100 : 0;
+                        }
+
+                        // 今日涨幅
+                        const latest = recentHist[recentHist.length - 1];
+                        todayChange = Math.round((Number(latest.pct_change) || 0) * 100) / 100;
+                    } else if (hist.length > 0) {
+                        avgChange = hist.reduce((sum, h) => sum + Number(h.pct_change), 0) / hist.length;
+                        const last5 = hist.sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date))).slice(-5);
+                        change5day = last5.reduce((sum, h) => sum + Number(h.pct_change), 0);
+                        const latest = hist.sort((a, b) => String(b.trade_date).localeCompare(String(a.trade_date)))[0];
+                        todayChange = Math.round((Number(latest.pct_change) || 0) * 100) / 100;
+                    }
+                } catch (err) {
+                    console.warn(`[HotSectorAnalyzer] ths_daily获取失败(${cpt.name}):`, (err as Error).message);
+                }
+            }
+
+            // 上榜频次：同花顺热榜10天内上榜天数
+            const hotDays = conceptHotDaysMap.get(cpt.name) || 0;
+            // 如果热榜无数据，用涨停家数作为最低频次
+            const frequency = hotDays > 0 ? hotDays : (cpt.limit_times > 0 ? 1 : 0);
+
             candidates.push({
                 code: cpt.ts_code || '',
                 name: cpt.name,
                 type: 'concept',
-                frequency: cpt.limit_times || 1,  // 涨停家数作为频次
-                avg_change: 0,  // 用涨停家数替代，不再需要平均涨幅
-                today_change: 0,  // limit_cpt_list无涨幅，后续补充
-                amount_trend: hotScore,  // 热度值替代资金趋势
+                frequency,  // 同花顺热榜10天上榜频次
+                avg_change: Math.round(avgChange * 100) / 100,
+                today_change: todayChange,
+                amount_trend: Math.round(amountTrend * 100) / 100,
                 net_inflow: netInflow,
                 driver: conUpStat,  // 连板统计作为驱动描述
                 leading_stock: leadStock,
@@ -575,39 +769,37 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
                 up_count: upCount,
                 down_count: downCount,
                 score: 0,
-            });
+                _change5day: change5day,  // 内部使用，5日累计涨幅
+            } as any);
         }
 
-        // 综合评分：涨停家数35% + 热度值25% + 资金净流入25% + 连板统计15%
+        // 综合评分：上榜频次40% + 平均涨幅20% + 5日涨幅15% + 资金净流入15% + 涨停家数10%
         for (const s of candidates) {
-            const limitScore = Math.min(10, (s.frequency || 0) * 1.5);
-            const hotScoreVal = Math.min(10, (s.amount_trend || 0) / 10);
+            const freqScore = Math.min(10, (s.frequency || 0) * 1.0);  // 10天上榜天数，上限10
+            const changeScore = Math.min(10, Math.abs(s.avg_change || 0) * 1.5);
+            const change5dScore = Math.min(10, Math.abs((s as any)._change5day || 0) * 0.5);  // 5日累计涨幅
             const inflowScore = Math.min(10, Math.abs(s.net_inflow) / 100000000 * 2);
-            const conScore = s.driver ? Math.min(10, 5) : 0; // 有连板统计加分
-            s.score = Math.round((limitScore * 3.5 + hotScoreVal * 2.5 + inflowScore * 2.5 + conScore * 1.5) * 100) / 100;
+            const limitScore = Math.min(10, (limitCptData.find(c => c.name === s.name)?.limit_times || 0) * 1.5);
+            s.score = Math.round((freqScore * 4.0 + changeScore * 2.0 + change5dScore * 1.5 + inflowScore * 1.5 + limitScore * 1.0) * 100) / 100;
+            delete (s as any)._change5day;  // 清理临时字段
         }
 
-        candidates.sort((a, b) => b.score - a.score);
-        const result = candidates.slice(0, topN);
+        // 过滤ST板块等非风口概念
+        candidates = candidates.filter(c => !c.name.includes('ST') && !c.name.includes('退市') && !c.name.includes('次新股'));
 
-        // 补充今日涨幅（通过ths_daily获取，仅对topN概念）
-        const thsIndexMap = await getThsIndexNameMap();
-        for (const concept of result) {
-            if (concept.today_change === 0) {
-                const tsCode = thsIndexMap.get(concept.name) || concept.code;
-                if (tsCode) {
-                    try {
-                        const startDate = new Date();
-                        startDate.setDate(startDate.getDate() - 3);
-                        const hist = await getThsDaily(tsCode, formatDate(startDate));
-                        if (hist.length > 0) {
-                            const latest = hist.sort((a, b) => String(b.trade_date).localeCompare(String(a.trade_date)))[0];
-                            concept.today_change = Math.round((Number(latest.pct_change) || 0) * 100) / 100;
-                        }
-                    } catch { /* ignore */ }
-                }
-            }
+        // 筛选上榜频次 >= minFrequency 的概念
+        let hotConcepts = candidates.filter(c => c.frequency >= minFrequency);
+        if (hotConcepts.length < topN) {
+            hotConcepts = candidates.filter(c => c.frequency >= Math.max(1, minFrequency - 1));
         }
+        if (hotConcepts.length < topN) {
+            hotConcepts = candidates
+                .sort((a, b) => b.score - a.score)
+                .slice(0, topN);
+        }
+
+        hotConcepts.sort((a, b) => b.score - a.score);
+        const result = hotConcepts.slice(0, topN);
 
         cacheSet(cacheKey, result);
         return result;
@@ -839,8 +1031,53 @@ const INDUSTRY_CHAIN: Record<string, { upstream: string[]; downstream: string[] 
     '电网设备': { upstream: ['电力设备', '金属新材料', '自动化设备'], downstream: ['电力'] },
 };
 
+/** 同花顺行业分类 → 申万行业名映射（用于产业链查找） */
+const THS_TO_SW_INDUSTRY: Record<string, string[]> = {
+    '信息技术(A股)': ['软件开发', '计算机设备', '通信设备', '传媒', '游戏'],
+    '软件与服务(A股)': ['软件开发', '计算机设备', '传媒'],
+    '技术硬件与设备(A股)': ['半导体', '元件', '消费电子', '光学光电子', '通信设备', '计算机设备'],
+    '工业(A股)': ['通用设备', '专用设备', '自动化设备', '电力设备'],
+    '资本品(A股)': ['通用设备', '专用设备', '自动化设备', '汽车零部件'],
+    '半导体产品与设备Ⅱ(A股)': ['半导体', '元件', '电子化学品'],
+    '半导体产品与设备Ⅲ(A股)': ['半导体', '元件', '电子化学品'],
+    '材料(A股)': ['金属新材料', '化学制品', '电子化学品'],
+    '能源(A股)': ['电力', '电力设备', '煤炭开采加工'],
+    '金融(A股)': ['银行', '证券', '保险'],
+    '医疗保健(A股)': ['医药生物', '医药商业'],
+    '日常消费(A股)': ['食品加工', '饮料乳品', '农牧饲渔'],
+    '可选消费(A股)': ['消费电子', '汽车整车', '汽车零部件'],
+    '房地产(A股)': ['房地产开发', '建筑装饰'],
+    '公用事业(A股)': ['电力', '环保', '电网设备'],
+};
+
 function getUpstreamDownstream(industryName: string): { upstream: string[]; downstream: string[] } {
-    return INDUSTRY_CHAIN[industryName] || { upstream: [], downstream: [] };
+    // 1. 直接匹配申万行业名
+    const direct = INDUSTRY_CHAIN[industryName];
+    if (direct) return direct;
+
+    // 2. 同花顺行业名 → 多个申万行业，合并去重
+    const swNames = THS_TO_SW_INDUSTRY[industryName];
+    if (swNames) {
+        const upSet = new Set<string>();
+        const downSet = new Set<string>();
+        for (const sw of swNames) {
+            const chain = INDUSTRY_CHAIN[sw];
+            if (chain) {
+                for (const u of chain.upstream) upSet.add(u);
+                for (const d of chain.downstream) downSet.add(d);
+            }
+        }
+        // 移除自身已包含的行业（避免循环）
+        for (const sw of swNames) { upSet.delete(sw); downSet.delete(sw); }
+        return { upstream: [...upSet], downstream: [...downSet] };
+    }
+
+    // 3. 模糊匹配：去掉"(A股)"后缀再试
+    const cleanName = industryName.replace(/\(A股\)$/, '').replace(/[ⅡⅢ]$/, '');
+    const fuzzy = INDUSTRY_CHAIN[cleanName];
+    if (fuzzy) return fuzzy;
+
+    return { upstream: [], downstream: [] };
 }
 
 // ==================== 传导因子计算 ====================
@@ -978,13 +1215,22 @@ interface AiAnalysis {
     risk_warning: string;
 }
 
+/** AI API是否可用的标记（首次失败后直接跳过，避免重复超时） */
+let aiApiAvailable: boolean | null = null;
+
 async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, transmission: TransmissionResult): Promise<AiAnalysis> {
     const apiKey = process.env.OPENAI_API_KEY || '';
-    const apiBase = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+    let apiBase = process.env.OPENAI_API_BASE_URL || process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+    // 兼容URL已包含/chat/completions的情况（其他Service直接用完整URL）
+    const chatUrl = apiBase.includes('/chat/completions') ? apiBase : `${apiBase}/chat/completions`;
     const model = process.env.AI_MODEL || 'gpt-4o-mini';
 
-    if (!apiKey) {
-        console.log('[HotSectorAnalyzer] 未配置OPENAI_API_KEY，使用规则引擎判断');
+    if (!apiKey || aiApiAvailable === false) {
+        if (aiApiAvailable === false) {
+            // AI已确认不可用，直接用规则引擎
+        } else if (!apiKey) {
+            console.log('[HotSectorAnalyzer] 未配置OPENAI_API_KEY，使用规则引擎判断');
+        }
         return ruleBasedAnalysis(sectorName, sectorData, transmission);
     }
 
@@ -1013,8 +1259,9 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
 
 只返回JSON，不要其他文字。`;
 
-        const resp = await fetch(`${apiBase}/chat/completions`, {
+        const resp = await fetch(chatUrl, {
             method: 'POST',
+            signal: AbortSignal.timeout(15000),  // 15秒超时，免费API响应较慢
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
@@ -1036,9 +1283,16 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
             if (content.startsWith('json')) content = content.slice(4);
         }
 
-        return JSON.parse(content.trim());
+        const result = JSON.parse(content.trim());
+        aiApiAvailable = true;  // AI可用
+        return result;
     } catch (err) {
-        console.error('[HotSectorAnalyzer] AI分析失败，使用规则引擎:', err);
+        const errMsg = (err as Error).message || '';
+        // 只有连接错误才标记AI永久不可用，超时只是暂时问题
+        if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ENOTFOUND') || errMsg.includes('fetch failed')) {
+            aiApiAvailable = false;
+        }
+        console.error('[HotSectorAnalyzer] AI分析失败，使用规则引擎:', errMsg);
         return ruleBasedAnalysis(sectorName, sectorData, transmission);
     }
 }
@@ -1105,6 +1359,7 @@ interface SelectedStock {
     reason_tag_class: string;
     source: string;
     in_concept: boolean;
+    limit_tags: string[];  // 涨停标签（status优先，再tag），如["2连板","换手板"]
     chain_position?: string;
     related_industry?: string;
     overlap_ratio?: number;
@@ -1238,7 +1493,7 @@ async function fetchTushareEnhancement(stockCodes: string[]): Promise<{
         const batch = tsCodes.slice(i, i + batchSize);
         const promises = batch.map(async (tsCode) => {
             try {
-                const rows = await getStockDailyRecent(tsCode.split('.')[0], 10);
+                const rows = await getStockDailyRecent(tsCode.split('.')[0], 20);
                 dailyHistMap.set(tsCode, rows);
             } catch { /* ignore */ }
         });
@@ -1302,7 +1557,6 @@ async function selectStocksFromIndustry(
 
         // 资金净流入：优先用moneyflow_ths（更精准，含占比和5日数据），回退到moneyflow
         const netMfAmount = mfThsData?.net_mf_amount || mfData?.net_mf_amount || 0;
-        const netMfRatio = mfThsData?.net_mf_ratio || 0;  // 净流入占比
         const mf5day = mfThsData?.mf_5day || 0;  // 5日主力净额（万元）
         // 大单+特大单净买入（万元）
         const bigNetAmount = mfThsData
@@ -1321,110 +1575,275 @@ async function selectStocksFromIndustry(
         const consecutiveUpDays = histData ? calcConsecutiveUpDays(histData) : 0;
         // 涨停数据
         const isLimitUp = limitData != null;  // 是否涨停
-        const limitTimes = limitData?.limit_times || 0;  // 连板数
-        const limitReason = limitData?.limit_reason || '';  // 涨停原因
-        const fcRatio = limitData?.fc_ratio || 0;  // 封板率
+        // 从status字段解析连板数，格式如"4天4板"、"2天2板"、"首板"
+        const statusStr = limitData?.status || '';
+        const boardMatch = statusStr.match(/(\d+)天(\d+)板/);
+        const limitTimes = boardMatch ? parseInt(boardMatch[2]) : (statusStr.includes('首板') ? 1 : 0);
+        const limitReason = limitData?.lu_desc || '';  // 涨停原因
+        const fcRatio = limitData?.limit_up_suc_rate || 0;  // 近一年涨停封板率
 
         // 市值过滤：流通市值 < 20亿 的跳过（容易被操纵）
         if (circMv > 0 && circMv < 200000) {
             continue;
         }
 
-        // 多因子打分
-        let baseScore = 0;
-        let reason = '';
+        // ===== 12子因子四维打分体系 =====
+        // 目标：筛选未来1-2周有上涨潜力的风口股
+        // 趋势/动量40% + 资金流/量价30% + 风口/概念20% + 风险/拥挤度10%
+
+        // ---- 维度1：趋势/动量（权重40%，4因子）----
+        let trendScore = 0;
+
+        // 因子1：当日涨跌幅（0-25分）
+        // 涨停>大涨>中涨>小涨>微涨>平盘>下跌
+        if (changePct >= 9.5) {
+            trendScore += 25; // 涨停级
+        } else if (changePct >= 5) {
+            trendScore += 15 + Math.min(10, (changePct - 5) * 2);
+        } else if (changePct >= 2) {
+            trendScore += 8 + (changePct - 2) * 2.33;
+        } else if (changePct > 0) {
+            trendScore += changePct * 4;
+        } else {
+            trendScore += Math.max(0, 3 + changePct); // 下跌给极少分
+        }
+
+        // 因子2：连续上涨天数（0-25分）
+        // 连涨天数越多，趋势惯性越强，未来1-2周延续概率越高
+        if (consecutiveUpDays >= 7) {
+            trendScore += 25;
+        } else if (consecutiveUpDays >= 5) {
+            trendScore += 20;
+        } else if (consecutiveUpDays >= 3) {
+            trendScore += 12 + (consecutiveUpDays - 3) * 4;
+        } else if (consecutiveUpDays >= 1) {
+            trendScore += 4;
+        }
+
+        // 因子3：涨停/连板强度（0-30分）
+        // 连板是最强动量信号，短期爆发力最强
+        if (isLimitUp && limitTimes >= 4) {
+            trendScore += 30; // 4连板+
+        } else if (isLimitUp && limitTimes >= 3) {
+            trendScore += 27;
+        } else if (isLimitUp && limitTimes >= 2) {
+            trendScore += 24;
+        } else if (isLimitUp) {
+            trendScore += 18 + Math.min(12, fcRatio / 10 * 2); // 首板+封板率加分
+        }
+
+        // 因子4：20日涨幅（0-20分）
+        // 中期趋势强度，20日涨幅反映近一个月的趋势
+        let change20d = 0;
+        if (histData && histData.length >= 5) {
+            const sorted = [...histData].sort((a, b) => String(a.trade_date).localeCompare(String(b.trade_date)));
+            if (sorted.length >= 2) {
+                const oldestClose = Number(sorted[0].close);
+                const latestClose = Number(sorted[sorted.length - 1].close);
+                if (oldestClose > 0) {
+                    change20d = (latestClose - oldestClose) / oldestClose * 100;
+                }
+            }
+        }
+        if (change20d >= 30) {
+            trendScore += 20; // 强势趋势
+        } else if (change20d >= 15) {
+            trendScore += 14;
+        } else if (change20d >= 5) {
+            trendScore += 8;
+        } else if (change20d >= 0) {
+            trendScore += 3;
+        } else if (change20d >= -10) {
+            trendScore += 1;
+        }
+        // 20日跌幅过大则不加趋势分
+
+        // ---- 维度2：资金流/量价（权重30%，4因子）----
+        let fundScore = 0;
+
+        // 因子5：5日主力净流入占比 net_mf_ratio（0-25分）
+        // 占比越高说明主力资金越积极，是短期上涨的核心驱动力
+        const netMfRatio = mfThsData?.net_mf_ratio || 0;
+        if (netMfRatio >= 20) {
+            fundScore += 25; // 主力极度积极
+        } else if (netMfRatio >= 10) {
+            fundScore += 18;
+        } else if (netMfRatio >= 5) {
+            fundScore += 12;
+        } else if (netMfRatio >= 0) {
+            fundScore += 5;
+        } else if (netMfRatio >= -5) {
+            fundScore += 2; // 小幅流出
+        }
+        // 大幅流出不给分
+
+        // 因子6：5日主力净额 mf_5day（0-25分）
+        // 绝对金额反映资金介入深度
+        if (mf5day > 0) {
+            const mf5dYi = mf5day / 10000; // 转亿
+            if (mf5dYi >= 5) {
+                fundScore += 25;
+            } else if (mf5dYi >= 2) {
+                fundScore += 16 + (mf5dYi - 2) * 3;
+            } else if (mf5dYi >= 0.5) {
+                fundScore += 8 + (mf5dYi - 0.5) * 5.33;
+            } else {
+                fundScore += mf5dYi * 16;
+            }
+        }
+
+        // 因子7：换手率（0-25分）
+        // 风口股需要流动性支撑！适中换手(3-10%)最佳，过低无人关注，过高过热
+        if (turnover >= 3 && turnover <= 5) {
+            fundScore += 25; // 最佳：温和活跃，资金参与度高
+        } else if (turnover > 5 && turnover <= 7) {
+            fundScore += 22; // 良好：正常活跃
+        } else if (turnover > 7 && turnover <= 10) {
+            fundScore += 18; // 可接受：偏活跃
+        } else if (turnover > 2 && turnover < 3) {
+            fundScore += 15; // 偏低但尚可
+        } else if (turnover > 1 && turnover <= 2) {
+            fundScore += 8;  // 偏低，流动性不足
+        } else if (turnover > 10 && turnover <= 15) {
+            fundScore += 10; // 偏高，游资特征
+        } else if (turnover > 0 && turnover <= 1) {
+            fundScore += 3;  // 极低换手，无人关注
+        } else if (turnover > 15 && turnover <= 25) {
+            fundScore += 4;  // 过热
+        }
+        // >25% 极度过热，0分
+
+        // 因子8：量比（0-25分）
+        // 量比>1说明今日放量，资金关注度提升
+        if (volumeRatio >= 3) {
+            fundScore += 25; // 明显放量
+        } else if (volumeRatio >= 2) {
+            fundScore += 18 + (volumeRatio - 2) * 7;
+        } else if (volumeRatio >= 1.5) {
+            fundScore += 10;
+        } else if (volumeRatio >= 1) {
+            fundScore += 5;
+        } else if (volumeRatio > 0) {
+            fundScore += 2; // 缩量
+        }
+
+        // ---- 维度3：风口/概念（权重20%，2因子）----
+        let conceptScoreVal = 0;
+
+        // 因子9：概念共振（0-60分）
+        // 属于该风口概念成分股，享受板块上涨红利
+        const inConcept = conceptCodes.has(stock.code);
+        if (inConcept) {
+            conceptScoreVal += 60;
+        }
+
+        // 因子10：板块联动（0-40分）
+        // 板块连涨+个股跟涨 = 最强联动
+        if (isBoardUptrend && changePct > 0) {
+            conceptScoreVal += 40;
+        } else if (isBoardUptrend) {
+            conceptScoreVal += 15;
+        } else if (changePct > 3) {
+            conceptScoreVal += 20;
+        }
+
+        // ---- 维度4：风险/拥挤度（权重10%，2因子，负向）----
+        let riskScore = 50; // 基准50分
+
+        // 因子11：高换手+高涨幅减分（出货嫌疑）
+        if (changePct > 7 && turnover > 20) {
+            riskScore -= 40; // 极大概率出货
+        } else if (changePct > 5 && turnover > 15) {
+            riskScore -= 25; // 高位放量
+        } else if (changePct > 3 && turnover > 10) {
+            riskScore -= 10; // 温和放量
+        }
+
+        // 因子12：资金流出+上涨减分（虚涨，无资金支撑）
+        if (changePct > 0 && mf5day < 0 && netMfRatio < -5) {
+            riskScore -= 20; // 上涨但资金持续流出
+        } else if (changePct > 0 && mf5day < 0) {
+            riskScore -= 8; // 上涨但5日资金小幅流出
+        }
+
+        riskScore = Math.max(0, Math.min(100, riskScore));
+
+        // ===== 加权求和 =====
+        const totalScore = trendScore * 0.40 + fundScore * 0.30 + conceptScoreVal * 0.20 + riskScore * 0.10;
+
+        // 跳过总分过低的股票
+        if (totalScore < 15) continue;
+
+        // ===== 生成标签和描述 =====
         let reasonTag = '';
         let reasonTagClass = '';
+        let reason = '';
 
-        // 连续上涨加分（独立于其他条件）
-        const consecutiveBonus = consecutiveUpDays >= 3 ? (consecutiveUpDays - 2) * 5 : 0;
-
-        // 涨停加分（来自limit_list_ths）
-        const limitUpBonus = isLimitUp
-            ? Math.min(15, 5 + limitTimes * 5 + Math.min(fcRatio / 10, 5))
-            : 0;
-
-        // 5日主力净额加分（来自moneyflow_ths）
-        const mf5dayBonus = mf5day > 0 ? Math.min(8, mf5day / 5000) : 0;
+        // 提取涨停标签（status优先，再tag），用于红色标签显示
+        const limitTags: string[] = [];
+        if (isLimitUp) {
+            // status优先：如"4天4板"、"首板"
+            if (statusStr) {
+                limitTags.push(statusStr);
+            }
+            // 再加tag：如"换手板"、"一字板"、"T字板"
+            const tagStr = limitData?.tag || '';
+            if (tagStr && !statusStr.includes(tagStr)) {
+                limitTags.push(tagStr);
+            }
+        }
 
         if (isLimitUp && limitTimes >= 2) {
-            // 连板股（来自limit_list_ths）
-            baseScore = Math.min(92, 60 + limitTimes * 8 + fcRatio * 0.1 + turnover * 0.5);
-            reason = `${limitTimes}连板，封板率${fcRatio.toFixed(0)}%${limitReason ? '，' + limitReason : ''}`;
             reasonTag = `${limitTimes}连板`;
             reasonTagClass = 'tag-bullish';
+            // 涨停股不再在理由中写涨停/连板，因为红色标签会显示
+            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
+            reason = reason || '涨停';  // 兜底
         } else if (isLimitUp) {
-            // 首板涨停
-            baseScore = Math.min(88, 55 + fcRatio * 0.1 + turnover * 0.5 + Math.min(Math.abs(netInflowEm) / 100000000, 10) * 2);
-            reason = `涨停，封板率${fcRatio.toFixed(0)}%${limitReason ? '，' + limitReason : ''}`;
             reasonTag = '涨停';
             reasonTagClass = 'tag-bullish';
+            // 涨停股不再在理由中写涨停，因为红色标签会显示
+            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
+            reason = reason || '涨停';  // 兜底
+        } else if (consecutiveUpDays >= 5 && mf5day > 0) {
+            reasonTag = '强势连阳';
+            reasonTagClass = 'tag-trend';
+            reason = `连续${consecutiveUpDays}日上涨，5日主力净流入${(mf5day / 10000).toFixed(2)}亿`;
+        } else if (consecutiveUpDays >= 3 && mf5day > 0) {
+            reasonTag = '资金连阳';
+            reasonTagClass = 'tag-trend';
+            reason = `连续${consecutiveUpDays}日上涨，资金持续流入`;
         } else if (changePct > 5 && turnover > 5) {
-            // 量价齐升
-            baseScore = Math.min(90, Math.abs(changePct) * 5 + turnover * 2 + Math.min(Math.abs(netInflowEm) / 100000000, 10) * 3);
-            reason = `量价齐升，涨幅${changePct.toFixed(1)}%`;
             reasonTag = '量价齐升';
             reasonTagClass = 'tag-trend';
+            reason = `量价齐升，涨幅${changePct.toFixed(1)}%`;
+        } else if (mf5day > 0 && changePct > 0) {
+            reasonTag = '资金流入';
+            reasonTagClass = 'tag-fund';
+            reason = `资金流入+上涨${changePct.toFixed(1)}%`;
         } else if (consecutiveUpDays >= 3) {
-            // 连续上涨3天以上
-            baseScore = Math.min(88, Math.abs(changePct) * 5 + consecutiveUpDays * 6 + turnover * 1.5);
-            reason = `连续${consecutiveUpDays}日上涨，阶段涨幅${changePct.toFixed(1)}%`;
             reasonTag = '连续上涨';
             reasonTagClass = 'tag-bullish';
-        } else if (changePct > 3 && isBoardUptrend) {
-            // 板块连续上涨 + 个股强势
-            baseScore = Math.min(86, Math.abs(changePct) * 6 + turnover * 1.5 + Math.min(Math.abs(netInflowEm) / 100000000, 10) * 2);
-            reason = `板块联动上涨，涨幅${changePct.toFixed(1)}%`;
-            reasonTag = '连续上涨';
-            reasonTagClass = 'tag-bullish';
+            reason = `连续${consecutiveUpDays}日上涨`;
         } else if (changePct > 3) {
-            // 强势上涨
-            baseScore = Math.min(85, Math.abs(changePct) * 6 + turnover * 1.5);
-            reason = `涨幅${changePct.toFixed(1)}%`;
             reasonTag = '强势上涨';
             reasonTagClass = 'tag-bullish';
-        } else if (bigNetAmount > 5000) {
-            // 大单净买入 > 5000万（Tushare数据，更精准）
-            baseScore = Math.min(82, 40 + Math.min(bigNetAmount / 10000, 20) * 2);
-            reason = `主力大单净买入${(bigNetAmount / 10000).toFixed(2)}亿`;
-            reasonTag = '持续放量';
-            reasonTagClass = 'tag-fund';
-        } else if (Math.abs(netInflowEm) > 500000000) {
-            // 东方财富资金大幅流入
-            baseScore = Math.min(80, 40 + Math.min(Math.abs(netInflowEm) / 100000000, 20) * 2);
-            reason = `持续放量，主力净流入${(netInflowEm / 100000000).toFixed(2)}亿`;
-            reasonTag = '持续放量';
-            reasonTagClass = 'tag-fund';
-        } else if (changePct > 0 && turnover > 3) {
-            // 放量上涨
-            baseScore = Math.min(75, Math.abs(changePct) * 8 + turnover * 1.2);
-            reason = `放量上涨${changePct.toFixed(1)}%，换手率${turnover.toFixed(1)}%`;
-            reasonTag = '量价齐升';
-            reasonTagClass = 'tag-trend';
-        } else if (changePct > 0) {
-            // 上涨
-            baseScore = Math.min(70, Math.abs(changePct) * 8 + turnover);
             reason = `涨幅${changePct.toFixed(1)}%`;
+        } else if (changePct > 0) {
             reasonTag = '上涨';
             reasonTagClass = 'tag-trend';
+            reason = `涨幅${changePct.toFixed(1)}%`;
         } else {
-            continue; // 跳过下跌股
+            reasonTag = '资金关注';
+            reasonTagClass = 'tag-fund';
+            reason = `主力资金关注`;
         }
 
-        // 量比加分（量比>2说明明显放量）
-        const volumeRatioBonus = volumeRatio > 2 ? Math.min(8, (volumeRatio - 2) * 3) : 0;
-        if (volumeRatioBonus > 0 && !reason.includes('放量')) {
-            reason += `，量比${volumeRatio.toFixed(1)}`;
-        }
-
-        // 概念标签加分
-        const conceptBonus = conceptCodes.has(stock.code) ? 10 : 0;
-        if (conceptBonus > 0) {
+        // 概念共振覆盖标签
+        if (inConcept) {
             reasonTag = '概念共振';
             reasonTagClass = 'tag-bullish';
         }
-
-        const totalScore = baseScore + consecutiveBonus + volumeRatioBonus + conceptBonus + limitUpBonus + mf5dayBonus;
 
         stocks.push({
             code: stock.code,
@@ -1435,7 +1854,8 @@ async function selectStocksFromIndustry(
             reason_tag: reasonTag,
             reason_tag_class: reasonTagClass,
             source: reasonTag === '概念共振' ? conceptName : reasonTag,
-            in_concept: conceptBonus > 0,
+            in_concept: inConcept,
+            limit_tags: limitTags,
             price: stock.price,
             change_pct: stock.change_pct,
         });
@@ -1518,6 +1938,52 @@ function buildFlowData(
 
 // ==================== 提取龙头股信息 ====================
 
+/** 龙头地位关键词 */
+const LEADER_KEYWORDS = [
+    '龙头', '领先', '最大', '第一', '唯一', '首家', '核心',
+    '独家', '稀缺', '不可替代', '市占率', '份额第一',
+    '全球领先', '国内领先', '世界领先', '行业领先',
+    '绝对龙头', '双龙头', '细分龙头', '行业第一',
+    '全球最大', '国内最大', '世界最大', '全球第一', '国内第一',
+    '垄断', '主导', '标杆', '领军', '先驱',
+];
+
+/** 从introduction中提取龙头优势描述（1-2句） */
+function extractLeaderDescription(introduction: string, mainBusiness: string): string {
+    if (!introduction && !mainBusiness) return '';
+
+    // 按句号/分号拆分句子
+    const sentences = introduction.split(/[。；]/).filter(s => s.trim().length > 0);
+    const matched: string[] = [];
+
+    for (const sentence of sentences) {
+        for (const keyword of LEADER_KEYWORDS) {
+            if (sentence.includes(keyword)) {
+                matched.push(sentence.trim());
+                break;  // 每个句子只匹配一次
+            }
+        }
+        if (matched.length >= 2) break;  // 最多取2句
+    }
+
+    if (matched.length > 0) {
+        return matched.join('；');
+    }
+
+    // 无关键词时用main_business
+    return mainBusiness || '';
+}
+
+/** 统计introduction中龙头关键词数量 */
+function countLeaderKeywords(introduction: string): number {
+    if (!introduction) return 0;
+    let count = 0;
+    for (const keyword of LEADER_KEYWORDS) {
+        if (introduction.includes(keyword)) count++;
+    }
+    return count;
+}
+
 interface LeadingStockInfo {
     name: string;
     code: string;
@@ -1526,6 +1992,7 @@ interface LeadingStockInfo {
     change_pct: number | null;
     reason: string;
     in_concept: boolean;
+    limit_tags: string[];
 }
 
 async function extractLeadingStock(
@@ -1547,14 +2014,51 @@ async function extractLeadingStock(
                 if (quote['涨跌幅']) changePct = quote['涨跌幅'];
             } catch { /* ignore */ }
         }
+
+        // 调用stock_company获取公司介绍，构建龙头依据
+        let leaderBasis = best.reason;
+        let leaderBonus = 0;
+        try {
+            const tsCode = toTsCodeFromEm(best.code);
+            if (tsCode) {
+                const companyData = await getStockCompany(tsCode);
+                if (companyData) {
+                    const desc = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
+                    // 龙头地位加分：1个关键词+4分，2个以上+8分
+                    const keywordCount = countLeaderKeywords(companyData.introduction || '');
+                    if (keywordCount >= 2) {
+                        leaderBonus = 8;
+                    } else if (keywordCount >= 1) {
+                        leaderBonus = 4;
+                    }
+                    // 龙头依据 = introduction关键词提取 + lu_desc补充
+                    const luDesc = best.reason;
+                    if (desc && luDesc) {
+                        leaderBasis = desc + '；' + luDesc;
+                    } else if (desc) {
+                        leaderBasis = desc;
+                    }
+                    // else 保持原reason
+                }
+            }
+        } catch (e) {
+            console.warn(`[HotSectorAnalyzer] stock_company获取失败(${best.code}):`, (e as Error).message);
+        }
+
+        // 龙头地位加分
+        if (leaderBonus > 0) {
+            best.score = Math.round((best.score + leaderBonus) * 10) / 10;
+        }
+
         return {
             name: best.name,
             code: best.code,
             industry: best.industry,
             price,
             change_pct: changePct,
-            reason: best.reason,
+            reason: leaderBasis,
             in_concept: best.in_concept,
+            limit_tags: best.limit_tags || [],
         };
     }
 
@@ -1571,14 +2075,29 @@ async function extractLeadingStock(
                 if (quote['涨跌幅']) changePct = quote['涨跌幅'];
             } catch { /* ignore */ }
         }
+
+        // 备选龙头也调用stock_company
+        let leaderBasis = concept.driver || '';
+        try {
+            const tsCode = toTsCodeFromEm(stock.code);
+            if (tsCode) {
+                const companyData = await getStockCompany(tsCode);
+                if (companyData) {
+                    const desc = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
+                    if (desc) leaderBasis = desc;
+                }
+            }
+        } catch { /* ignore */ }
+
         return {
             name: stock.name,
             code: stock.code,
             industry: stock.industry || '',
             price,
             change_pct: changePct,
-            reason: concept.driver || '',
+            reason: leaderBasis,
             in_concept: true,
+            limit_tags: [],
         };
     }
 
@@ -1590,6 +2109,7 @@ async function extractLeadingStock(
         change_pct: null,
         reason: concept.driver || '',
         in_concept: false,
+        limit_tags: [],
     };
 }
 
@@ -1796,6 +2316,13 @@ export class HotSectorAnalyzerService {
                 concept.name, concept, finalMainStocks, concept.code,
             );
 
+            // 板块综合评分（用于泡泡图大小）：频次*4 + 均涨幅*3 + 资金趋势*0.3
+            const sectorScore = Math.round(
+                (concept.frequency || 0) * 4 +
+                (concept.avg_change || 0) * 3 +
+                (concept.amount_trend || 0) * 0.3
+            );
+
             result.hot_sectors.push({
                 name: concept.name,
                 type: concept.type,
@@ -1808,6 +2335,7 @@ export class HotSectorAnalyzerService {
                 up_count: concept.up_count,
                 down_count: concept.down_count,
                 driver: concept.driver,
+                score: sectorScore,
                 related_industries: relatedIndNames,
                 industry_data: industryData,
                 ai_analysis: aiAnalysis,

@@ -699,6 +699,18 @@ export async function getThsMember(tsCode: string): Promise<ThsMemberRow[]> {
     return rows as ThsMemberRow[];
 }
 
+/** 按交易日期获取全市场股票日线行情（用于批量获取成分股涨幅）
+ * 频率限制：500次/分钟，单次最大5000行
+ */
+export async function getDailyByDate(tradeDate: string): Promise<DailyPriceRow[]> {
+    const rows = await tushareRequest(
+        'daily',
+        { trade_date: tradeDate },
+        'ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount',
+    );
+    return rows as DailyPriceRow[];
+}
+
 // ==================== 打板专题 & THS增强接口 ====================
 
 /** 涨停板块统计 - 每天涨停股最多的概念板块 */
@@ -727,52 +739,63 @@ export async function getLimitCptList(tradeDate: string): Promise<LimitCptListRo
 
 /** 同花顺热榜 */
 export interface ThsHotRow {
-    ts_code: string;          // 股票代码
-    name: string;             // 股票名称
-    hot_type: string;         // 热度类型
-    hot_rank: number;         // 热度排名
-    hot_score: number;        // 热度值
-    concept_tag: string;      // 概念标签
-    industry_tag: string;     // 行业标签
+    ts_code: string;          // 代码
+    ts_name: string;          // 名称
+    data_type: string;        // 数据类型
+    rank: number;             // 排行
+    pct_change: number;       // 涨跌幅%
+    current_price: number;    // 当前价格
+    concept: string;          // 标签（JSON数组字符串，如 '["钠离子电池", "同花顺漂亮100"]'）
+    rank_reason: string;      // 上榜解读
+    hot: number;              // 热度值
+    rank_time: string;        // 排行榜获取时间
     trade_date: string;       // 交易日期
 }
 
 /** 获取同花顺热榜数据
- * 频率限制：2000条/次
+ * market: 热股/ETF/可转债/行业板块/概念板块/期货/港股/热基/美股
+ * 频率限制：2000条/次，需6000积分
  */
-export async function getThsHot(tradeDate: string, hotType?: string): Promise<ThsHotRow[]> {
-    const params: Record<string, any> = { trade_date: tradeDate };
-    if (hotType) params.hot_type = hotType;
+export async function getThsHot(tradeDate: string, market?: string): Promise<ThsHotRow[]> {
+    const params: Record<string, any> = { trade_date: tradeDate, is_new: 'Y' };
+    if (market) params.market = market;
     const rows = await tushareRequest(
         'ths_hot',
         params,
-        'ts_code,name,hot_type,hot_rank,hot_score,concept_tag,industry_tag,trade_date',
+        'ts_code,ts_name,data_type,rank,pct_change,current_price,concept,rank_reason,hot,rank_time,trade_date',
     );
     return rows as ThsHotRow[];
 }
 
 /** 涨跌停板块 - 涨停池/连板池/炸板池 */
 export interface LimitListThsRow {
-    trade_date: string;       // 交易日期
-    ts_code: string;          // 股票代码
-    name: string;             // 股票名称
-    close: number;            // 收盘价
-    pct_chg: number;          // 涨跌幅
-    amp: number;              // 振幅
-    fc_ratio: number;         // 封板率
-    fl_ratio: number;         // 炸板率
-    fd_amount: number;        // 封单金额（元）
-    limit_times: number;      // 连板数
-    first_time: string;       // 首次涨停时间
-    last_time: string;        // 最后涨停时间
-    limit_reason: string;     // 涨停原因
-    up_stat: string;          // 涨跌统计
-    con_tag: string;          // 概念标签
+    trade_date: string;           // 交易日期
+    ts_code: string;              // 股票代码
+    name: string;                 // 股票名称
+    price: number;                // 收盘价(元)
+    pct_chg: number;              // 涨跌幅%
+    open_num: number;             // 打开次数
+    lu_desc: string;              // 涨停原因
+    limit_type: string;           // 板单类别
+    tag: string;                  // 涨停标签
+    status: string;               // 涨停状态（如"N天N板"、"一字板"、"换手板"）
+    first_lu_time: string;        // 首次涨停时间
+    last_lu_time: string;         // 最后涨停时间
+    limit_order: number;          // 封单量(元)
+    limit_amount: number;         // 封单额(元)
+    turnover_rate: number;        // 换手率%
+    free_float: number;           // 实际流通(元)
+    lu_limit_order: number;       // 最大封单(元)
+    limit_up_suc_rate: number;    // 近一年涨停封板率
+    turnover: number;             // 成交额
+    rise_rate: number;            // 涨速
+    sum_float: number;            // 总市值（亿元）
+    market_type: string;          // 股票类型：HS/GEM/STAR
 }
 
 /** 获取涨跌停榜单
  * limit_type: '涨停池'|'连板池'|'炸板池'|'跌停池'
- * 频率限制：500次/分钟，单次最大4000条
+ * 频率限制：500次/分钟，单次最大4000条，需8000积分
  */
 export async function getLimitListThs(tradeDate: string, limitType?: string): Promise<LimitListThsRow[]> {
     const params: Record<string, any> = { trade_date: tradeDate };
@@ -780,7 +803,7 @@ export async function getLimitListThs(tradeDate: string, limitType?: string): Pr
     const rows = await tushareRequest(
         'limit_list_ths',
         params,
-        'trade_date,ts_code,name,close,pct_chg,amp,fc_ratio,fl_ratio,fd_amount,limit_times,first_time,last_time,limit_reason,up_stat,con_tag',
+        'trade_date,ts_code,name,price,pct_chg,open_num,lu_desc,limit_type,tag,status,first_lu_time,last_lu_time,limit_order,limit_amount,turnover_rate,free_float,lu_limit_order,limit_up_suc_rate,turnover,rise_rate,sum_float,market_type',
     );
     return rows as LimitListThsRow[];
 }
@@ -893,6 +916,35 @@ export async function getMoneyflowThsByDate(tradeDate: string): Promise<Moneyflo
 }
 
 /** 开盘啦概念题材成分股 */
+export interface StockCompanyRow {
+    ts_code: string;              // 股票代码
+    exchange: string;             // 交易所 SSE SZSE BSE
+    chairman: string;             // 法人代表
+    manager: string;              // 总经理
+    secretary: string;            // 董秘
+    reg_capital: number;          // 注册资本
+    setup_date: string;           // 注册日期
+    province: string;             // 所在省份
+    city: string;                 // 所在城市
+    introduction: string;         // 公司介绍
+    main_business: string;        // 主要业务及产品
+    website: string;              // 公司网站
+    employees: number;            // 员工人数
+    com_name: string;             // 公司名称
+}
+
+/** 获取上市公司基本信息（含公司介绍、主营业务）
+ * 积分要求：120，频率限制：单次最大4500条
+ */
+export async function getStockCompany(tsCode: string): Promise<StockCompanyRow | null> {
+    const rows = await tushareRequest(
+        'stock_company',
+        { ts_code: tsCode },
+        'ts_code,exchange,chairman,manager,secretary,reg_capital,setup_date,province,city,introduction,main_business,website,employees,com_name',
+    );
+    return rows.length > 0 ? rows[0] as StockCompanyRow : null;
+}
+
 export interface KplConceptConsRow {
     ts_code: string;          // 题材ID（如 000111.KP）
     name: string;             // 题材名称

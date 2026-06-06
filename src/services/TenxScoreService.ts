@@ -535,14 +535,14 @@ async function calcIndustryTrack(symbol: string, data: PrefetchedData, industryC
     let thsHotScore: number | null = null;
     if (data.thsHot) {
         // 热度排名越靠前越好（排名前10→100, 前50→80, 前100→60, 前200→40, 其他→20）
-        const rank = data.thsHot.hot_rank || 9999;
+        const rank = data.thsHot.rank || 9999;
         if (rank <= 10) thsHotScore = 100;
         else if (rank <= 50) thsHotScore = 80;
         else if (rank <= 100) thsHotScore = 60;
         else if (rank <= 200) thsHotScore = 40;
         else thsHotScore = 20;
         // 热度值额外加分
-        const hotVal = data.thsHot.hot_score || 0;
+        const hotVal = data.thsHot.hot || 0;
         if (hotVal > 0) thsHotScore = Math.min(100, (thsHotScore || 0) + Math.min(hotVal / 10, 10));
     }
 
@@ -1003,7 +1003,10 @@ function calcNewsCatalyst(data: PrefetchedData): RawIndicators {
     // 3d. 涨停催化信号（来自limit_list_ths，新增增强维度）
     let limitUpSignal = 0; // 0=无, 1=有涨停, 2=连板
     if (data.limitListThs) {
-        const limitTimes = data.limitListThs.limit_times || 0;
+        // 从status字段解析连板数，格式如"4天4板"、"2天2板"、"首板"
+        const statusStr = data.limitListThs.status || '';
+        const boardMatch = statusStr.match(/(\d+)天(\d+)板/);
+        const limitTimes = boardMatch ? parseInt(boardMatch[2]) : (statusStr.includes('首板') ? 1 : 0);
         if (limitTimes >= 2) limitUpSignal = 2;
         else if (limitTimes >= 1) limitUpSignal = 1;
     }

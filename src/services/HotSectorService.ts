@@ -50,6 +50,7 @@ function formatStock(s: any): any {
         reason_tag: s.reason_tag,
         reason_tag_class: s.reason_tag_class || '',
         in_concept: s.in_concept,
+        limit_tags: s.limit_tags || [],
         chain_position: s.chain_position,
         source: s.source || '',
         overlap_ratio: s.overlap_ratio || 0,
