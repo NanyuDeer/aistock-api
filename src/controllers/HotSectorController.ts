@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import { HotSectorService } from '../services/HotSectorService';
+import { HotSectorAnalyzerService } from '../services/HotSectorAnalyzerService';
 
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || 'crawler-int-2026-token';
 
@@ -41,12 +42,7 @@ export class HotSectorController {
 
     /**
      * POST /api/internal/hot-sectors
-     * 内部接口：接收外部 Python 分析引擎推送的风口爆发股数据
-     *
-     * Headers:
-     *   - x-internal-token: 内部认证令牌
-     *
-     * Body: 完整的风口爆发股分析数据 JSON
+     * 内部接口：接收外部推送的风口爆发股数据（兼容旧Python引擎）
      */
     static async pushHotSectors(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -73,37 +69,12 @@ export class HotSectorController {
 
     /**
      * POST /api/cn/hot-sectors/refresh
-     * 触发 Python 分析引擎重新执行风口爆发股分析
+     * 使用TS版分析引擎重新执行风口爆发股分析（已替代Python引擎）
      */
     static async refreshAnalysis(_req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
-            console.log('[HotSectorController] 触发 Python 引擎重新分析...');
-            const http = await import('http');
-            const pythonPort = process.env.HOT_SECTOR_ENGINE_PORT || '5001';
-
-            const refreshPython = (): Promise<any> => {
-                return new Promise((resolve, reject) => {
-                    const req = http.request({
-                        hostname: 'localhost',
-                        port: parseInt(pythonPort),
-                        path: '/api/refresh',
-                        method: 'POST',
-                        timeout: 300000, // 分析可能需要几分钟
-                    }, (resp) => {
-                        let body = '';
-                        resp.on('data', (chunk: Buffer) => body += chunk.toString());
-                        resp.on('end', () => {
-                            try { resolve(JSON.parse(body)); }
-                            catch { resolve({ raw: body }); }
-                        });
-                    });
-                    req.on('error', reject);
-                    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-                    req.end();
-                });
-            };
-
-            const result = await refreshPython();
+            console.log('[HotSectorController] 触发TS分析引擎重新分析...');
+            const result = await HotSectorAnalyzerService.runFullAnalysis();
             createResponse(res, 200, 'success', {
                 count: result.hot_sectors?.length || 0,
                 update_time: result.update_time || '',

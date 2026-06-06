@@ -31,6 +31,7 @@ import { PotentialStockPushController } from './controllers/PotentialStockPushCo
 import { HotSectorController } from './controllers/HotSectorController';
 import { TenxBatchService } from './services/TenxBatchService';
 import { StockMonitorService } from './services/StockMonitorService';
+import { HotSectorAnalyzerService } from './services/HotSectorAnalyzerService';
 import { isAShareTradingTime } from './utils/tradingTime';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -346,9 +347,21 @@ if (process.env.STOCK_MONITOR_CRON_ENABLED !== 'false') {
     });
 }
 
-// 风口爆发股定时分析已迁移到 Python 后端（hot-sector-engine/app.py，每天凌晨3点执行）
-// TS 后端通过 POST /api/internal/hot-sectors 接收 Python 推送的数据
-// cron.schedule('35 15 * * 1-5', async () => { ... });
+// 风口爆发股定时分析（TS版，每天凌晨3点执行，替代原Python引擎）
+let hotSectorAnalyzing = false;
+cron.schedule('0 3 * * *', async () => {
+    if (hotSectorAnalyzing) return;
+    hotSectorAnalyzing = true;
+    try {
+        console.log('[HotSectorCron] 定时任务触发，开始风口爆发股分析...');
+        await HotSectorAnalyzerService.runFullAnalysis();
+        console.log('[HotSectorCron] 定时分析完成');
+    } catch (err: any) {
+        console.error('[HotSectorCron] 定时分析失败:', err?.message || err);
+    } finally {
+        hotSectorAnalyzing = false;
+    }
+});
 
 async function start() {
     try {
