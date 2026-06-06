@@ -29,9 +29,18 @@ export interface PushResult {
     logs: PushLogItem[];
 }
 
+export interface EnqueueResult {
+    queued: boolean;
+    reason: string | null;
+    queue_size: number;
+    event_id: string;
+}
+
 export class WechatPushService {
     private static readonly DAILY_LIMIT = 5;
     private static readonly STOCK_COOLDOWN_MINUTES = 30;
+    private static readonly QUEUE_MAX = Number(process.env.WECHAT_PUSH_QUEUE_MAX || 5000);
+    private static readonly QUEUE_INTERVAL_MS = Number(process.env.WECHAT_PUSH_QUEUE_INTERVAL_MS || 300);
     private static readonly LEVEL_RANK: Record<string, number> = {
         L1: 1,
         L2: 2,
@@ -43,6 +52,9 @@ export class WechatPushService {
         '中线异动': 'push_tag_mid_term',
         '长线异动': 'push_tag_long_term',
     };
+    private static pushQueue: MonitorEvent[] = [];
+    private static queuedEventIds = new Set<string>();
+    private static processingQueue = false;
 
     private static log(stage: string, message: string, data?: any): void {
         const ts = new Date().toISOString();
@@ -222,6 +234,73 @@ export class WechatPushService {
             throw new Error(`wechat template send failed: ${data.errmsg || data.errcode}`);
         }
         return data;
+    }
+
+    static enqueueMonitorEvent(event: MonitorEvent): EnqueueResult {
+        if (WechatPushService.queuedEventIds.has(event.event_id)) {
+            return {
+                queued: false,
+                reason: 'duplicate_in_queue',
+                queue_size: WechatPushService.pushQueue.length,
+                event_id: event.event_id,
+            };
+        }
+
+        if (WechatPushService.pushQueue.length >= WechatPushService.QUEUE_MAX) {
+            WechatPushService.log('queue', 'queue is full, drop event', {
+                event_id: event.event_id,
+                queue_size: WechatPushService.pushQueue.length,
+                queue_max: WechatPushService.QUEUE_MAX,
+            });
+            return {
+                queued: false,
+                reason: 'queue_full',
+                queue_size: WechatPushService.pushQueue.length,
+                event_id: event.event_id,
+            };
+        }
+
+        WechatPushService.pushQueue.push(event);
+        WechatPushService.queuedEventIds.add(event.event_id);
+        WechatPushService.startQueueProcessor();
+
+        return {
+            queued: true,
+            reason: null,
+            queue_size: WechatPushService.pushQueue.length,
+            event_id: event.event_id,
+        };
+    }
+
+    private static startQueueProcessor(): void {
+        if (WechatPushService.processingQueue) return;
+        WechatPushService.processingQueue = true;
+        setTimeout(() => {
+            void WechatPushService.processNextQueueItem();
+        }, 0);
+    }
+
+    private static async processNextQueueItem(): Promise<void> {
+        const event = WechatPushService.pushQueue.shift();
+        if (!event) {
+            WechatPushService.processingQueue = false;
+            return;
+        }
+
+        try {
+            await WechatPushService.dispatchMonitorEvent(event);
+        } catch (err: any) {
+            WechatPushService.log('queue', 'dispatch failed', {
+                event_id: event.event_id,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        } finally {
+            WechatPushService.queuedEventIds.delete(event.event_id);
+        }
+
+        setTimeout(() => {
+            void WechatPushService.processNextQueueItem();
+        }, WechatPushService.QUEUE_INTERVAL_MS);
     }
 
     static async dispatchMonitorEvent(event: MonitorEvent): Promise<PushResult> {
