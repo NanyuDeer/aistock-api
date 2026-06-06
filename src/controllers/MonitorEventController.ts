@@ -232,6 +232,8 @@ export class MonitorEventController {
             total: payloadEvents.length,
             success: 0,
             failed: 0,
+            queued: 0,
+            not_queued: 0,
             matched_users: 0,
             sent: 0,
             skipped: 0,
@@ -246,17 +248,18 @@ export class MonitorEventController {
                 }
 
                 await saveEvent(event);
-                const pushResult = await WechatPushService.dispatchMonitorEvent(event);
+                const queueResult = WechatPushService.enqueueMonitorEvent(event);
 
                 summary.success += 1;
-                summary.matched_users += pushResult?.matched_users || 0;
-                summary.sent += pushResult?.sent || 0;
-                summary.skipped += pushResult?.skipped || 0;
-                summary.push_failed += pushResult?.failed || 0;
+                if (queueResult.queued) {
+                    summary.queued += 1;
+                } else {
+                    summary.not_queued += 1;
+                }
 
                 results.push({
                     event,
-                    ...pushResult,
+                    queue: queueResult,
                 });
             } catch (err: any) {
                 summary.failed += 1;
@@ -269,10 +272,11 @@ export class MonitorEventController {
         }
 
         const code = summary.failed > 0 ? 207 : 200;
-        createResponse(res, code, payloadEvents.length > 1 ? 'batch success' : 'success', {
+        createResponse(res, code, payloadEvents.length > 1 ? 'batch accepted' : 'accepted', {
             summary,
             results,
             event: results[0]?.event,
+            queue: results[0]?.queue,
         });
     }
 }
