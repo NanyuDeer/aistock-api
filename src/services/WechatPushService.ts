@@ -36,6 +36,20 @@ export interface EnqueueResult {
     event_id: string;
 }
 
+export interface StockInfoPushEvent {
+    id: number;
+    symbol: string;
+    stock_name: string | null;
+    info_type: string;
+    title: string;
+    url: string;
+    published_at: string | Date;
+    ai_impact: string;
+    ai_horizon: string;
+    ai_keywords: string[];
+    ai_summary: string;
+}
+
 export class WechatPushService {
     private static readonly DAILY_LIMIT = 5;
     private static readonly STOCK_COOLDOWN_MINUTES = 30;
@@ -379,6 +393,140 @@ export class WechatPushService {
                     error: errorMsg,
                 });
                 await WechatPushService.insertPushLog(event, openid, 'failed', errorMsg, { error: errorMsg });
+                pushResult.failed += 1;
+                pushResult.logs.push({ openid, status: 'failed', reason: errorMsg });
+            }
+        }
+
+        return pushResult;
+    }
+
+    // ==================== 资讯研判推送（changer 分支） ====================
+
+    private static async insertStockInfoPushLog(
+        event: StockInfoPushEvent,
+        openid: string,
+        status: PushLogItem['status'],
+        errorMsg: string | null,
+        responseJson: any,
+    ): Promise<void> {
+        await pool.query(
+            `INSERT INTO wechat_push_logs (
+                event_id,
+                openid,
+                symbol,
+                stock_name,
+                event_type,
+                level,
+                summary,
+                template_id,
+                status,
+                error_msg,
+                wechat_response_json,
+                click_url
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+             ON CONFLICT(event_id, openid) DO NOTHING`,
+            [
+                `stock_info:${event.id}`,
+                openid,
+                event.symbol,
+                event.stock_name || event.symbol,
+                event.info_type,
+                event.ai_impact,
+                event.ai_summary,
+                process.env.WECHAT_TEMPLATE_ID || '',
+                status,
+                errorMsg,
+                responseJson ? JSON.stringify(responseJson) : null,
+                WechatPushService.buildDetailUrl(event.url),
+            ],
+        );
+    }
+
+    private static async sendStockInfoTemplateMessage(event: StockInfoPushEvent, openid: string): Promise<any> {
+        if (!process.env.WECHAT_TEMPLATE_ID) {
+            throw new Error('WECHAT_TEMPLATE_ID is not configured');
+        }
+
+        const accessToken = await ScanLoginController.getServerAccessToken();
+        const detailUrl = WechatPushService.buildDetailUrl(event.url);
+        const title = event.title.length > 40 ? `${event.title.slice(0, 40)}...` : event.title;
+        const res = await fetch(
+            `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    touser: openid,
+                    template_id: process.env.WECHAT_TEMPLATE_ID,
+                    url: detailUrl,
+                    data: {
+                        stock: { value: `${event.stock_name || event.symbol} (${event.symbol})` },
+                        event_type: { value: `${event.info_type === 'announcement' ? '公告' : '新闻'}研判` },
+                        level: { value: `${event.ai_impact}/${event.ai_horizon}` },
+                        summary: { value: event.ai_summary || title },
+                        time: { value: WechatPushService.formatEventTime(new Date(event.published_at).toISOString()) },
+                    },
+                }),
+            },
+        );
+        const data: any = await res.json();
+        if (data.errcode && data.errcode !== 0) {
+            throw new Error(`wechat template send failed: ${data.errmsg || data.errcode}`);
+        }
+        return data;
+    }
+
+    static async dispatchStockInfoJudgement(event: StockInfoPushEvent): Promise<PushResult> {
+        const result = await pool.query(
+            `SELECT DISTINCT u.openid
+             FROM users u
+             INNER JOIN user_stocks us ON u.openid = us.openid
+             WHERE us.symbol = $1`,
+            [event.symbol],
+        );
+
+        const users = result.rows || [];
+        const pushResult: PushResult = {
+            matched_users: users.length,
+            sent: 0,
+            skipped: 0,
+            failed: 0,
+            logs: [],
+        };
+
+        const eventId = `stock_info:${event.id}`;
+        for (const user of users) {
+            const openid = String(user.openid || '');
+            if (!openid) continue;
+
+            if (await WechatPushService.hasPushed(eventId, openid)) {
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'duplicate_event' });
+                continue;
+            }
+
+            if (!(await WechatPushService.isPushEnabled(openid))) {
+                await WechatPushService.insertStockInfoPushLog(event, openid, 'skipped', 'stock_push_disabled', null);
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'stock_push_disabled' });
+                continue;
+            }
+
+            try {
+                const wxResponse = await WechatPushService.sendStockInfoTemplateMessage(event, openid);
+                await WechatPushService.insertStockInfoPushLog(event, openid, 'sent', null, wxResponse);
+                pushResult.sent += 1;
+                pushResult.logs.push({ openid, status: 'sent', reason: null, wechat_response: wxResponse });
+            } catch (err: any) {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                WechatPushService.log('sendStockInfo', 'template send failed', {
+                    openid,
+                    event_id: eventId,
+                    error: errorMsg,
+                });
+                await WechatPushService.insertStockInfoPushLog(event, openid, 'failed', errorMsg, { error: errorMsg });
                 pushResult.failed += 1;
                 pushResult.logs.push({ openid, status: 'failed', reason: errorMsg });
             }

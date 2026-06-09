@@ -25,19 +25,15 @@ import { StockAnalysisController } from './controllers/StockAnalysisController';
 import { StockOcrController } from './controllers/StockOcrController';
 import { TenxScoreController } from './controllers/TenxScoreController';
 import { CapitalFlowController } from './controllers/CapitalFlowController';
-import { MonitorEventController } from './controllers/MonitorEventController';
 import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
 import { HotSectorController } from './controllers/HotSectorController';
+import { StockInfoJudgementController } from './controllers/StockInfoJudgementController';
 import { TenxBatchService } from './services/TenxBatchService';
-import { StockMonitorService } from './services/StockMonitorService';
-import { HotSectorAnalyzerService } from './services/HotSectorAnalyzerService';
-import { isAShareTradingTime } from './utils/tradingTime';
 import { isValidAShareSymbol } from './utils/validator';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-let stockMonitorScanning = false;
 
 const corsAllowOrigin = process.env.CORS_ALLOW_ORIGIN || '';
 const allowedOrigins = corsAllowOrigin.split(',').map(s => s.trim()).filter(Boolean);
@@ -119,13 +115,16 @@ app.post('/api/users/me/favorites', (req, res, next) => UserController.addFavori
 app.delete('/api/users/me/favorites', (req, res, next) => UserController.removeFavorites(req, res, next));
 app.post('/api/users/me/favorites/delete', (req, res, next) => UserController.removeFavorites(req, res, next));
 
-app.post('/api/internal/monitor-events', (req, res, next) => MonitorEventController.mockMonitorEvent(req, res, next));
-app.post('/api/internal/monitor-events/batch', (req, res, next) => MonitorEventController.mockMonitorEvent(req, res, next));
+app.get('/api/internal/stock-info/targets', (req, res, next) => StockInfoJudgementController.getTargets(req, res, next));
+app.post('/api/internal/stock-info/existing', (req, res, next) => StockInfoJudgementController.getExisting(req, res, next));
+app.post('/api/internal/stock-info/judgements', (req, res, next) => StockInfoJudgementController.saveJudgements(req, res, next));
+app.post('/api/internal/stock-info/push', (req, res, next) => StockInfoJudgementController.push(req, res, next));
 
-// 个股异动监测 - 前端查询接口
-app.get('/api/cn/monitor/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
-app.get('/api/cn/monitor/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
-app.get('/api/cn/monitor/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
+// 趋势风口 - 前端查询接口，数据来自外部爬虫提交的公告/新闻研判。
+app.get('/api/cn/trend-hotspots/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
+app.get('/api/cn/trend-hotspots/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
+app.get('/api/cn/trend-hotspots/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
+app.get('/api/cn/stock-info/judgements', (req, res, next) => StockInfoJudgementController.queryJudgements(req, res, next));
 
 // 风口爆发股
 app.post('/api/cn/hot-sectors/refresh', (req, res, next) => HotSectorController.refreshAnalysis(req, res, next));
@@ -325,43 +324,10 @@ cron.schedule('5 19 * * 1-5', async () => {
     }
 });
 
-if (process.env.STOCK_MONITOR_CRON_ENABLED !== 'false') {
-    cron.schedule('* * * * 1-5', async () => {
-        if (stockMonitorScanning) return;
-        stockMonitorScanning = true;
-        try {
-            const isTrading = await isAShareTradingTime();
-            if (!isTrading) return;
-
-            const result = await StockMonitorService.scanAndDispatch();
-            if (result.inserted > 0 || result.failed > 0) {
-                console.log(
-                    `[StockMonitorCron] 完成: 抓取=${result.fetched}, 新增=${result.inserted}, 推送=${result.pushed}, 失败=${result.failed}`,
-                );
-            }
-        } catch (err: any) {
-            console.error('[StockMonitorCron] 主动扫描失败:', err?.message || err);
-        } finally {
-            stockMonitorScanning = false;
-        }
-    });
-}
-
-// 风口爆发股定时分析（TS版，每天凌晨3点执行，替代原Python引擎）
-let hotSectorAnalyzing = false;
-cron.schedule('0 3 * * *', async () => {
-    if (hotSectorAnalyzing) return;
-    hotSectorAnalyzing = true;
-    try {
-        console.log('[HotSectorCron] 定时任务触发，开始风口爆发股分析...');
-        await HotSectorAnalyzerService.runFullAnalysis();
-        console.log('[HotSectorCron] 定时分析完成');
-    } catch (err: any) {
-        console.error('[HotSectorCron] 定时分析失败:', err?.message || err);
-    } finally {
-        hotSectorAnalyzing = false;
-    }
-});
+// 风口爆发股定时分析已迁移到 Python 后端（hot-sector-engine/app.py，每天凌晨3点执行）
+// TS 后端通过 POST /api/internal/hot-sectors 接收 Python 推送的数据
+// 如需恢复 TS 版 cron，取消下方注释：
+// cron.schedule('0 3 * * *', async () => { ... HotSectorAnalyzerService.runFullAnalysis() ... });
 
 async function start() {
     try {
