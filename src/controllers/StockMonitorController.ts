@@ -1,8 +1,7 @@
 /**
- * 个股异动监测 API 控制器
+ * 趋势风口 API 控制器
  *
- * 提供前端页面所需的异动数据查询接口
- * 数据来源：StockMonitorService（当前从数据库查询，后续接入主动监测引擎）
+ * 提供前端页面所需的公告/新闻研判数据查询接口。
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -11,12 +10,12 @@ import { StockMonitorService } from '../services/StockMonitorService';
 
 export class StockMonitorController {
     /**
-     * GET /api/cn/monitor/events
-     * 查询异动事件列表
+     * GET /api/cn/trend-hotspots/events
+     * 查询趋势风口列表
      *
      * Query params:
      *   - cycle: 周期筛选 (all/short/mid/long)，默认 all
-     *   - change_type: 异动类型代码筛选，如 4=涨停
+     *   - change_type: 信息类型(news/announcement)或影响级别
      *   - stock_code: 指定股票代码
      *   - limit: 每页条数，默认 20
      *   - offset: 偏移量，默认 0
@@ -40,14 +39,14 @@ export class StockMonitorController {
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[StockMonitorController] getEvents error:', errMsg);
+            console.error('[TrendHotspotController] getEvents error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * GET /api/cn/monitor/events/:stockCode
-     * 查询指定股票的异动事件
+     * GET /api/cn/trend-hotspots/events/:stockCode
+     * 查询指定股票的趋势风口
      */
     static async getEventsByStock(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -65,14 +64,14 @@ export class StockMonitorController {
             createResponse(res, 200, 'success', { events });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[StockMonitorController] getEventsByStock error:', errMsg);
+            console.error('[TrendHotspotController] getEventsByStock error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * GET /api/cn/monitor/stats
-     * 获取异动统计概览
+     * GET /api/cn/trend-hotspots/stats
+     * 获取趋势风口统计概览
      */
     static async getStats(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -80,7 +79,7 @@ export class StockMonitorController {
             createResponse(res, 200, 'success', stats);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[StockMonitorController] getStats error:', errMsg);
+            console.error('[TrendHotspotController] getStats error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
