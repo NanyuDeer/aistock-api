@@ -57,7 +57,7 @@ export class HotSectorController {
                 return;
             }
 
-            HotSectorService.saveData(data);
+            await HotSectorService.saveData(data);
             console.log(`[HotSectorController] 收到风口爆发股数据推送，共 ${data.hot_sectors.length} 个板块，更新时间: ${data.update_time || '未知'}`);
             createResponse(res, 200, 'success', { count: data.hot_sectors.length, update_time: data.update_time });
         } catch (err: any) {

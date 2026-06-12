@@ -20,7 +20,7 @@ export function getStockIdentity(symbol: string): StockIdentity {
     if (symbol.startsWith('002') || symbol.startsWith('003')) {
         return { market: 'sz', board: '中小板', eastmoneyId: 0 };
     }
-    if (symbol.startsWith('300')) {
+    if (symbol.startsWith('300') || symbol.startsWith('301')) {
         return { market: 'sz', board: '创业板', eastmoneyId: 0 };
     }
     if (symbol.startsWith('200')) {
