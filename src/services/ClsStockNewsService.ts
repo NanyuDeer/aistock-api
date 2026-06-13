@@ -143,4 +143,35 @@ export class ClsStockNewsService {
 
         return { stockName, keyword, total, items };
     }
+
+    static async getNewsFulltext(newsId: string): Promise<{ title: string; content: string; link: string; time: string } | null> {
+        const url = `https://www.cls.cn/detail/${newsId}`;
+        await cailianpressThrottler.throttle();
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml',
+                'Referer': 'https://www.cls.cn/telegraph',
+            },
+        });
+
+        if (!response.ok) return null;
+
+        const html = await response.text();
+        const $ = cheerio.load(html);
+
+        const title = ($('.detail-header').first().text() || $('h1').first().text() || '').trim();
+        const content = ($('.detail-content').first().text() || $('.content').first().text() || '').trim();
+
+        if (!content) return null;
+
+        return {
+            title: title.replace(this.BRACKET_PREFIX_PATTERN, '').trim(),
+            content: content.slice(0, 20000),
+            link: url,
+            time: $('.detail-time').first().text().trim() || '',
+        };
+    }
 }

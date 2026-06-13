@@ -176,7 +176,7 @@ async function fetchGelonghuiNews(limit: number = 50): Promise<TelegraphItem[]> 
 
         if (!response.ok) return [];
 
-        const rawData = await response.json();
+        const rawData: any = await response.json();
         const entries = rawData?.data?.list || rawData?.data || [];
         const items: TelegraphItem[] = [];
 

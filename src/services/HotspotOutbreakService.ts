@@ -72,7 +72,7 @@ async function fetchThsHotSectors(): Promise<{ name: string; rank: number; chang
                 return hotData.slice(0, 10).map((row, idx) => ({
                     name: row.ts_name || '',
                     rank: idx + 1,
-                    change_pct: Number(row.change_pct) || 0,
+                    change_pct: Number(row.pct_change) || 0,
                 }));
             }
         }
