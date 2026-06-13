@@ -29,6 +29,9 @@ import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
 import { HotSectorController } from './controllers/HotSectorController';
 import { StockInfoJudgementController } from './controllers/StockInfoJudgementController';
+import { FeishuMessageController } from './controllers/FeishuMessageController';
+import { FeishuAuthController } from './controllers/FeishuAuthController';
+import { FeishuPushService } from './services/FeishuPushService';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -124,12 +127,33 @@ app.post('/api/internal/stock-info/push', (req, res, next) => StockInfoJudgement
 app.get('/api/cn/trend-hotspots/events', (req, res, next) => StockMonitorController.getEvents(req, res, next));
 app.get('/api/cn/trend-hotspots/events/:stockCode', (req, res, next) => StockMonitorController.getEventsByStock(req, res, next));
 app.get('/api/cn/trend-hotspots/stats', (req, res, next) => StockMonitorController.getStats(req, res, next));
+app.get('/api/cn/favorites/news', (req, res, next) => StockMonitorController.getFavoritesNews(req, res, next));
 app.get('/api/cn/stock-info/judgements', (req, res, next) => StockInfoJudgementController.queryJudgements(req, res, next));
 
 // 风口爆发股
 app.post('/api/cn/hot-sectors/refresh', (req, res, next) => HotSectorController.refreshAnalysis(req, res, next));
 app.get('/api/cn/hot-sectors', (req, res, next) => HotSectorController.getHotSectors(req, res, next));
 app.post('/api/internal/hot-sectors', (req, res, next) => HotSectorController.pushHotSectors(req, res, next));
+app.post('/api/cn/hot-keywords/detect', (req, res, next) => HotSectorController.detectHotKeywords(req, res, next));
+app.get('/api/cn/hot-keywords', (req, res, next) => HotSectorController.getHotKeywords(req, res, next));
+
+// 飞书群消息接收
+app.post('/api/internal/feishu-message', (req, res, next) => FeishuMessageController.receiveMessage(req, res, next));
+app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageController.getMessages(req, res, next));
+
+// 风口爆发三步检测
+app.post('/api/cn/hotspot-outbreak/detect', (req, res, next) => HotSectorController.detectOutbreak(req, res, next));
+app.get('/api/cn/hotspot-outbreak', (req, res, next) => HotSectorController.getOutbreak(req, res, next));
+
+// 飞书OAuth授权
+app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
+
+// 用户订阅
+app.get('/api/users/me/subscription', (req, res, next) => FeishuAuthController.getSubscription(req, res, next));
+app.post('/api/users/me/subscription', (req, res, next) => FeishuAuthController.updateSubscription(req, res, next));
+
+// 内部推送接口
+app.post('/api/internal/push-feishu', (req, res, next) => FeishuAuthController.pushMessage(req, res, next));
 
 app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
 app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
@@ -353,6 +377,8 @@ async function start() {
 
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`[Server] aistock-api running on http://0.0.0.0:${PORT}`);
+        // 启动飞书定时推送调度器
+        FeishuPushService.startScheduler();
     });
 }
 

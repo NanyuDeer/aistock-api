@@ -6,6 +6,8 @@ import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import { HotSectorService } from '../services/HotSectorService';
 import { HotSectorAnalyzerService } from '../services/HotSectorAnalyzerService';
+import { HotKeywordDetectorService } from '../services/HotKeywordDetectorService';
+import { HotspotOutbreakService } from '../services/HotspotOutbreakService';
 
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || 'crawler-int-2026-token';
 
@@ -82,6 +84,77 @@ export class HotSectorController {
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
             console.error('[HotSectorController] refreshAnalysis error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
+
+    /**
+     * POST /api/cn/hot-keywords/detect
+     * 手动触发关键词爆发检测
+     */
+    static async detectHotKeywords(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const hotKeywords = await HotKeywordDetectorService.detectHotKeywords();
+            createResponse(res, 200, 'success', { count: hotKeywords.length, keywords: hotKeywords });
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[HotSectorController] detectHotKeywords error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
+
+    /**
+     * GET /api/cn/hot-keywords
+     * 查询最近爆发关键词
+     *
+     * Query params:
+     *   - hours: 查询最近N小时，默认6
+     *   - limit: 返回数量，默认20
+     */
+    static async getHotKeywords(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
+            const limit = Math.min(Math.max(parseInt(String(req.query.limit || '20'), 10), 1), 100);
+            const keywords = await HotKeywordDetectorService.getRecentHotKeywords(hours, limit);
+            createResponse(res, 200, 'success', { count: keywords.length, keywords });
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[HotSectorController] getHotKeywords error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
+
+    /**
+     * POST /api/cn/hotspot-outbreak/detect
+     * 执行三步风口爆发检测（关键词爆发+飞书消息+同花顺验证）
+     */
+    static async detectOutbreak(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const result = await HotspotOutbreakService.detectOutbreak();
+            createResponse(res, 200, 'success', result);
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[HotSectorController] detectOutbreak error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
+
+    /**
+     * GET /api/cn/hotspot-outbreak
+     * 查询最近风口爆发检测结果
+     */
+    static async getOutbreak(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
+            const result = await HotspotOutbreakService.getRecentOutbreaks(hours);
+            if (!result) {
+                createResponse(res, 404, '暂无风口爆发检测数据');
+                return;
+            }
+            createResponse(res, 200, 'success', result);
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[HotSectorController] getOutbreak error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
