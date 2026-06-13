@@ -1,4 +1,5 @@
 import { StockInfoService, type StockInfoImpact, type StockInfoJudgementRow } from './StockInfoService';
+import pool from '../db';
 
 const INFO_TYPE_LABELS: Record<string, string> = {
     announcement: '公告研判',
@@ -127,6 +128,81 @@ export class StockMonitorService {
             limit: params?.limit || 20,
         });
         return result.events;
+    }
+
+    /**
+     * 根据用户自选股过滤研判资讯
+     */
+    static async getEventsByUserFavorites(openid: string, params?: {
+        cycle?: string;
+        change_type?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<{ total: number; events: MonitorEventItem[] }> {
+        // 获取用户自选股列表
+        const stocksResult = await pool.query(
+            `SELECT symbol FROM user_stocks WHERE openid = $1`,
+            [openid],
+        );
+        const symbols = stocksResult.rows.map((r: any) => r.symbol as string);
+        if (symbols.length === 0) {
+            return { total: 0, events: [] };
+        }
+
+        const cycle = normalizeCycle(params?.cycle);
+        await StockInfoService.ensureSchema();
+
+        // 按自选股symbol批量查询研判数据
+        const conditions = ['symbol = ANY($1)'];
+        const values: any[] = [symbols];
+
+        if (params?.change_type) {
+            const impact = normalizeImpact(params.change_type);
+            if (impact) {
+                values.push(impact);
+                conditions.push(`ai_impact = $${values.length}`);
+            } else {
+                const infoType = params.change_type as 'news' | 'announcement';
+                if (infoType === 'news' || infoType === 'announcement') {
+                    values.push(infoType);
+                    conditions.push(`info_type = $${values.length}`);
+                }
+            }
+        }
+
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+        const countResult = await pool.query(
+            `SELECT COUNT(*)::int AS total FROM stock_info_judgements ${whereClause}`,
+            values,
+        );
+
+        const limit = params?.limit || 20;
+        const offset = params?.offset || 0;
+        const listValues = [...values, limit, offset];
+        const result = await pool.query(
+            `SELECT id, symbol, stock_name, info_type, source, source_id, title, url, published_at,
+                    ai_impact, ai_horizon, ai_keywords, ai_summary, created_at
+             FROM stock_info_judgements
+             ${whereClause}
+             ORDER BY published_at DESC, id DESC
+             LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
+            listValues,
+        );
+
+        const items: StockInfoJudgementRow[] = result.rows.map((row: any) => ({
+            ...row,
+            ai_keywords: Array.isArray(row.ai_keywords) ? row.ai_keywords : [],
+        }));
+
+        let events = items.map(mapJudgementToEvent);
+        if (cycle) {
+            events = events.filter(event => event.cycle === cycle);
+        }
+
+        return {
+            total: cycle ? events.length : Number(countResult.rows[0]?.total || 0),
+            events,
+        };
     }
 
     static async getStats(): Promise<TrendHotspotStats> {
