@@ -240,7 +240,7 @@ function buildOutbreakCard(stocks: OutbreakStock[], scheduleLabel: string): any 
 // ==================== 推送执行 ====================
 
 export class FeishuPushService {
-    private static timer: NodeJS.Timer | null = null;
+    private static timer: NodeJS.Timeout | null = null;
 
     /**
      * 启动定时推送调度

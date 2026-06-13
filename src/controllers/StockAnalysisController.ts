@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { StockAnalysisService } from '../services/StockAnalysisService';
+import { StockAnalysisAgentService } from '../services/StockAnalysisAgentService';
 import { createResponse } from '../utils/response';
+
+const USE_AGENT = () => process.env.USE_AGENT_ANALYSIS === 'true';
 
 export class StockAnalysisController {
     private static readonly DEFAULT_PAGE_SIZE = 20;
@@ -59,13 +62,32 @@ export class StockAnalysisController {
                 }, 15_000);
 
                 try {
-                    send('start', { message: '开始刷新个股评价', symbol });
-                    const data = await StockAnalysisService.createStockAnalysis(
-                        symbol,
-                        (progress) => send('progress', progress),
-                        (delta) => send('model.delta', delta),
-                    );
-                    send('result', data);
+                    send('start', { message: '开始刷新个股评价', symbol, mode: USE_AGENT() ? 'agent' : 'legacy' });
+
+                    if (USE_AGENT()) {
+                        // Agent 模式：多轮检索
+                        const data = await StockAnalysisAgentService.createStockAnalysis(
+                            symbol,
+                            (event) => {
+                                send('progress', event);
+                                // 额外发送 agent_step 事件供前端展示
+                                send('agent_step', {
+                                    type: event.type,
+                                    round: event.round,
+                                    data: event.data,
+                                });
+                            },
+                        );
+                        send('result', data);
+                    } else {
+                        // 旧版模式：全量喂入
+                        const data = await StockAnalysisService.createStockAnalysis(
+                            symbol,
+                            (progress) => send('progress', progress),
+                            (delta) => send('model.delta', delta),
+                        );
+                        send('result', data);
+                    }
                     send('done', { message: 'success' });
                 } catch (error: any) {
                     const message = error instanceof Error ? error.message : 'Internal Server Error';
@@ -79,7 +101,12 @@ export class StockAnalysisController {
             }
 
             try {
-                const data = await StockAnalysisService.createStockAnalysis(symbol);
+                let data: Record<string, any>;
+                if (USE_AGENT()) {
+                    data = await StockAnalysisAgentService.createStockAnalysis(symbol);
+                } else {
+                    data = await StockAnalysisService.createStockAnalysis(symbol);
+                }
                 createResponse(res, 200, 'success', data);
             } catch (error: any) {
                 const message = error instanceof Error ? error.message : 'Internal Server Error';
