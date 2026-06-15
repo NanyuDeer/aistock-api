@@ -1,20 +1,20 @@
 /**
  * 风口爆发整合服务
  *
- * 整合三步数据源：
- * 1. 财联社/格隆汇关键词爆发检测（HotKeywordDetectorService）
- * 2. 飞书群消息中的股票资讯（FeishuMessageController / DB）
- * 3. 同花顺热点掘金验证（HotSectorAnalyzerService / Tushare ths_hot）
+ * 整合三步数据源（个股代码驱动）：
+ * 1. 财联社/格隆汇快讯中提取个股代码，检测个股爆发（HotKeywordDetectorService）
+ * 2. 飞书群消息中的股票资讯关联（FeishuMessageController / DB）
+ * 3. 同花顺热点掘金验证（Tushare ths_hot）
  *
  * 核心逻辑：
- * - Step1: 从快讯中检测关键词爆发信号
- * - Step2: 从飞书群消息中提取相关股票代码和关键词
- * - Step3: 验证相关板块是否在同花顺热门板块Top10
- * - 输出: 经过三步验证的风口爆发信号
+ * - Step1: 从快讯中提取个股代码，检测个股爆发信号
+ * - Step2: 从飞书群消息中关联同只股票，提取关键词作为辅助解释
+ * - Step3: 验证股票所属板块是否在同花顺热门板块Top10
+ * - 输出: 经过三步验证的个股共振信号（关键词退居辅助标签）
  */
 
 import pool from '../db';
-import { HotKeywordDetectorService, KEYWORD_DIMENSIONS, getKeywordDimension } from './HotKeywordDetectorService';
+import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
 
 // ==================== 类型定义 ====================
@@ -32,28 +32,51 @@ interface FeishuMessageRow {
     received_at: string;
 }
 
-interface HotKeywordWithVerification {
-    keyword: string;
-    dimension: string;
-    dimensionLabel: string;
-    dimensionColor: string;
-    currentCount: number;
-    surgeRatio: number;
-    feishuStockCodes: string[];
+/** 个股共振信号（个股代码为主维度，关键词为辅助解释） */
+interface StockResonanceSignal {
+    /** 股票代码，如 "300308" */
+    symbol: string;
+    /** 股票名称 */
+    stockName: string;
+    /** 资讯提及次数 */
+    newsCount: number;
+    /** 资讯爆发比率（当前/历史） */
+    newsSurgeRatio: number;
+    /** 资讯中出现的关键词（哪些关键词触发了该股票） */
+    newsKeywords: string[];
+    /** 飞书消息中该股票被提及次数 */
     feishuMessageCount: number;
+    /** 飞书消息中匹配到的关键词 */
+    feishuKeywords: string[];
+    /** 同花顺验证 */
     thsVerified: boolean;
     thsSectorName: string;
     thsSectorRank: number;
+    /** 共振强度得分 (0-100) */
+    resonanceScore: number;
+    /** 共振等级 */
+    resonanceLevel: 'critical' | 'high' | 'medium' | 'low';
+    /** 概念共振信息（共振一：细分概念交叉验证） */
+    conceptResonance: {
+        conceptName: string;       // 匹配到的细分概念
+        clsCount: number;          // 财联社该概念出现次数
+        glhCount: number;          // 格隆汇该概念出现次数
+        conceptVerified: boolean;  // 共振一是否通过
+    } | null;
+    /** 相关快讯 */
     articles: { id: string; title: string; source: string; time: string }[];
+    /** 检测时间 */
     detectedAt: string;
 }
 
 interface HotspotOutbreakResult {
     update_time: string;
-    total_keywords: number;
-    verified_keywords: number;
+    total_stocks_checked: number;
+    resonance_count: number;
     ths_hot_sectors: { name: string; rank: number; change_pct: number }[];
-    outbreaks: HotKeywordWithVerification[];
+    outbreaks: StockResonanceSignal[];
+    /** 细分概念爆发信号（共振一） */
+    hot_concepts: HotConceptResult[];
 }
 
 // ==================== 同花顺热点掘金验证 ====================
@@ -61,7 +84,6 @@ interface HotspotOutbreakResult {
 async function fetchThsHotSectors(): Promise<{ name: string; rank: number; change_pct: number }[]> {
     try {
         const today = new Date();
-        // 尝试最近3天
         for (let offset = 0; offset < 3; offset++) {
             const d = new Date(today);
             d.setDate(d.getDate() - offset);
@@ -89,6 +111,64 @@ function formatDate(d: Date): string {
     return `${y}${m}${day}`;
 }
 
+// ==================== 辅助函数 ====================
+
+/** 从 stocks 表查询股票名称 */
+async function getStockName(symbol: string): Promise<string> {
+    try {
+        const result = await pool.query('SELECT name FROM stocks WHERE symbol = $1 LIMIT 1', [symbol]);
+        return result.rows[0]?.name || '';
+    } catch {
+        return '';
+    }
+}
+
+/** 查询个股所属板块（通过 stock_concept_mapping 表） */
+async function getStockSector(symbol: string): Promise<string[]> {
+    try {
+        const result = await pool.query(
+            `SELECT DISTINCT sector_name FROM stock_concept_mapping
+             WHERE symbol = $1 LIMIT 20`,
+            [symbol]
+        );
+        return result.rows.map((r: any) => r.sector_name);
+    } catch {
+        return [];
+    }
+}
+
+/** 共振评分：资讯频次(30%) + 飞书讨论(30%) + 同花顺验证(40%) */
+function calculateResonanceScore(
+    newsCount: number, newsSurgeRatio: number,
+    feishuMsgCount: number,
+    thsRank: number, thsVerified: boolean
+): { score: number; level: 'critical' | 'high' | 'medium' | 'low' } {
+    // 资讯得分（爆发比率越高越好，上限100）
+    const newsScore = Math.min(100, Math.min(newsCount, 10) * 10 + Math.min(newsSurgeRatio, 5) * 10);
+
+    // 飞书得分（讨论数越多越好）
+    const feishuScore = Math.min(100, feishuMsgCount * 25);
+
+    // 同花顺得分（排名越前越高，未上榜=0）
+    let thsScore = 0;
+    if (thsVerified) {
+        if (thsRank === 1) thsScore = 100;
+        else if (thsRank <= 3) thsScore = 80;
+        else if (thsRank <= 5) thsScore = 60;
+        else if (thsRank <= 10) thsScore = 40;
+    }
+
+    const score = Math.round(newsScore * 0.30 + feishuScore * 0.30 + thsScore * 0.40);
+
+    let level: 'critical' | 'high' | 'medium' | 'low';
+    if (score >= 80) level = 'critical';
+    else if (score >= 55) level = 'high';
+    else if (score >= 30) level = 'medium';
+    else level = 'low';
+
+    return { score, level };
+}
+
 // ==================== 飞书消息查询 ====================
 
 async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]> {
@@ -105,7 +185,6 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
             keywords: typeof row.keywords === 'string' ? JSON.parse(row.keywords) : row.keywords || [],
         }));
     } catch {
-        // 表可能不存在
         return [];
     }
 }
@@ -114,172 +193,183 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 
 export class HotspotOutbreakService {
     /**
-     * 执行完整的三步风口爆发检测：
-     * 1. 关键词爆发检测（财联社/格隆汇）
-     * 2. 飞书群消息关联
-     * 3. 同花顺热榜验证
+     * 执行完整的三步风口爆发检测（个股代码驱动）：
+     * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
+     * 2. 飞书群消息关联（同只股票是否在群内讨论）
+     * 3. 同花顺热榜验证（股票所属板块是否上榜）
+     *
+     * 关键词退居辅助解释层：附着在共振信号上说明原因
      */
     static async detectOutbreak(): Promise<HotspotOutbreakResult> {
-        console.log('[HotspotOutbreak] 开始三步风口爆发检测...');
+        console.log('[HotspotOutbreak] 开始三步风口爆发检测（个股驱动）...');
 
         const now = new Date().toISOString();
 
-        // Step 1: 关键词爆发检测
-        const hotKeywords = await HotKeywordDetectorService.detectHotKeywords();
-        console.log(`[HotspotOutbreak] Step1: 检测到 ${hotKeywords.length} 个爆发关键词`);
+        // ===== Step 1: 个股爆发检测（代码提取替代关键词匹配） =====
+        const hotStocks = await HotKeywordDetectorService.detectHotStocks();
+        console.log(`[HotspotOutbreak] Step1: 检测到 ${hotStocks.length} 只爆发个股`);
 
-        // Step 2: 飞书群消息关联
-        const feishuMessages = await getFeishuMessages(6);
-        console.log(`[HotspotOutbreak] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
+        // ===== Step 1.5: 细分概念爆发检测（共振一：交叉验证） =====
+        const hotConcepts = await HotKeywordDetectorService.detectHotConcepts();
+        console.log(`[HotspotOutbreak] Step1.5: 检测到 ${hotConcepts.length} 个爆发细分概念`);
 
-        // 构建飞书消息中的关键词→股票代码映射
-        const feishuKeywordStocks = new Map<string, { codes: Set<string>; messageCount: number }>();
-        for (const msg of feishuMessages) {
-            for (const kw of msg.keywords) {
-                const existing = feishuKeywordStocks.get(kw.keyword);
-                if (existing) {
-                    for (const code of msg.stock_codes) {
-                        existing.codes.add(code);
-                    }
-                    existing.messageCount++;
-                } else {
-                    feishuKeywordStocks.set(kw.keyword, {
-                        codes: new Set(msg.stock_codes),
-                        messageCount: 1,
-                    });
+        // 构建：股票代码 → 匹配到的概念列表
+        const stockConceptMap = new Map<string, HotConceptResult>();
+        for (const concept of hotConcepts) {
+            for (const stock of concept.stockCodes) {
+                if (!stockConceptMap.has(stock.symbol)) {
+                    stockConceptMap.set(stock.symbol, concept);
                 }
             }
         }
 
-        // Step 3: 同花顺热榜验证
+        // 对爆发个股，同步匹配关键词作为"原因标签"
+        const keywordResults = await HotKeywordDetectorService.detectHotKeywords();
+
+        // 构建：每个股票代码 → 与其相关的关键词列表（通过 articleIds 交叉匹配）
+        const stockKeywordsMap = new Map<string, string[]>();
+        for (const stock of hotStocks) {
+            const stockArticleIds = new Set(stock.articles.map(a => a.id));
+            const matchedKws: string[] = [];
+            for (const kw of keywordResults) {
+                for (const a of kw.articles) {
+                    if (stockArticleIds.has(a.id)) {
+                        matchedKws.push(kw.keyword);
+                        break;
+                    }
+                }
+            }
+            stockKeywordsMap.set(stock.symbol, [...new Set(matchedKws)]);
+        }
+
+        // ===== Step 2: 飞书群消息关联 =====
+        const feishuMessages = await getFeishuMessages(6);
+        console.log(`[HotspotOutbreak] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
+
+        // 构建：股票代码 → 飞书消息数 + 关键词
+        const feishuStockMap = new Map<string, { messageCount: number; keywords: Set<string> }>();
+        for (const msg of feishuMessages) {
+            for (const code of msg.stock_codes) {
+                const existing = feishuStockMap.get(code);
+                if (existing) {
+                    existing.messageCount++;
+                    for (const kw of msg.keywords) existing.keywords.add(kw.keyword);
+                } else {
+                    const kwSet = new Set<string>();
+                    for (const kw of msg.keywords) kwSet.add(kw.keyword);
+                    feishuStockMap.set(code, { messageCount: 1, keywords: kwSet });
+                }
+            }
+        }
+
+        // ===== Step 3: 同花顺热榜验证 =====
         const thsHotSectors = await fetchThsHotSectors();
         console.log(`[HotspotOutbreak] Step3: 同花顺热榜 ${thsHotSectors.length} 个板块`);
 
-        // 构建板块名称→排名映射
-        const thsSectorRankMap = new Map<string, number>();
-        for (const sector of thsHotSectors) {
-            thsSectorRankMap.set(sector.name, sector.rank);
-        }
+        const thsSectorNameSet = new Set(thsHotSectors.map(s => s.name));
+        const thsSectorRankMap = new Map(thsHotSectors.map(s => [s.name, s.rank]));
 
-        // 整合三步数据
-        const outbreaks: HotKeywordWithVerification[] = [];
-        let verifiedCount = 0;
+        // ===== 整合：三个来源按股票代码对齐 =====
+        const outbreaks: StockResonanceSignal[] = [];
+        let resonanceCount = 0;
 
-        for (const kw of hotKeywords) {
-            const feishuData = feishuKeywordStocks.get(kw.keyword);
-            const feishuStockCodes = feishuData ? Array.from(feishuData.codes) : [];
-            const feishuMessageCount = feishuData?.messageCount || 0;
+        for (const stock of hotStocks) {
+            const feishuData = feishuStockMap.get(stock.symbol);
+            const feishuMsgCount = feishuData?.messageCount || 0;
+            const feishuKws = feishuData ? Array.from(feishuData.keywords) : [];
 
-            // 尝试匹配同花顺板块（关键词可能与板块名称相关）
+            // 合并关键词（快讯关键词 + 飞书关键词）
+            const allKws = new Set(stockKeywordsMap.get(stock.symbol) || []);
+            for (const kw of feishuKws) allKws.add(kw);
+
+            // 同花顺验证：查该股票所属板块是否在热榜
             let thsVerified = false;
             let thsSectorName = '';
             let thsSectorRank = 0;
 
-            // 通过飞书消息中的股票代码查找其所属板块
-            if (feishuStockCodes.length > 0) {
-                for (const sector of thsHotSectors) {
-                    // 检查板块名称是否与关键词维度相关
-                    const dim = KEYWORD_DIMENSIONS[kw.dimension];
-                    if (dim) {
-                        // 简单匹配：板块名包含关键词或关键词维度标签
-                        // 更精确的匹配需要查询板块成分股
-                        thsVerified = thsSectorRankMap.has(sector.name);
-                        if (thsVerified) {
-                            thsSectorName = sector.name;
-                            thsSectorRank = sector.rank;
-                            break;
+            const stockSectors = await getStockSector(stock.symbol);
+            // 精确匹配
+            for (const sector of stockSectors) {
+                if (thsSectorNameSet.has(sector)) {
+                    thsVerified = true;
+                    thsSectorName = sector;
+                    thsSectorRank = thsSectorRankMap.get(sector) || 0;
+                    break;
+                }
+            }
+
+            // 模糊匹配：热榜板块名包含在股票板块中或反之
+            if (!thsVerified) {
+                outer: for (const sector of stockSectors) {
+                    for (const thsName of thsSectorNameSet) {
+                        if (sector.includes(thsName) || thsName.includes(sector)) {
+                            thsVerified = true;
+                            thsSectorName = thsName;
+                            thsSectorRank = thsSectorRankMap.get(thsName) || 0;
+                            break outer;
                         }
                     }
                 }
             }
 
-            // 如果飞书消息没有股票代码，仅用关键词维度匹配
-            if (!thsVerified) {
-                // 关键词本身出现在同花顺热榜板块名中
-                for (const sector of thsHotSectors) {
-                    if (sector.name.includes(kw.keyword) || kw.keyword.includes(sector.name)) {
-                        thsVerified = true;
-                        thsSectorName = sector.name;
-                        thsSectorRank = sector.rank;
-                        break;
-                    }
-                }
-            }
+            // 共振评分
+            const { score, level } = calculateResonanceScore(
+                stock.currentCount, stock.surgeRatio,
+                feishuMsgCount,
+                thsSectorRank, thsVerified
+            );
 
-            if (thsVerified) verifiedCount++;
+            // 过滤无共振的低分信号（仅快讯暴增但无飞书讨论且无板块验证的过滤）
+            if (level === 'low' && !thsVerified) continue;
+
+            resonanceCount++;
+
+            const stockName = stock.stockName || await getStockName(stock.symbol);
 
             outbreaks.push({
-                keyword: kw.keyword,
-                dimension: kw.dimension,
-                dimensionLabel: kw.dimensionLabel,
-                dimensionColor: kw.dimensionColor,
-                currentCount: kw.currentCount,
-                surgeRatio: kw.surgeRatio,
-                feishuStockCodes,
-                feishuMessageCount,
+                symbol: stock.symbol,
+                stockName,
+                newsCount: stock.currentCount,
+                newsSurgeRatio: stock.surgeRatio,
+                newsKeywords: Array.from(allKws),
+                feishuMessageCount: feishuMsgCount,
+                feishuKeywords: feishuKws,
                 thsVerified,
                 thsSectorName,
                 thsSectorRank,
-                articles: kw.articles,
-                detectedAt: kw.detectedAt,
+                resonanceScore: score,
+                resonanceLevel: level,
+                conceptResonance: stockConceptMap.has(stock.symbol) ? {
+                    conceptName: stockConceptMap.get(stock.symbol)!.conceptName,
+                    clsCount: stockConceptMap.get(stock.symbol)!.clsCount,
+                    glhCount: stockConceptMap.get(stock.symbol)!.glhCount,
+                    conceptVerified: stockConceptMap.get(stock.symbol)!.crossVerified,
+                } : null,
+                articles: stock.articles,
+                detectedAt: stock.detectedAt,
             });
         }
 
-        // 按验证状态和爆发比率排序：已验证的排前面
-        outbreaks.sort((a, b) => {
-            if (a.thsVerified !== b.thsVerified) return a.thsVerified ? -1 : 1;
-            return b.surgeRatio - a.surgeRatio;
-        });
+        // 按共振评分降序
+        outbreaks.sort((a, b) => b.resonanceScore - a.resonanceScore);
 
-        console.log(`[HotspotOutbreak] 检测完成: ${outbreaks.length} 个爆发关键词, ${verifiedCount} 个通过同花顺验证`);
+        console.log(`[HotspotOutbreak] 检测完成: ${outbreaks.length} 个共振信号`);
 
         return {
             update_time: now,
-            total_keywords: hotKeywords.length,
-            verified_keywords: verifiedCount,
+            total_stocks_checked: hotStocks.length,
+            resonance_count: resonanceCount,
             ths_hot_sectors: thsHotSectors,
             outbreaks,
+            hot_concepts: hotConcepts,
         };
     }
 
     /**
-     * 获取最近的风口爆发检测结果（从缓存/DB）
+     * 获取最近的风口爆发检测结果
+     * 短期方案：返回 null 让前端调用 detectOutbreak 获取最新数据
      */
-    static async getRecentOutbreaks(hours: number = 6): Promise<HotspotOutbreakResult | null> {
-        try {
-            const hotKeywords = await HotKeywordDetectorService.getRecentHotKeywords(hours, 20);
-            const thsHotSectors = await fetchThsHotSectors();
-            const feishuMessages = await getFeishuMessages(hours);
-
-            if (hotKeywords.length === 0 && feishuMessages.length === 0) {
-                return null;
-            }
-
-            const outbreaks: HotKeywordWithVerification[] = hotKeywords.map(kw => ({
-                keyword: kw.keyword,
-                dimension: kw.dimension,
-                dimensionLabel: kw.dimensionLabel,
-                dimensionColor: kw.dimensionColor,
-                currentCount: kw.currentCount,
-                surgeRatio: kw.surgeRatio,
-                feishuStockCodes: [],
-                feishuMessageCount: 0,
-                thsVerified: false,
-                thsSectorName: '',
-                thsSectorRank: 0,
-                articles: kw.articles,
-                detectedAt: kw.detectedAt,
-            }));
-
-            return {
-                update_time: new Date().toISOString(),
-                total_keywords: hotKeywords.length,
-                verified_keywords: 0,
-                ths_hot_sectors: thsHotSectors,
-                outbreaks,
-            };
-        } catch {
-            return null;
-        }
+    static async getRecentOutbreaks(_hours: number = 6): Promise<HotspotOutbreakResult | null> {
+        return null;
     }
 }
