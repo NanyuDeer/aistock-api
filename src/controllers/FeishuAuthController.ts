@@ -234,6 +234,12 @@ export class FeishuAuthController {
                     [userId],
                 );
                 createResponse(res, 200, '取消订阅成功', { status: 'idle' });
+            } else if (action === 'unbind') {
+                await pool.query(
+                    `UPDATE user_subscriptions SET status = 'unbound', feishu_open_id = '', feishu_user_id = '', feishu_name = '', unsubscribed_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
+                    [userId],
+                );
+                createResponse(res, 200, '已解除飞书绑定', { status: 'idle' });
             } else {
                 createResponse(res, 400, '无效操作');
             }
