@@ -116,6 +116,7 @@ async function fetchTencentIndexQuotes(tencentCodes: string[]): Promise<Map<stri
         const url = `https://qt.gtimg.cn/q=${tencentCodes.join(',')}`;
         const response = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(10000), // 10秒超时
         });
         if (!response.ok) return result;
 

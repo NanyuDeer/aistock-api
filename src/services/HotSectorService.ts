@@ -104,7 +104,6 @@ function formatStock(s: any): any {
         reason_tag: cleanText(s.reason_tag, 80),
         reason_tag_class: cleanText(s.reason_tag_class, 80),
         in_concept: s.in_concept,
-        limit_tags: cleanTextList(s.limit_tags),
         chain_position: cleanText(s.chain_position, 40),
         source: cleanText(s.source, 120),
         overlap_ratio: s.overlap_ratio || 0,
@@ -178,7 +177,6 @@ function collectPushRecordsFromData(data: any): any[] {
             chain_position: chainPosition,
             source: cleanText(stock.source || sectorName, 120),
             reason_tag: cleanText(stock.reason_tag, 80),
-            limit_tags: cleanTextList(stock.limit_tags),
             push_price: Number(pushPrice.toFixed(2)),
             latest_price: Number(pushPrice.toFixed(2)),
             latest_trade_date: pushDate,
@@ -288,12 +286,14 @@ export class HotSectorService {
         if (!data) return null;
 
         const sectors = (data.hot_sectors || []).slice(0, limit).map((sector: any) => ({
+            code: sector.code || '',
             name: sector.name,
             type: sector.type,
             frequency: sector.frequency,
             avg_change: sector.avg_change,
             today_change: sector.today_change,
             amount_trend: sector.amount_trend,
+            net_inflow: sector.net_inflow || 0,
             score: sector.score ?? 0,
             leading_stock: sector.leading_stock,
             leading_change: sector.leading_change || 0,

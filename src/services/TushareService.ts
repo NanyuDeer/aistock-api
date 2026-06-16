@@ -37,6 +37,7 @@ export async function tushareRequest(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000), // 30秒超时
     });
 
     if (!response.ok) throw new Error(`Tushare ${apiName} HTTP错误: ${response.status}`);
@@ -835,30 +836,28 @@ export async function getLimitStep(tradeDate: string): Promise<LimitStepRow[]> {
 /** 同花顺概念板块资金流向 */
 export interface MoneyflowCntThsRow {
     trade_date: string;       // 交易日期
-    ts_code: string;          // 概念代码
+    ts_code: string;          // 概念代码（如885748.TI）
     name: string;             // 概念名称
-    buy_sm_amount: number;    // 小单买入（万元）
-    buy_md_amount: number;    // 中单买入（万元）
-    buy_lg_amount: number;    // 大单买入（万元）
-    buy_elg_amount: number;   // 特大单买入（万元）
-    sell_sm_amount: number;   // 小单卖出（万元）
-    sell_md_amount: number;   // 中单卖出（万元）
-    sell_lg_amount: number;   // 大单卖出（万元）
-    sell_elg_amount: number;  // 特大单卖出（万元）
-    net_mf_amount: number;    // 净流入（万元）
-    net_mf_vol: number;       // 净流入量（手）
-    lead_stock: string;       // 领涨股
-    lead_pct_chg: number;     // 领涨股涨跌幅
+    lead_stock: string;       // 领涨股票名称
+    close_price: number;      // 最新价
+    pct_change: number;       // 行业涨跌幅
+    industry_index: number;   // 板块指数点位
+    company_num: number;      // 公司数量
+    pct_change_stock: number; // 领涨股涨跌幅
+    net_buy_amount: number;   // 流入资金（亿元）
+    net_sell_amount: number;  // 流出资金（亿元）
+    net_amount: number;       // 净额（亿元）
 }
 
-/** 获取概念板块资金流向（替代同花顺资金流向爬虫）
+/** 获取概念板块资金流向
  * 频率限制：5000条/次
+ * 需要6000积分
  */
 export async function getMoneyflowCntThs(tradeDate: string): Promise<MoneyflowCntThsRow[]> {
     const rows = await tushareRequest(
         'moneyflow_cnt_ths',
         { trade_date: tradeDate },
-        'trade_date,ts_code,name,buy_sm_amount,buy_md_amount,buy_lg_amount,buy_elg_amount,sell_sm_amount,sell_md_amount,sell_lg_amount,sell_elg_amount,net_mf_amount,net_mf_vol,lead_stock,lead_pct_chg',
+        'trade_date,ts_code,name,lead_stock,close_price,pct_change,industry_index,company_num,pct_change_stock,net_buy_amount,net_sell_amount,net_amount',
     );
     return rows as MoneyflowCntThsRow[];
 }
