@@ -34,7 +34,8 @@ import { IndustryKGService } from './services/IndustryKGService';
 import { StockInfoJudgementController } from './controllers/StockInfoJudgementController';
 import { FeishuMessageController } from './controllers/FeishuMessageController';
 import { FeishuAuthController } from './controllers/FeishuAuthController';
-import { FeishuPushService } from './services/FeishuPushService';
+import { ConfigController } from './controllers/ConfigController';
+import { MessagePushService } from './services/MessagePushService';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 
@@ -157,6 +158,9 @@ app.post('/api/users/me/subscription', (req, res, next) => FeishuAuthController.
 
 // 内部推送接口
 app.post('/api/internal/push-feishu', (req, res, next) => FeishuAuthController.pushMessage(req, res, next));
+
+// 公共配置接口
+app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
 
 app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
 app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
@@ -399,7 +403,7 @@ async function start() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`[Server] aistock-api running on http://0.0.0.0:${PORT}`);
         // 启动飞书定时推送调度器
-        FeishuPushService.startScheduler();
+        MessagePushService.startScheduler();
     });
 }
 
