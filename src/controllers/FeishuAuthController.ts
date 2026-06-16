@@ -110,7 +110,7 @@ export class FeishuAuthController {
         try {
             const { code, state } = req.query;
             if (!code) {
-                res.redirect('/?error=feishu_auth_failed');
+                res.redirect('/?feishu_bind=failed&reason=no_code');
                 return;
             }
 
@@ -118,7 +118,7 @@ export class FeishuAuthController {
             const tokenData = await getFeishuUserToken(String(code));
             if (!tokenData?.access_token) {
                 console.error('[FeishuAuth] 获取用户token失败:', tokenData);
-                res.redirect('/?error=feishu_token_failed');
+                res.redirect('/?feishu_bind=failed&reason=token_failed');
                 return;
             }
 
@@ -126,14 +126,14 @@ export class FeishuAuthController {
             const userInfo = await getFeishuUserInfo(tokenData.access_token);
             if (!userInfo?.open_id) {
                 console.error('[FeishuAuth] 获取用户信息失败:', userInfo);
-                res.redirect('/?error=feishu_userinfo_failed');
+                res.redirect('/?feishu_bind=failed&reason=userinfo_failed');
                 return;
             }
 
             // 从Cookie中获取当前登录用户ID
             const userId = (req as any).user?.id;
             if (!userId) {
-                res.redirect('/login?error=session_expired');
+                res.redirect('/login?feishu_bind=failed&reason=session_expired');
                 return;
             }
 
@@ -151,10 +151,11 @@ export class FeishuAuthController {
 
             // 重定向回原页面
             const redirectPath = state ? decodeURIComponent(String(state)) : '/';
-            res.redirect(redirectPath);
+            const separator = redirectPath.includes('?') ? '&' : '?';
+            res.redirect(`${redirectPath}${separator}feishu_bind=success`);
         } catch (err: any) {
             console.error('[FeishuAuth] oauthCallback error:', err.message);
-            res.redirect('/?error=feishu_auth_error');
+            res.redirect('/?feishu_bind=failed&reason=server_error');
         }
     }
 
