@@ -396,14 +396,14 @@ export class MessagePushService {
 
     // ==================== 龙头股推送 ====================
 
-    static async executeLeaderPush(): Promise<{ success: number; fail: number }> {
+    static async executeLeaderPush(): Promise<{ success: number; fail: number; detail?: any }> {
         const stocks = await getLeaderStocksForPush();
         if (stocks.length === 0) {
             console.log('[MessagePush] 龙头股日报: 无数据，跳过推送');
-            return { success: 0, fail: 0 };
+            return { success: 0, fail: 0, detail: { reason: 'no_stocks', stocksCount: 0 } };
         }
 
-        console.log(`[MessagePush] 龙头股日报: 提取到${stocks.length}只龙头股`);
+        console.log(`[MessagePush] 龙头股日报: 提取到${stocks.length}只龙头股`, stocks.map(s => `${s.name}(${s.code}) score=${s.score}`));
 
         const { WechatPushService } = await import('./WechatPushService');
         const leaderStocks: any[] = stocks.map(s => ({
@@ -415,13 +415,12 @@ export class MessagePushService {
         }));
 
         const result = await WechatPushService.dispatchLeaderStocks(leaderStocks);
-        console.log(`[MessagePush] 龙头股日报推送完成: 发送${result.sent}, 跳过${result.skipped}, 失败${result.failed}`);
+        console.log(`[MessagePush] 龙头股日报推送完成: matched=${result.matched_users}, 发送${result.sent}, 跳过${result.skipped}, 失败${result.failed}`);
+        if (result.logs.length > 0) {
+            console.log('[MessagePush] 推送日志:', JSON.stringify(result.logs));
+        }
 
-        // TODO: 飞书渠道预留
-        // const feishuCard = buildLeaderFeishuCard(stocks);
-        // for (const sub of subscribers) { if (sub.channel === 'feishu') { ... } }
-
-        return { success: result.sent, fail: result.failed };
+        return { success: result.sent, fail: result.failed, detail: { matched: result.matched_users, skipped: result.skipped, logs: result.logs } };
     }
 
     // ==================== 风口爆发+个股资讯推送 ====================
