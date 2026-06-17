@@ -628,7 +628,10 @@ export class WechatPushService {
             const reasonKey = `reason${i + 1}`;
             if (stock) {
                 data[stockKey] = { value: `${stock.name}(${stock.code})  ${WechatPushService.formatChangePct(stock.change_pct)}` };
-                data[reasonKey] = { value: stock.reason || '暂无' };
+                // 限制理由长度，避免微信截断
+                let reason = stock.reason || '暂无';
+                if (reason.length > 20) reason = reason.slice(0, 20) + '...';
+                data[reasonKey] = { value: reason };
             } else {
                 data[stockKey] = { value: '暂无' };
                 data[reasonKey] = { value: '暂无' };
@@ -640,7 +643,7 @@ export class WechatPushService {
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ touser: openid, template_id: templateId, data }),
+                body: JSON.stringify({ touser: openid, template_id: templateId, url: 'https://gupiao.yaozhineng.com/', data }),
             },
         );
         const resData: any = await res.json();
