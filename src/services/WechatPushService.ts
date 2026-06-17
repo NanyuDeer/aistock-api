@@ -628,10 +628,7 @@ export class WechatPushService {
             const reasonKey = `reason${i + 1}`;
             if (stock) {
                 data[stockKey] = { value: `${stock.name}(${stock.code})  ${WechatPushService.formatChangePct(stock.change_pct)}` };
-                // 限制理由长度，避免微信截断
-                let reason = stock.reason || '暂无';
-                if (reason.length > 20) reason = reason.slice(0, 20) + '...';
-                data[reasonKey] = { value: reason };
+                data[reasonKey] = { value: stock.reason || '暂无' };
             } else {
                 data[stockKey] = { value: '暂无' };
                 data[reasonKey] = { value: '暂无' };
