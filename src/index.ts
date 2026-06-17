@@ -159,6 +159,20 @@ app.post('/api/users/me/subscription', (req, res, next) => FeishuAuthController.
 // 内部推送接口
 app.post('/api/internal/push-feishu', (req, res, next) => FeishuAuthController.pushMessage(req, res, next));
 
+// 手动触发龙头股推送（测试用）
+app.post('/api/internal/push-leader', async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const result = await MessagePushService.executeLeaderPush();
+        res.json({ success: true, result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 公共配置接口
 app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
 

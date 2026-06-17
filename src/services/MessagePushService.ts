@@ -1,14 +1,17 @@
 /**
  * 统一消息推送服务
  *
- * 每日2次推送（9:00 / 17:00）：
- * - 个股资讯 + 风口爆发，合并为一条消息
+ * 每日3次推送：
+ * - 8:30 龙头股日报（3只龙头股）
+ * - 9:00 / 17:00 个股资讯 + 风口爆发，合并为一条消息
  * - 标签：【个股资讯】 / 【风口爆发】 / 【个股资讯x风口爆发】
- * - 支持多渠道：飞书卡片 / 微信文本
+ * - 支持多渠道：飞书卡片 / 微信模板消息
  */
 
 import pool from '../db';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
 const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
@@ -16,8 +19,9 @@ const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
 
 // 推送时间配置
 const PUSH_SCHEDULES = [
-    { hour: 9, minute: 0, label: '早报' },
-    { hour: 17, minute: 0, label: '晚报' },
+    { hour: 8, minute: 30, label: '龙头股日报', type: 'leader' as const },
+    { hour: 9, minute: 0, label: '早报', type: 'outbreak+stock' as const },
+    { hour: 17, minute: 0, label: '晚报', type: 'outbreak+stock' as const },
 ];
 
 // ==================== 标签 ====================
@@ -162,6 +166,95 @@ async function getOutbreakStocks(): Promise<OutbreakStock[]> {
     }
 }
 
+// ==================== 龙头股数据提取（渠道无关，飞书可复用） ====================
+
+interface LeaderStockData {
+    name: string;
+    code: string;
+    industry: string;
+    change_pct: number;
+    reason: string;
+    score: number;
+}
+
+async function getLeaderStocksForPush(): Promise<LeaderStockData[]> {
+    try {
+        const dataFile = path.join(process.cwd(), 'data', 'hot-sectors.json');
+        const raw = fs.readFileSync(dataFile, 'utf-8');
+        const data = JSON.parse(raw);
+        const sectors = Array.isArray(data?.hot_sectors) ? data.hot_sectors : [];
+
+        // 收集所有板块的main_stocks，附带板块名
+        const allStocks: LeaderStockData[] = [];
+        for (const sector of sectors) {
+            const sectorName = sector.name || '';
+            const mainStocks = Array.isArray(sector.main_stocks) ? sector.main_stocks : [];
+            for (const stock of mainStocks) {
+                allStocks.push({
+                    name: stock.name || '',
+                    code: stock.code || '',
+                    industry: sectorName,
+                    change_pct: Number(stock.change_pct) || 0,
+                    reason: stock.reason || '',
+                    score: Number(stock.score) || 0,
+                });
+            }
+        }
+
+        // 按score降序排列
+        allStocks.sort((a, b) => b.score - a.score);
+
+        // 跨板块去重（同一股票只保留得分最高的板块）
+        const usedCodes = new Set<string>();
+        const deduped: LeaderStockData[] = [];
+        for (const stock of allStocks) {
+            if (!usedCodes.has(stock.code)) {
+                usedCodes.add(stock.code);
+                deduped.push(stock);
+            }
+            if (deduped.length >= 3) break;
+        }
+
+        return deduped;
+    } catch (err: any) {
+        console.error('[MessagePush] 读取龙头股数据失败:', err?.message || err);
+        return [];
+    }
+}
+
+// ==================== 风口爆发数据提取（扩展字段，供微信模板使用） ====================
+
+interface OutbreakPushData {
+    name: string;
+    code: string;
+    sector: string;
+    resonance_score: number;
+    resonance_level: string;
+    trigger_reason: string;
+}
+
+async function getOutbreakStocksForWechat(): Promise<OutbreakPushData[]> {
+    try {
+        const result = await pool.query(
+            `SELECT name, concept, change_pct, reason
+             FROM hot_sectors
+             WHERE created_at > CURRENT_DATE
+             ORDER BY change_pct DESC
+             LIMIT 3`,
+        );
+        return result.rows.map((row: any) => ({
+            name: row.name || '',
+            code: '',
+            sector: row.concept || '',
+            resonance_score: Number(row.change_pct) || 0,
+            resonance_level: Number(row.change_pct) >= 7 ? '高' : Number(row.change_pct) >= 3 ? '中' : '低',
+            trigger_reason: row.reason || '',
+        }));
+    } catch {
+        return [];
+    }
+}
+
 // ==================== 消息构建 ====================
 
 function buildUnifiedCard(
@@ -275,7 +368,7 @@ export class MessagePushService {
             for (const schedule of PUSH_SCHEDULES) {
                 if (hour === schedule.hour && minute === schedule.minute) {
                     console.log(`[MessagePush] 到达推送时间: ${schedule.label}`);
-                    this.executePush(schedule.label).catch(err => {
+                    this.executePush(schedule).catch(err => {
                         console.error(`[MessagePush] ${schedule.label}推送失败:`, err.message);
                     });
                 }
@@ -291,7 +384,49 @@ export class MessagePushService {
         }
     }
 
-    static async executePush(scheduleLabel: string): Promise<{ success: number; fail: number }> {
+    static async executePush(schedule: { label: string; type: string }): Promise<{ success: number; fail: number }> {
+        // 龙头股日报推送
+        if (schedule.type === 'leader') {
+            return this.executeLeaderPush();
+        }
+
+        // 原有的 outbreak+stock 推送逻辑
+        return this.executeOutbreakAndStockPush(schedule.label);
+    }
+
+    // ==================== 龙头股推送 ====================
+
+    static async executeLeaderPush(): Promise<{ success: number; fail: number }> {
+        const stocks = await getLeaderStocksForPush();
+        if (stocks.length === 0) {
+            console.log('[MessagePush] 龙头股日报: 无数据，跳过推送');
+            return { success: 0, fail: 0 };
+        }
+
+        console.log(`[MessagePush] 龙头股日报: 提取到${stocks.length}只龙头股`);
+
+        const { WechatPushService } = await import('./WechatPushService');
+        const leaderStocks: any[] = stocks.map(s => ({
+            name: s.name,
+            code: s.code,
+            industry: s.industry,
+            change_pct: s.change_pct,
+            reason: s.reason,
+        }));
+
+        const result = await WechatPushService.dispatchLeaderStocks(leaderStocks);
+        console.log(`[MessagePush] 龙头股日报推送完成: 发送${result.sent}, 跳过${result.skipped}, 失败${result.failed}`);
+
+        // TODO: 飞书渠道预留
+        // const feishuCard = buildLeaderFeishuCard(stocks);
+        // for (const sub of subscribers) { if (sub.channel === 'feishu') { ... } }
+
+        return { success: result.sent, fail: result.failed };
+    }
+
+    // ==================== 风口爆发+个股资讯推送 ====================
+
+    static async executeOutbreakAndStockPush(scheduleLabel: string): Promise<{ success: number; fail: number }> {
         const subscribers = await getSubscribers();
         console.log(`[MessagePush] ${scheduleLabel}: ${subscribers.length} 个订阅用户`);
 
@@ -326,12 +461,12 @@ export class MessagePushService {
                             ai_impact: '', ai_horizon: '', ai_keywords: info.keywords, ai_summary: '',
                         });
                     }
-                    // 微信风口爆发暂用飞书兜底，后续可扩展模板消息
+                    // 微信风口爆发：通过模板消息推送
                     if (hasOutbreak) {
-                        const card = buildUnifiedCard(label, [], outbreakStocks, scheduleLabel);
-                        const sent = await sendFeishuCard(sub.feishu_open_id, card);
-                        if (sent) success++;
-                        else fail++;
+                        const outbreakData = await getOutbreakStocksForWechat();
+                        if (outbreakData.length > 0) {
+                            await WechatPushService.dispatchOutbreakStocks(outbreakData);
+                        }
                     }
                     success++;
                 } else if (sub.feishu_open_id) {
@@ -352,6 +487,6 @@ export class MessagePushService {
     }
 
     static async manualPush(): Promise<{ success: number; fail: number }> {
-        return this.executePush('手动推送');
+        return this.executePush({ label: '手动推送', type: 'outbreak+stock' });
     }
 }
