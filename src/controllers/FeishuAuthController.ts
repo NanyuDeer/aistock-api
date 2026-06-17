@@ -22,8 +22,15 @@ const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
 
 async function ensureSubscriptionSchema(): Promise<void> {
     // 旧表使用 user_id INTEGER REFERENCES users(id)，但 users 表主键是 openid TEXT，
-    // 类型不匹配导致外键约束无法生效。由于认证 bug 历史上从未成功写入数据，安全 drop 重建。
-    await pool.query(`DROP TABLE IF EXISTS user_subscriptions CASCADE;`);
+    // 类型不匹配导致外键约束无法生效。检测旧表结构，仅在旧结构存在时 DROP 重建。
+    const { rows } = await pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'user_subscriptions' AND column_name = 'user_id'
+    `);
+    if (rows.length > 0) {
+        // 旧表结构存在（user_id 列），且因认证 bug 历史上从未成功写入数据，安全 drop 重建
+        await pool.query(`DROP TABLE IF EXISTS user_subscriptions CASCADE;`);
+    }
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_subscriptions (
