@@ -179,7 +179,7 @@ interface LeaderStockData {
 
 async function getLeaderStocksForPush(): Promise<LeaderStockData[]> {
     try {
-        const dataFile = path.join(process.cwd(), 'data', 'hot-sectors.json');
+        const dataFile = path.resolve(__dirname, '../../data/hot-sectors.json');
         const raw = fs.readFileSync(dataFile, 'utf-8');
         const data = JSON.parse(raw);
         const sectors = Array.isArray(data?.hot_sectors) ? data.hot_sectors : [];
