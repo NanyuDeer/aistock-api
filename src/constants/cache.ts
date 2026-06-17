@@ -1,8 +1,3 @@
-import type { StockRankResult } from '../services/TushareRankService';
-
-export const HOT_STOCKS_CACHE_KEY = 'hot_stocks:v1';
-export const HOT_STOCKS_CACHE_TTL_SECONDS = 30 * 60;
-export const HOT_STOCKS_SOURCE = 'Tushare https://tushare.pro';
 export const STOCK_INFO_CACHE_KEY_PREFIX = 'stock_info:';
 export const STOCK_INFO_CACHE_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const INDEX_QUOTE_CACHE_KEY_PREFIX = 'index_quote:';
@@ -16,15 +11,6 @@ export const STOCK_QUOTE_FUNDAMENTAL_TRADING_TTL_SECONDS = 60;
 export interface TimestampedCachePayload<TData = Record<string, any>> {
     timestamp: number;
     data: TData;
-}
-
-export interface HotStocksCachePayload {
-    timestamp: number;
-    generatedAt: string;
-    source: string;
-    topN: number;
-    symbols: string[];
-    hotStocks: StockRankResult[];
 }
 
 export type StockInfoCachePayload = TimestampedCachePayload<Record<string, any>>;

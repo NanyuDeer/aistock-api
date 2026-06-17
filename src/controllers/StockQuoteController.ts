@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { TushareQuoteService, QuoteLevel } from '../services/TushareQuoteService';
 import { TushareKlineService, KLineFqt, KLinePeriod } from '../services/TushareKlineService';
+import { EmQuoteService } from '../services/EmQuoteService';
 import { CacheService } from '../services/CacheService';
 import { createResponse } from '../utils/response';
 import { isValidAShareSymbol } from '../utils/validator';
@@ -166,6 +167,43 @@ export class StockQuoteController {
 
     static async getCoreQuotes(req: Request, res: Response, _next: NextFunction): Promise<void> {
         await this.handleBatchQuotes(req, 'core', res);
+    }
+
+    static async getRealtimeQuotes(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const symbolsParam = req.query.symbols as string;
+
+        if (!symbolsParam) {
+            createResponse(res, 400, '缺少 symbols 参数，示例: ?symbols=000001,600519');
+            return;
+        }
+
+        const symbols = [...new Set(symbolsParam.split(',').map(s => s.trim()).filter(Boolean))];
+        if (symbols.length === 0) {
+            createResponse(res, 400, '缺少 symbols 参数，示例: ?symbols=000001,600519');
+            return;
+        }
+        if (symbols.length > MAX_SYMBOLS) {
+            createResponse(res, 400, `单次最多查询 ${MAX_SYMBOLS} 只股票`);
+            return;
+        }
+
+        const invalidSymbols = symbols.filter(s => !isValidAShareSymbol(s));
+        if (invalidSymbols.length > 0) {
+            createResponse(res, 400, `Invalid symbol(s) - A股代码必须是6位数字: ${invalidSymbols.join(', ')}`);
+            return;
+        }
+
+        try {
+            const results = await EmQuoteService.getBatchQuotes(symbols, 'core');
+            createResponse(res, 200, 'success', {
+                '来源': '东方财富',
+                '股票数量': results.length,
+                '行情': results,
+            });
+        } catch (err: any) {
+            console.error('Error fetching realtime batch quotes:', err);
+            createResponse(res, 500, err instanceof Error ? err.message : 'Internal Server Error');
+        }
     }
 
     static async getActivityQuotes(req: Request, res: Response, _next: NextFunction): Promise<void> {

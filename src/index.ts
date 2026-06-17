@@ -12,7 +12,6 @@ import redis from './redis';
 import { ProfitForecastController } from './controllers/ProfitForecastController';
 import { StockInfoController } from './controllers/StockInfoController';
 import { StockQuoteController } from './controllers/StockQuoteController';
-import { StockRankController } from './controllers/StockRankController';
 import { StockListController } from './controllers/StockListController';
 import { IndexQuoteController } from './controllers/IndexQuoteController';
 import { TagLeaderController } from './controllers/TagLeaderController';
@@ -28,6 +27,10 @@ import { CapitalFlowController } from './controllers/CapitalFlowController';
 import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
 import { HotSectorController } from './controllers/HotSectorController';
+import { AiGraphController } from './controllers/AiGraphController';
+import { AiGraphService } from './services/AiGraphService';
+import { IndustryKGController } from './controllers/IndustryKGController';
+import { IndustryKGService } from './services/IndustryKGService';
 import { StockInfoJudgementController } from './controllers/StockInfoJudgementController';
 import { FeishuMessageController } from './controllers/FeishuMessageController';
 import { FeishuAuthController } from './controllers/FeishuAuthController';
@@ -162,7 +165,6 @@ app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConf
 app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
 app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
 
-app.get('/api/cn/market/stockrank', (req, res, next) => StockRankController.getHotRank(req, res, next));
 app.get('/api/cn/stocks', (req, res, next) => StockListController.getStockList(req, res, next));
 app.get('/api/cn/stock/infos', (req, res, next) => StockInfoController.getBatchStockInfo(req, res, next));
 app.get('/api/cn/stock/quotes/core', (req, res, next) => StockQuoteController.getCoreQuotes(req, res, next));
@@ -294,6 +296,25 @@ app.get('/api/news/:id', (req, res, next) => {
     }
     NewsController.getNewsDetail(req, res, next);
 });
+
+// ==================== AI 知识图谱路由 ====================
+AiGraphService.initialize().catch((err: Error) => {
+    console.error('[AiGraph] 初始化失败:', err);
+});
+app.get('/api/aigraph/concepts', (req, res, next) => AiGraphController.getConcepts(req, res, next));
+app.get('/api/aigraph/concept/:conceptCode', (req, res, next) => AiGraphController.getGraph(req, res, next));
+app.post('/api/aigraph/graph', (req, res, next) => AiGraphController.getGraph(req, res, next));
+
+// ==================== 行业知识图谱路由 ====================
+IndustryKGService.initialize().catch((err: Error) => {
+    console.error('[IndustryKG] 初始化失败:', err);
+});
+app.get('/api/kg/graph', (req, res, next) => IndustryKGController.getFullGraph(req, res, next));
+app.get('/api/kg/ai-graph', (req, res, next) => IndustryKGController.getAISubGraph(req, res, next));
+app.get('/api/kg/subgraph', (req, res, next) => IndustryKGController.getSubGraph(req, res, next));
+app.get('/api/kg/concepts', (req, res, next) => IndustryKGController.getConcepts(req, res, next));
+app.get('/api/kg/industry/:industryId/stocks', (req, res, next) => IndustryKGController.getIndustryStocks(req, res, next));
+app.post('/api/kg/refresh', (req, res, next) => IndustryKGController.refresh(req, res, next));
 
 app.use((_req, res) => {
     res.status(404).json({ code: 404, message: 'Not Found' });
