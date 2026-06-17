@@ -17,6 +17,8 @@ import axios from 'axios';
 const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
 const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
 const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
+// 前端域名，用于 OAuth 回调后重定向回前端页面（后端域名无前端路由，相对路径 redirect 会造成空白页）
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://gupiao.yaozhineng.com';
 
 // ==================== 数据库Schema ====================
 
@@ -131,11 +133,13 @@ export class FeishuAuthController {
     static async oauthCallback(req: Request, res: Response, _next: NextFunction): Promise<void> {
         const redirectPath = req.query.state ? decodeURIComponent(String(req.query.state)) : '/';
         const separator = redirectPath.includes('?') ? '&' : '?';
+        // 构建前端绝对 URL，避免后端域名无前端路由造成空白页
+        const frontendUrl = (path: string) => `${FRONTEND_BASE_URL}${path}`;
 
         try {
             const { code } = req.query;
             if (!code) {
-                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=no_code`);
+                res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=no_code`));
                 return;
             }
 
@@ -144,7 +148,7 @@ export class FeishuAuthController {
             if (!auth.ok) {
                 // 会话过期，跳登录页并带 redirect 参数，登录后回到原页面
                 const loginRedirect = encodeURIComponent(redirectPath);
-                res.redirect(`/login?feishu_bind=failed&reason=session_expired&redirect=${loginRedirect}`);
+                res.redirect(frontendUrl(`/login?feishu_bind=failed&reason=session_expired&redirect=${loginRedirect}`));
                 return;
             }
             const openid = auth.openid;
@@ -153,7 +157,7 @@ export class FeishuAuthController {
             const tokenData = await getFeishuUserToken(String(code));
             if (!tokenData?.access_token) {
                 console.error('[FeishuAuth] 获取用户token失败:', tokenData);
-                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=token_failed`);
+                res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=token_failed`));
                 return;
             }
 
@@ -161,7 +165,7 @@ export class FeishuAuthController {
             const userInfo = await getFeishuUserInfo(tokenData.access_token);
             if (!userInfo?.open_id) {
                 console.error('[FeishuAuth] 获取用户信息失败:', userInfo);
-                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=userinfo_failed`);
+                res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=userinfo_failed`));
                 return;
             }
 
@@ -177,10 +181,10 @@ export class FeishuAuthController {
 
             console.log(`[FeishuAuth] 用户${openid}绑定飞书成功: open_id=${userInfo.open_id}, name=${userInfo.name}`);
 
-            res.redirect(`${redirectPath}${separator}feishu_bind=success`);
+            res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=success`));
         } catch (err: any) {
             console.error('[FeishuAuth] oauthCallback error:', err.message);
-            res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=server_error`);
+            res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=server_error`));
         }
     }
 
