@@ -9,6 +9,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
+import { verifyJwt } from '../utils/jwt';
 import pool from '../db';
 import axios from 'axios';
 
@@ -20,10 +21,14 @@ const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
 // ==================== 数据库Schema ====================
 
 async function ensureSubscriptionSchema(): Promise<void> {
+    // 旧表使用 user_id INTEGER REFERENCES users(id)，但 users 表主键是 openid TEXT，
+    // 类型不匹配导致外键约束无法生效。由于认证 bug 历史上从未成功写入数据，安全 drop 重建。
+    await pool.query(`DROP TABLE IF EXISTS user_subscriptions CASCADE;`);
+
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_subscriptions (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_openid TEXT NOT NULL REFERENCES users(openid) ON DELETE CASCADE,
             feishu_open_id TEXT NOT NULL DEFAULT '',
             feishu_user_id TEXT NOT NULL DEFAULT '',
             feishu_name TEXT NOT NULL DEFAULT '',
@@ -33,9 +38,9 @@ async function ensureSubscriptionSchema(): Promise<void> {
             unsubscribed_at TIMESTAMPTZ,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE(user_id)
+            UNIQUE(user_openid)
         );
-        CREATE INDEX IF NOT EXISTS idx_us_user_id ON user_subscriptions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_us_user_openid ON user_subscriptions(user_openid);
         CREATE INDEX IF NOT EXISTS idx_us_feishu_open_id ON user_subscriptions(feishu_open_id);
     `);
 }
@@ -102,23 +107,46 @@ async function sendFeishuMessage(openId: string, msgType: string, content: any):
 // ==================== 控制器 ====================
 
 export class FeishuAuthController {
+    private static async requireAuth(req: Request): Promise<{ ok: true; openid: string } | { ok: false; code: number; message: string }> {
+        const cookie = req.headers.cookie || '';
+        const tokenMatch = cookie.match(/(?:^|;\s*)token=([^;]+)/);
+        if (!tokenMatch) return { ok: false, code: 401, message: '未登录' };
+        const token = tokenMatch[1];
+        const payload = verifyJwt(token, process.env.JWT_SECRET!);
+        if (!payload) return { ok: false, code: 401, message: 'token 无效或已过期' };
+        return { ok: true, openid: payload.openid };
+    }
+
     /**
      * GET /api/auth/feishu/callback
      * 飞书OAuth2.0授权回调
      */
     static async oauthCallback(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const redirectPath = req.query.state ? decodeURIComponent(String(req.query.state)) : '/';
+        const separator = redirectPath.includes('?') ? '&' : '?';
+
         try {
-            const { code, state } = req.query;
+            const { code } = req.query;
             if (!code) {
-                res.redirect('/?feishu_bind=failed&reason=no_code');
+                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=no_code`);
                 return;
             }
+
+            // 从 Cookie 中认证当前登录用户
+            const auth = await FeishuAuthController.requireAuth(req);
+            if (!auth.ok) {
+                // 会话过期，跳登录页并带 redirect 参数，登录后回到原页面
+                const loginRedirect = encodeURIComponent(redirectPath);
+                res.redirect(`/login?feishu_bind=failed&reason=session_expired&redirect=${loginRedirect}`);
+                return;
+            }
+            const openid = auth.openid;
 
             // 获取用户Token
             const tokenData = await getFeishuUserToken(String(code));
             if (!tokenData?.access_token) {
                 console.error('[FeishuAuth] 获取用户token失败:', tokenData);
-                res.redirect('/?feishu_bind=failed&reason=token_failed');
+                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=token_failed`);
                 return;
             }
 
@@ -126,36 +154,26 @@ export class FeishuAuthController {
             const userInfo = await getFeishuUserInfo(tokenData.access_token);
             if (!userInfo?.open_id) {
                 console.error('[FeishuAuth] 获取用户信息失败:', userInfo);
-                res.redirect('/?feishu_bind=failed&reason=userinfo_failed');
-                return;
-            }
-
-            // 从Cookie中获取当前登录用户ID
-            const userId = (req as any).user?.id;
-            if (!userId) {
-                res.redirect('/login?feishu_bind=failed&reason=session_expired');
+                res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=userinfo_failed`);
                 return;
             }
 
             // 保存飞书绑定信息
             await ensureSubscriptionSchema();
             await pool.query(
-                `INSERT INTO user_subscriptions (user_id, feishu_open_id, feishu_user_id, feishu_name, status, subscribed_at)
+                `INSERT INTO user_subscriptions (user_openid, feishu_open_id, feishu_user_id, feishu_name, status, subscribed_at)
                  VALUES ($1, $2, $3, $4, 'subscribed', NOW())
-                 ON CONFLICT (user_id)
+                 ON CONFLICT (user_openid)
                  DO UPDATE SET feishu_open_id = $2, feishu_user_id = $3, feishu_name = $4, status = 'subscribed', subscribed_at = NOW(), updated_at = NOW()`,
-                [userId, userInfo.open_id, userInfo.user_id || '', userInfo.name || ''],
+                [openid, userInfo.open_id, userInfo.user_id || '', userInfo.name || ''],
             );
 
-            console.log(`[FeishuAuth] 用户${userId}绑定飞书成功: open_id=${userInfo.open_id}, name=${userInfo.name}`);
+            console.log(`[FeishuAuth] 用户${openid}绑定飞书成功: open_id=${userInfo.open_id}, name=${userInfo.name}`);
 
-            // 重定向回原页面
-            const redirectPath = state ? decodeURIComponent(String(state)) : '/';
-            const separator = redirectPath.includes('?') ? '&' : '?';
             res.redirect(`${redirectPath}${separator}feishu_bind=success`);
         } catch (err: any) {
             console.error('[FeishuAuth] oauthCallback error:', err.message);
-            res.redirect('/?feishu_bind=failed&reason=server_error');
+            res.redirect(`${redirectPath}${separator}feishu_bind=failed&reason=server_error`);
         }
     }
 
@@ -165,16 +183,17 @@ export class FeishuAuthController {
      */
     static async getSubscription(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
-            const userId = (req as any).user?.id;
-            if (!userId) {
-                createResponse(res, 401, '未登录');
+            const auth = await FeishuAuthController.requireAuth(req);
+            if (!auth.ok) {
+                createResponse(res, auth.code, auth.message);
                 return;
             }
+            const openid = auth.openid;
 
             await ensureSubscriptionSchema();
             const result = await pool.query(
-                'SELECT status, feishu_open_id, feishu_name, push_times, subscribed_at FROM user_subscriptions WHERE user_id = $1',
-                [userId],
+                'SELECT status, feishu_open_id, feishu_name, push_times, subscribed_at FROM user_subscriptions WHERE user_openid = $1',
+                [openid],
             );
 
             if (result.rows.length === 0) {
@@ -203,11 +222,12 @@ export class FeishuAuthController {
      */
     static async updateSubscription(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
-            const userId = (req as any).user?.id;
-            if (!userId) {
-                createResponse(res, 401, '未登录');
+            const auth = await FeishuAuthController.requireAuth(req);
+            if (!auth.ok) {
+                createResponse(res, auth.code, auth.message);
                 return;
             }
+            const openid = auth.openid;
 
             const { action } = req.body;
             await ensureSubscriptionSchema();
@@ -215,8 +235,8 @@ export class FeishuAuthController {
             if (action === 'subscribe') {
                 // 检查是否已绑定飞书
                 const existing = await pool.query(
-                    'SELECT feishu_open_id FROM user_subscriptions WHERE user_id = $1',
-                    [userId],
+                    'SELECT feishu_open_id FROM user_subscriptions WHERE user_openid = $1',
+                    [openid],
                 );
 
                 if (existing.rows.length === 0 || !existing.rows[0].feishu_open_id) {
@@ -225,20 +245,20 @@ export class FeishuAuthController {
                 }
 
                 await pool.query(
-                    `UPDATE user_subscriptions SET status = 'subscribed', subscribed_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
-                    [userId],
+                    `UPDATE user_subscriptions SET status = 'subscribed', subscribed_at = NOW(), updated_at = NOW() WHERE user_openid = $1`,
+                    [openid],
                 );
                 createResponse(res, 200, '订阅成功', { status: 'subscribed' });
             } else if (action === 'unsubscribe') {
                 await pool.query(
-                    `UPDATE user_subscriptions SET status = 'unsubscribed', unsubscribed_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
-                    [userId],
+                    `UPDATE user_subscriptions SET status = 'unsubscribed', unsubscribed_at = NOW(), updated_at = NOW() WHERE user_openid = $1`,
+                    [openid],
                 );
                 createResponse(res, 200, '取消订阅成功', { status: 'idle' });
             } else if (action === 'unbind') {
                 await pool.query(
-                    `UPDATE user_subscriptions SET status = 'unbound', feishu_open_id = '', feishu_user_id = '', feishu_name = '', unsubscribed_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
-                    [userId],
+                    `UPDATE user_subscriptions SET status = 'unbound', feishu_open_id = '', feishu_user_id = '', feishu_name = '', unsubscribed_at = NOW(), updated_at = NOW() WHERE user_openid = $1`,
+                    [openid],
                 );
                 createResponse(res, 200, '已解除飞书绑定', { status: 'idle' });
             } else {
