@@ -159,6 +159,85 @@ app.post('/api/users/me/subscription', (req, res, next) => FeishuAuthController.
 // 内部推送接口
 app.post('/api/internal/push-feishu', (req, res, next) => FeishuAuthController.pushMessage(req, res, next));
 
+// 手动触发龙头股推送（测试用）
+app.post('/api/internal/push-leader', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const force = req.body?.force === true || req.query.force === 'true';
+        const result = await MessagePushService.executeLeaderPush(force);
+        res.json({ success: true, result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 手动触发风口爆发推送（测试用，支持传入测试数据）
+app.post('/api/internal/push-outbreak', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const testData = req.body?.test_data;
+        const force = req.body?.force === true || req.query.force === 'true';
+        const result = await MessagePushService.executeOutbreakPush(testData, force);
+        res.json({ success: true, result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 手动触发自选股异动推送（测试用，支持传入测试数据）
+app.post('/api/internal/push-stock-info', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const testData = req.body?.test_data;
+        if (testData) {
+            // 使用传入的测试数据直接推送
+            const { WechatPushService } = await import('./services/WechatPushService');
+            const { MessagePushService } = await import('./services/MessagePushService');
+            const event = {
+                id: testData.id || Date.now(),
+                symbol: testData.symbol || '300750',
+                stock_name: testData.stock_name || '宁德时代',
+                info_type: testData.info_type || 'news',
+                title: testData.title || '宁德时代发布新产品',
+                url: testData.url || '',
+                published_at: testData.published_at || new Date().toISOString(),
+                ai_impact: testData.ai_impact || '重大利好',
+                ai_horizon: testData.ai_horizon || '短期',
+                ai_keywords: testData.ai_keywords || ['新产品', '增长'],
+                ai_summary: testData.ai_summary || '公司发布新产品，预计将带来显著业绩增长',
+            };
+            const wxResult = await WechatPushService.dispatchStockInfoJudgement(event);
+            const feishuResult = await MessagePushService.dispatchStockInfoToFeishu({
+                symbol: event.symbol,
+                stock_name: event.stock_name,
+                info_type: event.info_type,
+                title: event.title,
+                ai_impact: event.ai_impact,
+                ai_horizon: event.ai_horizon,
+                ai_summary: event.ai_summary,
+                published_at: event.published_at,
+            }, true); // 测试模式：推送给所有飞书订阅用户
+            res.json({ success: true, result: { wx: wxResult, feishu: feishuResult } });
+        } else {
+            // 使用数据库中的数据推送
+            const { StockInfoPushService } = await import('./services/StockInfoPushService');
+            const result = await StockInfoPushService.push(req.body || { window: 'morning' });
+            res.json({ success: true, result });
+        }
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 公共配置接口
 app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
 

@@ -361,6 +361,12 @@ export class StockInfoService {
             `SELECT us.symbol, MAX(s.name) AS stock_name, MAX(s.market) AS market, COUNT(DISTINCT us.openid)::int AS favorite_user_count
              FROM user_stocks us
              LEFT JOIN stocks s ON s.symbol = us.symbol
+             WHERE EXISTS (
+                 SELECT 1 FROM user_settings ust
+                 WHERE ust.openid = us.openid
+                   AND ust.setting_type = 'stock_push'
+                   AND COALESCE(ust.enabled, 1) != 0
+             )
              GROUP BY us.symbol
              ORDER BY favorite_user_count DESC, us.symbol ASC`,
         );
