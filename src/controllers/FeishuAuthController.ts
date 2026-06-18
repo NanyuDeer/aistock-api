@@ -184,7 +184,15 @@ export class FeishuAuthController {
             res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=success`));
         } catch (err: any) {
             console.error('[FeishuAuth] oauthCallback error:', err.message);
-            res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=server_error`));
+            const feishuData = err?.response?.data;
+            const errMsg = String(feishuData?.msg || feishuData?.error || '');
+            const errCode = String(feishuData?.code || '');
+            // 企业自建应用常见的未加入企业/用户不可见类错误关键词
+            const isNotInTenant =
+                /不在企业|not in tenant|tenant|用户不可见|user not visible|not in app/i.test(errMsg) ||
+                ['20013', '20015', '99991663'].includes(errCode);
+            const reason = isNotInTenant ? 'not_in_tenant' : 'server_error';
+            res.redirect(frontendUrl(`${redirectPath}${separator}feishu_bind=failed&reason=${reason}`));
         }
     }
 
