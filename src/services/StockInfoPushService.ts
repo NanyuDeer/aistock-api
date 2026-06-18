@@ -1,5 +1,6 @@
 import { StockInfoService, StockInfoType, type StockInfoPushWindow } from './StockInfoService';
 import { WechatPushService } from './WechatPushService';
+import { MessagePushService } from './MessagePushService';
 
 export interface StockInfoPushRequest {
     window?: string;
@@ -65,7 +66,7 @@ export class StockInfoPushService {
             summary.candidates += candidates.length;
 
             for (const judgement of candidates) {
-                const result = await WechatPushService.dispatchStockInfoJudgement({
+                const event = {
                     id: judgement.id,
                     symbol: judgement.symbol,
                     stock_name: judgement.stock_name,
@@ -77,11 +78,27 @@ export class StockInfoPushService {
                     ai_horizon: judgement.ai_horizon,
                     ai_keywords: judgement.ai_keywords,
                     ai_summary: judgement.ai_summary,
-                });
+                };
+
+                // 微信推送
+                const result = await WechatPushService.dispatchStockInfoJudgement(event);
                 summary.matched_users += result.matched_users;
                 summary.sent += result.sent;
                 summary.skipped += result.skipped;
                 summary.failed += result.failed;
+
+                // 飞书推送
+                await MessagePushService.dispatchStockInfoToFeishu({
+                    symbol: event.symbol,
+                    stock_name: event.stock_name || event.symbol,
+                    info_type: event.info_type,
+                    title: event.title,
+                    ai_impact: event.ai_impact,
+                    ai_horizon: event.ai_horizon,
+                    ai_summary: event.ai_summary,
+                    published_at: event.published_at instanceof Date ? event.published_at.toISOString() : String(event.published_at),
+                });
+
                 summary.results.push({ id: judgement.id, symbol: judgement.symbol, ...result });
             }
         }

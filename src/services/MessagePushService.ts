@@ -257,6 +257,100 @@ async function getOutbreakStocksForWechat(): Promise<OutbreakPushData[]> {
 
 // ==================== 消息构建 ====================
 
+function buildLeaderFeishuCard(stocks: LeaderStockData[]): any {
+    const elements: any[] = [];
+
+    elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: '**风口板块及龙头股推荐**' },
+    });
+    elements.push({ tag: 'hr' });
+
+    const sectors = stocks.map(s => s.industry).join(' / ');
+    elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `风口板块：${sectors}` },
+    });
+    elements.push({ tag: 'hr' });
+
+    for (let i = 0; i < stocks.length; i++) {
+        const stock = stocks[i];
+        const changeStr = stock.change_pct > 0
+            ? `+${stock.change_pct.toFixed(2)}%`
+            : `${stock.change_pct.toFixed(2)}%`;
+        const color = stock.change_pct > 0 ? 'red' : 'green';
+        elements.push({
+            tag: 'div',
+            text: {
+                tag: 'lark_md',
+                content: `**龙头股${i + 1}：${stock.name}(${stock.code})** <font color="${color}">${changeStr}</font>\n推荐理由：${stock.reason}`,
+            },
+        });
+        elements.push({ tag: 'hr' });
+    }
+
+    elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: '<font color="grey">点击查看完整龙头股一览</font>' },
+    });
+
+    return {
+        config: { wide_screen_mode: true },
+        header: {
+            title: { tag: 'plain_text', content: '【龙头股日报】' },
+            template: 'green',
+        },
+        elements,
+    };
+}
+
+interface StockInfoPushEventData {
+    symbol: string;
+    stock_name: string;
+    info_type: string;
+    title: string;
+    ai_impact: string;
+    ai_horizon: string;
+    ai_summary: string;
+    published_at: string;
+}
+
+function buildStockInfoFeishuCard(event: StockInfoPushEventData): any {
+    const elements: any[] = [];
+
+    elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: '**您的自选股有新动态**' },
+    });
+    elements.push({ tag: 'hr' });
+
+    const eventType = event.info_type === 'announcement' ? '公告研判' : '新闻研判';
+    const time = new Date(event.published_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+
+    elements.push({
+        tag: 'div',
+        text: {
+            tag: 'lark_md',
+            content: `股票：**${event.stock_name}**(${event.symbol})\n事件类型：${eventType}\n影响级别：${event.ai_impact}/${event.ai_horizon}\n摘要：${event.ai_summary || event.title}\n发生时间：${time}`,
+        },
+    });
+    elements.push({ tag: 'hr' });
+
+    elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: '<font color="grey">点击查看完整分析</font>' },
+    });
+
+    return {
+        config: { wide_screen_mode: true },
+        header: {
+            title: { tag: 'plain_text', content: '【自选股异动提醒】' },
+            template: 'orange',
+        },
+        elements,
+    };
+}
+
 function buildUnifiedCard(
     label: PushLabel,
     stockInfos: StockInfoItem[],
@@ -405,6 +499,10 @@ export class MessagePushService {
 
         console.log(`[MessagePush] 龙头股日报: 提取到${stocks.length}只龙头股`, stocks.map(s => `${s.name}(${s.code}) score=${s.score}`));
 
+        let success = 0;
+        let fail = 0;
+
+        // 微信推送
         const { WechatPushService } = await import('./WechatPushService');
         const leaderStocks: any[] = stocks.map(s => ({
             name: s.name,
@@ -413,14 +511,26 @@ export class MessagePushService {
             change_pct: s.change_pct,
             reason: s.reason,
         }));
+        const wxResult = await WechatPushService.dispatchLeaderStocks(leaderStocks);
+        success += wxResult.sent;
+        fail += wxResult.failed;
+        console.log(`[MessagePush] 龙头股日报微信推送: 发送${wxResult.sent}, 跳过${wxResult.skipped}, 失败${wxResult.failed}`);
 
-        const result = await WechatPushService.dispatchLeaderStocks(leaderStocks);
-        console.log(`[MessagePush] 龙头股日报推送完成: matched=${result.matched_users}, 发送${result.sent}, 跳过${result.skipped}, 失败${result.failed}`);
-        if (result.logs.length > 0) {
-            console.log('[MessagePush] 推送日志:', JSON.stringify(result.logs));
+        // 飞书推送
+        const subscribers = await getSubscribers();
+        const feishuSubs = subscribers.filter(s => s.feishu_open_id);
+        if (feishuSubs.length > 0) {
+            const card = buildLeaderFeishuCard(stocks);
+            for (const sub of feishuSubs) {
+                const sent = await sendFeishuCard(sub.feishu_open_id, card);
+                if (sent) success++;
+                else fail++;
+            }
+            console.log(`[MessagePush] 龙头股日报飞书推送: ${feishuSubs.length} 个用户`);
         }
 
-        return { success: result.sent, fail: result.failed, detail: { matched: result.matched_users, skipped: result.skipped, logs: result.logs } };
+        console.log(`[MessagePush] 龙头股日报推送完成: 成功${success}, 失败${fail}`);
+        return { success, fail, detail: { wxMatched: wxResult.matched_users, wxSkipped: wxResult.skipped, feishuCount: feishuSubs.length, logs: wxResult.logs } };
     }
 
     // ==================== 风口爆发+个股资讯推送 ====================
@@ -487,5 +597,40 @@ export class MessagePushService {
 
     static async manualPush(): Promise<{ success: number; fail: number }> {
         return this.executePush({ label: '手动推送', type: 'outbreak+stock' });
+    }
+
+    // ==================== 自选股异动飞书实时推送 ====================
+
+    static async dispatchStockInfoToFeishu(event: StockInfoPushEventData): Promise<{ sent: number; failed: number }> {
+        try {
+            const result = await pool.query(
+                `SELECT DISTINCT u.feishu_open_id
+                 FROM users u
+                 INNER JOIN user_stocks us ON u.openid = us.openid
+                 WHERE us.symbol = $1
+                   AND u.feishu_open_id IS NOT NULL
+                   AND u.feishu_open_id != ''`,
+                [event.symbol],
+            );
+
+            if (result.rows.length === 0) return { sent: 0, failed: 0 };
+
+            const card = buildStockInfoFeishuCard(event);
+            let sent = 0;
+            let failed = 0;
+
+            for (const row of result.rows) {
+                const openId = String(row.feishu_open_id);
+                const ok = await sendFeishuCard(openId, card);
+                if (ok) sent++;
+                else failed++;
+            }
+
+            console.log(`[MessagePush] 自选股异动飞书推送: ${event.stock_name}(${event.symbol}), 发送${sent}, 失败${failed}`);
+            return { sent, failed };
+        } catch (err: any) {
+            console.error('[MessagePush] 自选股异动飞书推送失败:', err.message);
+            return { sent: 0, failed: 0 };
+        }
     }
 }
