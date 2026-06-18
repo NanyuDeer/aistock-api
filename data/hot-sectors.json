@@ -1,21 +1,21 @@
 {
-  "update_time": "2026/6/17 01:50:04",
+  "update_time": "2026/6/19 03:00:18",
   "hot_sectors": [
     {
       "code": "886054",
       "name": "光刻机",
       "type": "concept",
-      "frequency": 7,
-      "avg_change": 5.08,
+      "frequency": 8,
+      "avg_change": 5.87,
       "today_change": 5.95,
-      "amount_trend": 20000,
-      "net_inflow": 20000,
-      "leading_stock": "江丰电子",
+      "amount_trend": -50000,
+      "net_inflow": -50000,
+      "leading_stock": "中瓷电子",
       "leading_change": 0,
       "up_count": 0,
       "down_count": 0,
-      "driver": "10日板块轮动上榜7次",
-      "score": 62,
+      "driver": "10日板块轮动上榜8次",
+      "score": 70,
       "related_industries": [
         "光学光电子",
         "半导体",
@@ -45,20 +45,36 @@
         }
       ],
       "ai_analysis": {
-        "persistence": "中期(1-2周)",
-        "persistence_reason": "资金持续流入，领涨股强势，上下游联动紧密，但短期涨幅已高需谨慎",
+        "persistence": "短期(1-3天)",
+        "persistence_reason": "主力资金净流出5亿元，高位分歧加大，短期获利盘抛压明显。",
         "heat_transfer": true,
-        "transfer_direction": "上游半导体设备、材料，下游半导体、电子板块",
-        "transfer_reason": "核心产业链关联度高，上游材料设备与下游电子制造热度传导明显",
-        "risk_warning": "短期涨幅较大，追高风险，关注政策与资金变化"
+        "transfer_direction": "向上游电子化学品、半导体材料等传导",
+        "transfer_reason": "光刻机热度溢出带动上游配套产业，但资金联动性偏弱。",
+        "risk_warning": "主力大幅流出，警惕板块高位回调风险。"
       },
       "main_stocks": [
+        {
+          "code": "003031",
+          "name": "中瓷电子",
+          "industry": "光刻机",
+          "score": 85,
+          "reason": "历史封板率1%，光通信陶瓷外壳+SiC功率器件+央企",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "光刻机",
+          "overlap_ratio": 1,
+          "price": 176.29,
+          "change_pct": 10
+        },
         {
           "code": "600353",
           "name": "旭光电子",
           "industry": "光刻机",
           "score": 85,
-          "reason": "历史封板率1%，氮化铝+韩国客户+真空灭弧室+可控核聚变",
+          "reason": "历史封板率1%，氮化铝+可控核聚变+定增受理",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
@@ -66,219 +82,187 @@
           "chain_position": "核心",
           "related_industry": "光刻机",
           "overlap_ratio": 1,
-          "price": 34.72,
-          "change_pct": 10.01
+          "price": 42.01,
+          "change_pct": 10
         },
         {
-          "code": "688167",
-          "name": "炬光科技",
+          "code": "688010",
+          "name": "福光股份",
           "industry": "光刻机",
-          "score": 67.4,
-          "reason": "涨幅3.7%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
+          "score": 70.8,
+          "reason": "量价齐升，涨幅5.4%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
           "related_industry": "光刻机",
           "overlap_ratio": 1,
-          "price": 413,
-          "change_pct": 3.7
+          "price": 50.47,
+          "change_pct": 5.41
         },
         {
-          "code": "300666",
-          "name": "江丰电子",
-          "industry": "光刻机",
-          "score": 64.1,
-          "reason": "涨幅2.0%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "光刻机",
-          "overlap_ratio": 1,
-          "price": 299.61,
-          "change_pct": 2.05
-        },
-        {
-          "code": "688484",
-          "name": "南芯科技",
+          "code": "688478",
+          "name": "晶升股份",
           "industry": "半导体",
-          "score": 45,
-          "reason": "可转债发行+AI算力电源+芯片",
+          "score": 47.1,
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 52.67,
-          "change_pct": 20.0046,
+          "price": 80.44,
+          "change_pct": 20.006,
           "chain_position": "核心",
           "related_industry": "半导体",
           "overlap_ratio": 0.184
         },
         {
-          "code": "300489",
-          "name": "光智科技",
-          "industry": "光学元件",
-          "score": 35.9,
-          "reason": "量价齐升，涨幅8.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "688515",
+          "name": "裕太微",
+          "industry": "半导体",
+          "score": 46.3,
+          "reason": "定增+高速通信芯片+人形机器人",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 212.18,
-          "change_pct": 8.5708,
+          "price": 238.8,
+          "change_pct": 20,
           "chain_position": "核心",
-          "related_industry": "光学元件",
+          "related_industry": "半导体",
           "overlap_ratio": 0.184
         }
       ],
       "upstream_stocks": [
         {
-          "code": "301666",
-          "name": "大普微",
-          "industry": "半导体",
-          "score": 19.2,
-          "reason": "量价齐升，涨幅10.1%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 673.6,
-          "change_pct": 10.0654,
-          "chain_position": "上游",
-          "transmission_factor": 0.675,
-          "source_industry": "光学光电子"
-        },
-        {
-          "code": "688147",
-          "name": "微导纳米",
-          "industry": "半导体设备",
-          "score": 36.4,
-          "reason": "连续3日上涨",
-          "reason_tag": "连续上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "连续上涨",
-          "in_concept": false,
-          "price": 109.2,
-          "change_pct": 8.6567,
-          "chain_position": "上游",
-          "transmission_factor": 0.632,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "688359",
-          "name": "三孚新科",
+          "code": "300285",
+          "name": "国瓷材料",
           "industry": "电子化学品",
-          "score": 34.6,
-          "reason": "量价齐升，涨幅11.1%",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 173.11,
-          "change_pct": 11.0534,
+          "price": 89.53,
+          "change_pct": 14.051,
           "chain_position": "上游",
-          "transmission_factor": 0.6,
+          "transmission_factor": 0.631,
           "source_industry": "光学光电子"
         },
         {
-          "code": "600206",
-          "name": "有研新材",
+          "code": "301630",
+          "name": "同宇新材",
+          "industry": "电子化学品",
+          "score": 22.3,
+          "reason": "量价齐升，涨幅13.7%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 402.31,
+          "change_pct": 13.6854,
+          "chain_position": "上游",
+          "transmission_factor": 0.631,
+          "source_industry": "光学光电子"
+        },
+        {
+          "code": "688535",
+          "name": "华海诚科",
           "industry": "半导体材料",
           "score": 37.6,
-          "reason": "历史封板率1%，半导体靶材+存储芯片+央企",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 39.11,
-          "change_pct": 10.0141,
+          "price": 152.9,
+          "change_pct": 14.13,
           "chain_position": "上游",
-          "transmission_factor": 0.563,
+          "transmission_factor": 0.57,
           "source_industry": "光学光电子"
         },
         {
-          "code": "603407",
-          "name": "长裕集团",
-          "industry": "其他小金属",
-          "score": 39.9,
-          "reason": "历史封板率1%，氧氯化锆+陶瓷载板+光通讯+业绩增长",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "code": "300435",
+          "name": "中泰股份",
+          "industry": "专用设备",
+          "score": 25.2,
+          "reason": "量价齐升，涨幅13.0%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 62.87,
-          "change_pct": 10.0087,
+          "price": 23.95,
+          "change_pct": 12.9717,
           "chain_position": "上游",
-          "transmission_factor": 0.516,
+          "transmission_factor": 0.544,
           "source_industry": "半导体"
         }
       ],
       "downstream_stocks": [
         {
-          "code": "301099",
-          "name": "雅创电子",
+          "code": "002859",
+          "name": "洁美科技",
           "industry": "其他电子",
-          "score": 28.2,
-          "reason": "MLCC分销+存储芯片+人形机器人",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 88.87,
-          "change_pct": 19.9973,
+          "price": 99.73,
+          "change_pct": 10.0044,
           "chain_position": "下游",
-          "transmission_factor": 0.607,
+          "transmission_factor": 0.62,
           "source_industry": "半导体"
         },
         {
-          "code": "301099",
-          "name": "雅创电子",
+          "code": "002859",
+          "name": "洁美科技",
           "industry": "其他电子Ⅲ",
-          "score": 28.2,
-          "reason": "MLCC分销+存储芯片+人形机器人",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 88.87,
-          "change_pct": 19.9973,
+          "price": 99.73,
+          "change_pct": 10.0044,
           "chain_position": "下游",
-          "transmission_factor": 0.607,
+          "transmission_factor": 0.62,
           "source_industry": "半导体"
         },
         {
-          "code": "688498",
-          "name": "源杰科技",
-          "industry": "分立器件",
-          "score": 37.3,
-          "reason": "量价齐升，涨幅9.8%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "002281",
+          "name": "光迅科技",
+          "industry": "通信网络设备及器件",
+          "score": 51,
+          "reason": "历史封板率1%，3.2T硅光NPO+CPO+定增+央企",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 1608.88,
-          "change_pct": 9.8302,
+          "price": 266.2,
+          "change_pct": 10,
           "chain_position": "下游",
-          "transmission_factor": 0.507,
-          "source_industry": "光学元件"
+          "transmission_factor": 0.516,
+          "source_industry": "半导体"
         },
         {
-          "code": "300570",
-          "name": "太辰光",
-          "industry": "通信网络设备及器件",
-          "score": 33.6,
-          "reason": "量价齐升，涨幅18.5%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "002150",
+          "name": "正泰电源",
+          "industry": "逆变器",
+          "score": 25.6,
+          "reason": "涨幅3.9%",
+          "reason_tag": "强势上涨",
+          "reason_tag_class": "tag-bullish",
+          "source": "强势上涨",
           "in_concept": false,
-          "price": 263.29,
-          "change_pct": 18.5457,
+          "price": 26.54,
+          "change_pct": 3.8748,
           "chain_position": "下游",
-          "transmission_factor": 0.502,
+          "transmission_factor": 0.499,
           "source_industry": "半导体"
         }
       ],
@@ -320,24 +304,14 @@
             "label": "半导体设备"
           },
           {
-            "id": "其他小金属",
-            "type": "upstream",
-            "label": "其他小金属"
-          },
-          {
             "id": "专用设备",
             "type": "upstream",
             "label": "专用设备"
           },
           {
-            "id": "军工电子",
-            "type": "downstream",
-            "label": "军工电子"
-          },
-          {
-            "id": "消费电子",
-            "type": "downstream",
-            "label": "消费电子"
+            "id": "其他小金属",
+            "type": "upstream",
+            "label": "其他小金属"
           },
           {
             "id": "其他电子",
@@ -353,6 +327,16 @@
             "id": "通信网络设备及器件",
             "type": "downstream",
             "label": "通信网络设备及器件"
+          },
+          {
+            "id": "军工电子",
+            "type": "downstream",
+            "label": "军工电子"
+          },
+          {
+            "id": "消费电子",
+            "type": "downstream",
+            "label": "消费电子"
           },
           {
             "id": "分立器件",
@@ -390,108 +374,491 @@
             "direction": "related"
           },
           {
-            "source": "半导体",
+            "source": "电子化学品",
             "target": "光学光电子",
-            "factor": 0.675,
+            "factor": 0.631,
             "direction": "upstream"
           },
           {
-            "source": "电子化学品",
+            "source": "半导体",
             "target": "光学光电子",
-            "factor": 0.6,
+            "factor": 0.604,
             "direction": "upstream"
           },
           {
             "source": "半导体材料",
             "target": "光学光电子",
-            "factor": 0.563,
+            "factor": 0.57,
             "direction": "upstream"
           },
           {
             "source": "半导体设备",
             "target": "半导体",
-            "factor": 0.632,
-            "direction": "upstream"
-          },
-          {
-            "source": "其他小金属",
-            "target": "半导体",
-            "factor": 0.516,
+            "factor": 0.575,
             "direction": "upstream"
           },
           {
             "source": "专用设备",
             "target": "半导体",
-            "factor": 0.51,
+            "factor": 0.544,
             "direction": "upstream"
           },
           {
-            "source": "光学光电子",
+            "source": "其他小金属",
             "target": "半导体",
-            "factor": 0.635,
-            "direction": "downstream"
-          },
-          {
-            "source": "光学光电子",
-            "target": "军工电子",
-            "factor": 0.492,
-            "direction": "downstream"
-          },
-          {
-            "source": "光学光电子",
-            "target": "消费电子",
-            "factor": 0.45,
-            "direction": "downstream"
+            "factor": 0.519,
+            "direction": "upstream"
           },
           {
             "source": "半导体",
             "target": "其他电子",
-            "factor": 0.607,
+            "factor": 0.62,
             "direction": "downstream"
           },
           {
             "source": "半导体",
             "target": "其他电子Ⅲ",
-            "factor": 0.607,
+            "factor": 0.62,
             "direction": "downstream"
           },
           {
             "source": "半导体",
             "target": "通信网络设备及器件",
-            "factor": 0.502,
+            "factor": 0.516,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "半导体",
+            "factor": 0.564,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "军工电子",
+            "factor": 0.494,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "消费电子",
+            "factor": 0.446,
             "direction": "downstream"
           },
           {
             "source": "光学元件",
             "target": "分立器件",
-            "factor": 0.507,
+            "factor": 0.487,
             "direction": "downstream"
           },
           {
             "source": "光学元件",
             "target": "LED",
-            "factor": 0.456,
+            "factor": 0.452,
             "direction": "downstream"
           },
           {
             "source": "光学元件",
             "target": "面板",
-            "factor": 0.41,
+            "factor": 0.38,
             "direction": "downstream"
           }
         ],
-        "transfer_direction": "上游半导体设备、材料，下游半导体、电子板块"
+        "transfer_direction": "向上游电子化学品、半导体材料等传导"
       },
       "leading_stock_info": {
-        "name": "江丰电子",
-        "code": "300666",
+        "name": "中瓷电子",
+        "code": "003031",
         "industry": "光刻机",
-        "price": 299.61,
-        "change_pct": 2.05,
-        "reason": "高纯溅射靶材的研发、生产和销售,主要产品为各种高纯溅射靶材,包括铝靶、钛靶、钽靶、钨钛靶等。，涨幅2.0%",
-        "reason_tag": "龙头股",
-        "reason_tag_class": "longtou",
+        "price": 176.29,
+        "change_pct": 10,
+        "reason": "电子陶瓷系列产品研发、生产和销售，历史封板率1%，光通信陶瓷外壳+SiC功率器件+央企",
+        "reason_tag": "涨停",
+        "reason_tag_class": "tag-bullish",
         "related_industry": "光刻机",
+        "in_concept": true
+      }
+    },
+    {
+      "code": "885893",
+      "name": "国家大基金持股",
+      "type": "concept",
+      "frequency": 8,
+      "avg_change": 7.07,
+      "today_change": 3.11,
+      "amount_trend": 30000,
+      "net_inflow": 30000,
+      "leading_stock": "XD有研新",
+      "leading_change": 0,
+      "up_count": 0,
+      "down_count": 0,
+      "driver": "10日板块轮动上榜8次",
+      "score": 67,
+      "related_industries": [
+        "半导体"
+      ],
+      "industry_data": [
+        {
+          "name": "半导体",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        }
+      ],
+      "ai_analysis": {
+        "persistence": "长期(1月+)",
+        "persistence_reason": "国家大基金持股代表国家战略，半导体产业政策支持长期，资金持续流入，产业链景气度高。",
+        "heat_transfer": true,
+        "transfer_direction": "向上游半导体设备、材料及下游消费电子、通信设备等方向传递",
+        "transfer_reason": "上下游关联度高，核心产业热度沿产业链扩散，资金从领涨股向关联板块轮动。",
+        "risk_warning": "短期涨幅已高，警惕获利回吐及市场情绪降温风险。"
+      },
+      "main_stocks": [
+        {
+          "code": "688146",
+          "name": "中船特气",
+          "industry": "国家大基金持股",
+          "score": 74.3,
+          "reason": "量价齐升，涨幅7.2%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "国家大基金持股",
+          "overlap_ratio": 1,
+          "price": 364,
+          "change_pct": 7.15
+        },
+        {
+          "code": "600206",
+          "name": "XD有研新",
+          "industry": "国家大基金持股",
+          "score": 73.7,
+          "reason": "量价齐升，涨幅6.8%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "国家大基金持股",
+          "overlap_ratio": 1,
+          "price": 42.51,
+          "change_pct": 6.84
+        },
+        {
+          "code": "688549",
+          "name": "N中巨芯-U",
+          "industry": "国家大基金持股",
+          "score": 64.8,
+          "reason": "涨幅2.4%",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "国家大基金持股",
+          "overlap_ratio": 1,
+          "price": 34.77,
+          "change_pct": 2.39
+        },
+        {
+          "code": "688478",
+          "name": "晶升股份",
+          "industry": "半导体",
+          "score": 47.1,
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 80.44,
+          "change_pct": 20.006,
+          "chain_position": "核心",
+          "related_industry": "半导体",
+          "overlap_ratio": 0.688
+        },
+        {
+          "code": "688515",
+          "name": "裕太微",
+          "industry": "半导体",
+          "score": 46.3,
+          "reason": "定增+高速通信芯片+人形机器人",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 238.8,
+          "change_pct": 20,
+          "chain_position": "核心",
+          "related_industry": "半导体",
+          "overlap_ratio": 0.688
+        }
+      ],
+      "upstream_stocks": [
+        {
+          "code": "688729",
+          "name": "屹唐股份",
+          "industry": "半导体设备",
+          "score": 42.4,
+          "reason": "干法刻蚀设备+干法去胶+募投完成+北京国资",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 33.07,
+          "change_pct": 19.9927,
+          "chain_position": "上游",
+          "transmission_factor": 0.701,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "688535",
+          "name": "华海诚科",
+          "industry": "半导体材料",
+          "score": 37.6,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 152.9,
+          "change_pct": 14.13,
+          "chain_position": "上游",
+          "transmission_factor": 0.615,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 89.53,
+          "change_pct": 14.051,
+          "chain_position": "上游",
+          "transmission_factor": 0.559,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "301021",
+          "name": "英诺激光",
+          "industry": "激光设备",
+          "score": 31.8,
+          "reason": "量价齐升，涨幅7.6%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 124.34,
+          "change_pct": 7.5606,
+          "chain_position": "上游",
+          "transmission_factor": 0.556,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "605006",
+          "name": "山东玻纤",
+          "industry": "玻璃玻纤",
+          "score": 15.8,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 23.4,
+          "change_pct": -10,
+          "chain_position": "上游",
+          "transmission_factor": 0.478,
+          "source_industry": "半导体"
+        }
+      ],
+      "downstream_stocks": [
+        {
+          "code": "688646",
+          "name": "ST逸飞",
+          "industry": "激光设备",
+          "score": 31.6,
+          "reason": "涨幅7.0%",
+          "reason_tag": "强势上涨",
+          "reason_tag_class": "tag-bullish",
+          "source": "强势上涨",
+          "in_concept": false,
+          "price": 70.97,
+          "change_pct": 6.9631,
+          "chain_position": "下游",
+          "transmission_factor": 0.516,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 99.73,
+          "change_pct": 10.0044,
+          "chain_position": "下游",
+          "transmission_factor": 0.483,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子Ⅲ",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 99.73,
+          "change_pct": 10.0044,
+          "chain_position": "下游",
+          "transmission_factor": 0.483,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "001339",
+          "name": "智微智能",
+          "industry": "其他计算机设备",
+          "score": 41.1,
+          "reason": "历史封板率1%，算力+人形机器人+定增募资+一季报增长",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 126.93,
+          "change_pct": 10.0009,
+          "chain_position": "下游",
+          "transmission_factor": 0.454,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "001339",
+          "name": "智微智能",
+          "industry": "计算机设备",
+          "score": 41.1,
+          "reason": "历史封板率1%，算力+人形机器人+定增募资+一季报增长",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 126.93,
+          "change_pct": 10.0009,
+          "chain_position": "下游",
+          "transmission_factor": 0.448,
+          "source_industry": "半导体"
+        }
+      ],
+      "flow_data": {
+        "nodes": [
+          {
+            "id": "国家大基金持股",
+            "type": "main",
+            "label": "国家大基金持股"
+          },
+          {
+            "id": "半导体",
+            "type": "related",
+            "label": "半导体"
+          },
+          {
+            "id": "半导体设备",
+            "type": "upstream",
+            "label": "半导体设备"
+          },
+          {
+            "id": "半导体材料",
+            "type": "upstream",
+            "label": "半导体材料"
+          },
+          {
+            "id": "电子化学品",
+            "type": "upstream",
+            "label": "电子化学品"
+          },
+          {
+            "id": "激光设备",
+            "type": "downstream",
+            "label": "激光设备"
+          },
+          {
+            "id": "其他电子",
+            "type": "downstream",
+            "label": "其他电子"
+          },
+          {
+            "id": "其他电子Ⅲ",
+            "type": "downstream",
+            "label": "其他电子Ⅲ"
+          }
+        ],
+        "links": [
+          {
+            "source": "国家大基金持股",
+            "target": "半导体",
+            "factor": 0.688,
+            "direction": "related"
+          },
+          {
+            "source": "半导体设备",
+            "target": "半导体",
+            "factor": 0.701,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体材料",
+            "target": "半导体",
+            "factor": 0.615,
+            "direction": "upstream"
+          },
+          {
+            "source": "电子化学品",
+            "target": "半导体",
+            "factor": 0.559,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体",
+            "target": "激光设备",
+            "factor": 0.516,
+            "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "其他电子",
+            "factor": 0.483,
+            "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "其他电子Ⅲ",
+            "factor": 0.483,
+            "direction": "downstream"
+          }
+        ],
+        "transfer_direction": "向上游半导体设备、材料及下游消费电子、通信设备等方向传递"
+      },
+      "leading_stock_info": {
+        "name": "XD有研新",
+        "code": "600206",
+        "industry": "国家大基金持股",
+        "price": 42.51,
+        "change_pct": 6.84,
+        "reason": "有研新材料股份有限公司,原名有研半导体材料股份有限公司,是由北京有色金属研究总院独家发起,以募集方式设立的股份有限公司,于1999年3月成立并在上海证券交易所挂牌上市，量价齐升，涨幅6.8%",
+        "reason_tag": "量价齐升",
+        "reason_tag_class": "tag-trend",
+        "related_industry": "国家大基金持股",
         "in_concept": true
       }
     },
@@ -502,9 +869,9 @@
       "frequency": 6,
       "avg_change": 6.55,
       "today_change": 5.12,
-      "amount_trend": -70000,
-      "net_inflow": -70000,
-      "leading_stock": "东材科技",
+      "amount_trend": -210000,
+      "net_inflow": -210000,
+      "leading_stock": "世名科技",
       "leading_change": 0,
       "up_count": 0,
       "down_count": 0,
@@ -540,19 +907,19 @@
       ],
       "ai_analysis": {
         "persistence": "短期(1-3天)",
-        "persistence_reason": "主力资金大幅流出7亿，高位获利了结迹象明显，短期回调风险加大。",
+        "persistence_reason": "近10日频繁上榜但今日主力大幅净流出21亿元，资金面支撑减弱，短期调整压力加大。",
         "heat_transfer": true,
-        "transfer_direction": "下游半导体材料、电子化学品等板块",
-        "transfer_reason": "下游关联度极高，且半导体产业链景气度支撑，资金可能轮动至低位分支。",
-        "risk_warning": "主力资金出逃，追高需谨慎，防范冲高回落。"
+        "transfer_direction": "下游半导体材料、电子化学品、光学光电子等板块",
+        "transfer_reason": "光刻胶与下游半导体、电子化学品关联度高达0.66-0.68，热点有望向核心技术链扩散。",
+        "risk_warning": "主力资金大幅流出，警惕高位回调风险。"
       },
       "main_stocks": [
         {
-          "code": "601208",
-          "name": "东材科技",
+          "code": "300522",
+          "name": "世名科技",
           "industry": "光刻胶",
           "score": 85,
-          "reason": "历史封板率1%，高速电子树脂+覆铜板上游+一季报增长",
+          "reason": "电子级碳氢树脂+PCB概念+光刻胶",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
@@ -560,31 +927,31 @@
           "chain_position": "核心",
           "related_industry": "光刻胶",
           "overlap_ratio": 1,
-          "price": 71.74,
-          "change_pct": 10
+          "price": 19.21,
+          "change_pct": 19.99
         },
         {
-          "code": "688056",
-          "name": "莱伯泰科",
+          "code": "603324",
+          "name": "盛剑科技",
           "industry": "光刻胶",
-          "score": 75,
-          "reason": "量价齐升，涨幅13.5%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
+          "score": 85,
+          "reason": "历史封板率1%，半导体附属装备+电子化学品+股权激励",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
           "related_industry": "光刻胶",
           "overlap_ratio": 1,
-          "price": 70.12,
-          "change_pct": 13.46
+          "price": 43.1,
+          "change_pct": 10.01
         },
         {
-          "code": "603823",
-          "name": "百合花",
+          "code": "605589",
+          "name": "圣泉集团",
           "industry": "光刻胶",
-          "score": 60.9,
-          "reason": "涨幅0.5%",
+          "score": 60,
+          "reason": "概念板块龙头",
           "reason_tag": "龙头股",
           "reason_tag_class": "longtou",
           "source": "concept_page",
@@ -592,37 +959,37 @@
           "chain_position": "核心",
           "related_industry": "光刻胶",
           "overlap_ratio": 1,
-          "price": 44.35,
-          "change_pct": 0.45
+          "price": 0,
+          "change_pct": 0
         },
         {
-          "code": "603260",
-          "name": "合盛硅业",
-          "industry": "化学制品",
-          "score": 58.2,
-          "reason": "历史封板率1%，碳化硅+有机硅+硅基新材料",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 51.03,
-          "change_pct": 10.0022,
+          "price": 89.53,
+          "change_pct": 14.051,
           "chain_position": "核心",
-          "related_industry": "化学制品",
-          "overlap_ratio": 0.26
+          "related_industry": "电子化学品",
+          "overlap_ratio": 0.221
         },
         {
-          "code": "920015",
-          "name": "锦华新材",
+          "code": "920206",
+          "name": "彩客科技",
           "industry": "化学制品",
-          "score": 44.5,
-          "reason": "连续3日上涨",
-          "reason_tag": "概念共振",
+          "score": 22.5,
+          "reason": "涨幅18.2%",
+          "reason_tag": "强势上涨",
           "reason_tag_class": "tag-bullish",
-          "source": "光刻胶",
-          "in_concept": true,
-          "price": 57.73,
-          "change_pct": 11.0192,
+          "source": "强势上涨",
+          "in_concept": false,
+          "price": 77.67,
+          "change_pct": 18.2192,
           "chain_position": "核心",
           "related_industry": "化学制品",
           "overlap_ratio": 0.26
@@ -633,162 +1000,130 @@
           "code": "000691",
           "name": "亚太实业",
           "industry": "其他化学原料",
-          "score": 29.5,
-          "reason": "量价齐升，涨幅6.1%",
+          "score": 21.7,
+          "reason": "量价齐升，涨幅5.6%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 11.15,
-          "change_pct": 6.0894,
+          "price": 12.23,
+          "change_pct": 5.6131,
           "chain_position": "上游",
-          "transmission_factor": 0.549,
+          "transmission_factor": 0.537,
           "source_industry": "化学制品"
         },
         {
-          "code": "603125",
-          "name": "常青科技",
+          "code": "300214",
+          "name": "日科化学",
           "industry": "其他化学制品",
-          "score": 40.6,
-          "reason": "历史封板率1%，光刻胶上游材料+风电+券商看好",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "score": 41.2,
+          "reason": "量价齐升，涨幅10.8%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 28.38,
-          "change_pct": 10,
+          "price": 9.47,
+          "change_pct": 10.7602,
           "chain_position": "上游",
-          "transmission_factor": 0.547,
+          "transmission_factor": 0.522,
           "source_industry": "电子化学品Ⅲ"
         },
         {
-          "code": "000510",
-          "name": "新金路",
-          "industry": "氯碱",
-          "score": 28.1,
-          "reason": "量价齐升，涨幅7.7%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "688001",
+          "name": "华兴源创",
+          "industry": "其他专用设备",
+          "score": 30.7,
+          "reason": "涨幅10.0%",
+          "reason_tag": "强势上涨",
+          "reason_tag_class": "tag-bullish",
+          "source": "强势上涨",
           "in_concept": false,
-          "price": 22.95,
-          "change_pct": 7.6959,
+          "price": 81.09,
+          "change_pct": 10.0421,
           "chain_position": "上游",
-          "transmission_factor": 0.532,
+          "transmission_factor": 0.505,
           "source_industry": "化学制品"
         },
         {
-          "code": "000510",
-          "name": "新金路",
+          "code": "600586",
+          "name": "金晶科技",
           "industry": "化学原料",
-          "score": 24.1,
-          "reason": "量价齐升，涨幅7.7%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "score": 16.7,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
           "in_concept": false,
-          "price": 22.95,
-          "change_pct": 7.6959,
+          "price": 4.69,
+          "change_pct": -6.7594,
           "chain_position": "上游",
-          "transmission_factor": 0.531,
+          "transmission_factor": 0.501,
           "source_industry": "化学制品"
         }
       ],
       "downstream_stocks": [
         {
-          "code": "688359",
-          "name": "三孚新科",
+          "code": "301630",
+          "name": "同宇新材",
           "industry": "电子化学品Ⅲ",
-          "score": 34.6,
-          "reason": "量价齐升，涨幅11.1%",
+          "score": 22.3,
+          "reason": "量价齐升，涨幅13.7%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 173.11,
-          "change_pct": 11.0534,
+          "price": 402.31,
+          "change_pct": 13.6854,
           "chain_position": "下游",
-          "transmission_factor": 0.682,
+          "transmission_factor": 0.683,
           "source_industry": "化学制品"
         },
         {
-          "code": "688549",
-          "name": "中巨芯",
-          "industry": "电子化学品Ⅲ",
-          "score": 27.9,
-          "reason": "量价齐升，涨幅10.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 29.89,
-          "change_pct": 10.6218,
-          "chain_position": "下游",
-          "transmission_factor": 0.682,
-          "source_industry": "化学制品"
-        },
-        {
-          "code": "600206",
-          "name": "有研新材",
+          "code": "688535",
+          "name": "华海诚科",
           "industry": "半导体材料",
           "score": 37.6,
-          "reason": "历史封板率1%，半导体靶材+存储芯片+央企",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 39.11,
-          "change_pct": 10.0141,
+          "price": 152.9,
+          "change_pct": 14.13,
           "chain_position": "下游",
-          "transmission_factor": 0.668,
+          "transmission_factor": 0.662,
           "source_industry": "电子化学品"
         },
         {
-          "code": "300522",
-          "name": "世名科技",
-          "industry": "涂料油墨",
-          "score": 39.7,
-          "reason": "量价齐升，涨幅9.0%",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "光刻胶",
-          "in_concept": true,
-          "price": 13.34,
-          "change_pct": 8.9869,
-          "chain_position": "下游",
-          "transmission_factor": 0.58,
-          "source_industry": "化学制品"
-        },
-        {
-          "code": "920438",
-          "name": "戈碧迦",
+          "code": "688079",
+          "name": "美迪凯",
           "industry": "光学元件",
-          "score": 30.1,
-          "reason": "涨幅17.6%",
-          "reason_tag": "强势上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "强势上涨",
+          "score": 18.1,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
           "in_concept": false,
-          "price": 97.96,
-          "change_pct": 17.6273,
+          "price": 29.56,
+          "change_pct": -7.4515,
           "chain_position": "下游",
-          "transmission_factor": 0.575,
+          "transmission_factor": 0.546,
           "source_industry": "电子化学品"
         },
         {
-          "code": "603989",
-          "name": "艾华集团",
-          "industry": "被动元件",
-          "score": 44.6,
-          "reason": "历史封板率1%，MLPC+AI服务器+铝电解电容+薄膜电容",
+          "code": "688478",
+          "name": "晶升股份",
+          "industry": "半导体",
+          "score": 47.1,
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 34.3,
-          "change_pct": 10.0064,
+          "price": 80.44,
+          "change_pct": 20.006,
           "chain_position": "下游",
-          "transmission_factor": 0.557,
+          "transmission_factor": 0.54,
           "source_industry": "电子化学品"
         }
       ],
@@ -830,14 +1165,9 @@
             "label": "氯碱"
           },
           {
-            "id": "化学原料",
+            "id": "其他专用设备",
             "type": "upstream",
-            "label": "化学原料"
-          },
-          {
-            "id": "贵金属",
-            "type": "upstream",
-            "label": "贵金属"
+            "label": "其他专用设备"
           },
           {
             "id": "纯碱",
@@ -845,14 +1175,19 @@
             "label": "纯碱"
           },
           {
+            "id": "贵金属",
+            "type": "upstream",
+            "label": "贵金属"
+          },
+          {
             "id": "涂料油墨",
             "type": "downstream",
             "label": "涂料油墨"
           },
           {
-            "id": "塑料制品",
+            "id": "光伏辅材",
             "type": "downstream",
-            "label": "塑料制品"
+            "label": "光伏辅材"
           },
           {
             "id": "半导体材料",
@@ -865,9 +1200,9 @@
             "label": "光学元件"
           },
           {
-            "id": "被动元件",
+            "id": "半导体",
             "type": "downstream",
-            "label": "被动元件"
+            "label": "半导体"
           },
           {
             "id": "集成电路封测",
@@ -902,103 +1237,103 @@
           {
             "source": "化学制品",
             "target": "电子化学品Ⅲ",
-            "factor": 0.583,
+            "factor": 0.56,
             "direction": "upstream"
           },
           {
             "source": "其他化学制品",
             "target": "电子化学品Ⅲ",
-            "factor": 0.547,
+            "factor": 0.522,
             "direction": "upstream"
           },
           {
             "source": "其他化学原料",
             "target": "化学制品",
-            "factor": 0.549,
+            "factor": 0.537,
             "direction": "upstream"
           },
           {
             "source": "氯碱",
             "target": "化学制品",
-            "factor": 0.532,
+            "factor": 0.527,
             "direction": "upstream"
           },
           {
-            "source": "化学原料",
+            "source": "其他专用设备",
             "target": "化学制品",
-            "factor": 0.531,
-            "direction": "upstream"
-          },
-          {
-            "source": "贵金属",
-            "target": "电子化学品",
-            "factor": 0.437,
+            "factor": 0.505,
             "direction": "upstream"
           },
           {
             "source": "纯碱",
             "target": "电子化学品",
-            "factor": 0.342,
+            "factor": 0.457,
+            "direction": "upstream"
+          },
+          {
+            "source": "贵金属",
+            "target": "电子化学品",
+            "factor": 0.399,
             "direction": "upstream"
           },
           {
             "source": "化学制品",
             "target": "电子化学品Ⅲ",
-            "factor": 0.682,
+            "factor": 0.683,
             "direction": "downstream"
           },
           {
             "source": "化学制品",
             "target": "涂料油墨",
-            "factor": 0.58,
+            "factor": 0.559,
             "direction": "downstream"
           },
           {
             "source": "化学制品",
-            "target": "塑料制品",
-            "factor": 0.547,
+            "target": "光伏辅材",
+            "factor": 0.533,
             "direction": "downstream"
           },
           {
             "source": "电子化学品",
             "target": "半导体材料",
-            "factor": 0.668,
+            "factor": 0.662,
             "direction": "downstream"
           },
           {
             "source": "电子化学品",
             "target": "光学元件",
-            "factor": 0.575,
+            "factor": 0.546,
             "direction": "downstream"
           },
           {
             "source": "电子化学品",
-            "target": "被动元件",
-            "factor": 0.557,
+            "target": "半导体",
+            "factor": 0.54,
             "direction": "downstream"
           },
           {
             "source": "电子化学品Ⅲ",
             "target": "集成电路封测",
-            "factor": 0.554,
+            "factor": 0.458,
             "direction": "downstream"
           },
           {
             "source": "电子化学品Ⅲ",
             "target": "集成电路制造",
-            "factor": 0.407,
+            "factor": 0.387,
             "direction": "downstream"
           }
         ],
-        "transfer_direction": "下游半导体材料、电子化学品等板块"
+        "transfer_direction": "下游半导体材料、电子化学品、光学光电子等板块"
       },
       "leading_stock_info": {
-        "name": "东材科技",
-        "code": "601208",
+        "name": "世名科技",
+        "code": "300522",
         "industry": "光刻胶",
-        "price": 71.74,
-        "change_pct": 10,
-        "reason": "化工新材料的研发、制造和销售，以新型绝缘材料为基础，重点发展光学膜材料、电子材料、环保阻燃材料等系列产品，历史封板率1%，高速电子树脂+覆铜板上游+一季报增长",
+        "price": 19.21,
+        "change_pct": 19.99,
+        "reason": "公司坚持走自主创新之路,秉承“巩固、推广、研发、储备”的经营理念,践行“创新、合作、服务、共享”的核心价值观,集科技研发、成果转化、生产销售、技术服务于一体,聚集了大批的科研精英,拥有精良的生产设备和精准的检测手段,近年来已完成和正在实施的国家、省、部等各级科研项目40余项,参与修、制订国标、行标30余项,拥有江苏省认定企业技术中心、江苏省水基颜料分散体工程技术研究中心、江苏省重点企业研发机构、江苏省博士后创新实践基地和江苏省企业研究生工作站等省级研发平台,具备较强的自主研发和自主创新能力；以国际竞争的眼光来制定发展战略,围绕“创新、合作、服务、共享”的核心价值观,强化创新的思维与方法,整合行业内外有效资源,实现公司可持续、健康发展,以更好的产品和更完善的服务回馈社会，电子级碳氢树脂+PCB概念+光刻胶",
         "reason_tag": "涨停",
         "reason_tag_class": "tag-bullish",
         "related_industry": "光刻胶",
@@ -1006,403 +1341,20 @@
       }
     },
     {
-      "code": "885893",
-      "name": "国家大基金持股",
-      "type": "concept",
-      "frequency": 6,
-      "avg_change": 4.86,
-      "today_change": 3.11,
-      "amount_trend": -40000,
-      "net_inflow": -40000,
-      "leading_stock": "XD有研新",
-      "leading_change": 0,
-      "up_count": 0,
-      "down_count": 0,
-      "driver": "10日板块轮动上榜6次",
-      "score": 51,
-      "related_industries": [
-        "半导体"
-      ],
-      "industry_data": [
-        {
-          "name": "半导体",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        }
-      ],
-      "ai_analysis": {
-        "persistence": "短期(1-3天)",
-        "persistence_reason": "主力净流出4亿元，资金分歧明显，短期冲高后回调概率大。",
-        "heat_transfer": true,
-        "transfer_direction": "上游半导体设备、材料，下游消费电子、军工电子",
-        "transfer_reason": "国家大基金持股与半导体产业链高度关联，上下游因子均超0.5，热度有望沿产业链扩散。",
-        "risk_warning": "主力资金大幅流出，警惕高位追涨风险。"
-      },
-      "main_stocks": [
-        {
-          "code": "600206",
-          "name": "XD有研新",
-          "industry": "国家大基金持股",
-          "score": 85,
-          "reason": "历史封板率1%，半导体靶材+存储芯片+央企",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "国家大基金持股",
-          "overlap_ratio": 1,
-          "price": 39.11,
-          "change_pct": 10.01
-        },
-        {
-          "code": "688549",
-          "name": "N中巨芯-U",
-          "industry": "国家大基金持股",
-          "score": 75,
-          "reason": "量价齐升，涨幅10.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "国家大基金持股",
-          "overlap_ratio": 1,
-          "price": 29.89,
-          "change_pct": 10.62
-        },
-        {
-          "code": "688146",
-          "name": "中船特气",
-          "industry": "国家大基金持股",
-          "score": 63,
-          "reason": "涨幅1.5%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "国家大基金持股",
-          "overlap_ratio": 1,
-          "price": 323,
-          "change_pct": 1.48
-        },
-        {
-          "code": "688484",
-          "name": "南芯科技",
-          "industry": "半导体",
-          "score": 45,
-          "reason": "可转债发行+AI算力电源+芯片",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 52.67,
-          "change_pct": 20.0046,
-          "chain_position": "核心",
-          "related_industry": "半导体",
-          "overlap_ratio": 0.688
-        },
-        {
-          "code": "301666",
-          "name": "大普微",
-          "industry": "半导体",
-          "score": 19.2,
-          "reason": "量价齐升，涨幅10.1%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 673.6,
-          "change_pct": 10.0654,
-          "chain_position": "核心",
-          "related_industry": "半导体",
-          "overlap_ratio": 0.688
-        }
-      ],
-      "upstream_stocks": [
-        {
-          "code": "688147",
-          "name": "微导纳米",
-          "industry": "半导体设备",
-          "score": 36.4,
-          "reason": "连续3日上涨",
-          "reason_tag": "连续上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "连续上涨",
-          "in_concept": false,
-          "price": 109.2,
-          "change_pct": 8.6567,
-          "chain_position": "上游",
-          "transmission_factor": 0.661,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "688200",
-          "name": "华峰测控",
-          "industry": "半导体设备",
-          "score": 25.2,
-          "reason": "涨幅6.4%",
-          "reason_tag": "强势上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "强势上涨",
-          "in_concept": false,
-          "price": 316.99,
-          "change_pct": 6.3725,
-          "chain_position": "上游",
-          "transmission_factor": 0.661,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "002008",
-          "name": "大族激光",
-          "industry": "激光设备",
-          "score": 37.9,
-          "reason": "历史封板率1%，AI算力PCB+一季报增长+半导体设备+商业航天",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 136.62,
-          "change_pct": 10,
-          "chain_position": "上游",
-          "transmission_factor": 0.551,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "603407",
-          "name": "长裕集团",
-          "industry": "其他小金属",
-          "score": 39.9,
-          "reason": "历史封板率1%，氧氯化锆+陶瓷载板+光通讯+业绩增长",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 62.87,
-          "change_pct": 10.0087,
-          "chain_position": "上游",
-          "transmission_factor": 0.542,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "688359",
-          "name": "三孚新科",
-          "industry": "电子化学品",
-          "score": 34.6,
-          "reason": "量价齐升，涨幅11.1%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 173.11,
-          "change_pct": 11.0534,
-          "chain_position": "上游",
-          "transmission_factor": 0.527,
-          "source_industry": "半导体"
-        }
-      ],
-      "downstream_stocks": [
-        {
-          "code": "688662",
-          "name": "富信科技",
-          "industry": "其他电子",
-          "score": 38.2,
-          "reason": "量价齐升，涨幅15.3%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 134.76,
-          "change_pct": 15.3076,
-          "chain_position": "下游",
-          "transmission_factor": 0.58,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "301099",
-          "name": "雅创电子",
-          "industry": "其他电子",
-          "score": 28.2,
-          "reason": "MLCC分销+存储芯片+人形机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 88.87,
-          "change_pct": 19.9973,
-          "chain_position": "下游",
-          "transmission_factor": 0.58,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "301099",
-          "name": "雅创电子",
-          "industry": "其他电子Ⅲ",
-          "score": 28.2,
-          "reason": "MLCC分销+存储芯片+人形机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 88.87,
-          "change_pct": 19.9973,
-          "chain_position": "下游",
-          "transmission_factor": 0.58,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "300763",
-          "name": "锦浪科技",
-          "industry": "逆变器",
-          "score": 32.7,
-          "reason": "量价齐升，涨幅6.7%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 93.06,
-          "change_pct": 6.7202,
-          "chain_position": "下游",
-          "transmission_factor": 0.537,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "300843",
-          "name": "胜蓝股份",
-          "industry": "消费电子零部件及组装",
-          "score": 46.9,
-          "reason": "数据中心连接器+中标高速线缆+液冷+机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 117.62,
-          "change_pct": 19.9959,
-          "chain_position": "下游",
-          "transmission_factor": 0.47,
-          "source_industry": "半导体"
-        }
-      ],
-      "flow_data": {
-        "nodes": [
-          {
-            "id": "国家大基金持股",
-            "type": "main",
-            "label": "国家大基金持股"
-          },
-          {
-            "id": "半导体",
-            "type": "related",
-            "label": "半导体"
-          },
-          {
-            "id": "半导体设备",
-            "type": "upstream",
-            "label": "半导体设备"
-          },
-          {
-            "id": "半导体材料",
-            "type": "upstream",
-            "label": "半导体材料"
-          },
-          {
-            "id": "激光设备",
-            "type": "upstream",
-            "label": "激光设备"
-          },
-          {
-            "id": "其他电子",
-            "type": "downstream",
-            "label": "其他电子"
-          },
-          {
-            "id": "其他电子Ⅲ",
-            "type": "downstream",
-            "label": "其他电子Ⅲ"
-          },
-          {
-            "id": "逆变器",
-            "type": "downstream",
-            "label": "逆变器"
-          }
-        ],
-        "links": [
-          {
-            "source": "国家大基金持股",
-            "target": "半导体",
-            "factor": 0.688,
-            "direction": "related"
-          },
-          {
-            "source": "半导体设备",
-            "target": "半导体",
-            "factor": 0.661,
-            "direction": "upstream"
-          },
-          {
-            "source": "半导体材料",
-            "target": "半导体",
-            "factor": 0.556,
-            "direction": "upstream"
-          },
-          {
-            "source": "激光设备",
-            "target": "半导体",
-            "factor": 0.551,
-            "direction": "upstream"
-          },
-          {
-            "source": "半导体",
-            "target": "其他电子",
-            "factor": 0.58,
-            "direction": "downstream"
-          },
-          {
-            "source": "半导体",
-            "target": "其他电子Ⅲ",
-            "factor": 0.58,
-            "direction": "downstream"
-          },
-          {
-            "source": "半导体",
-            "target": "逆变器",
-            "factor": 0.537,
-            "direction": "downstream"
-          }
-        ],
-        "transfer_direction": "上游半导体设备、材料，下游消费电子、军工电子"
-      },
-      "leading_stock_info": {
-        "name": "XD有研新",
-        "code": "600206",
-        "industry": "国家大基金持股",
-        "price": 39.11,
-        "change_pct": 10.01,
-        "reason": "有研新材料股份有限公司,原名有研半导体材料股份有限公司,是由北京有色金属研究总院独家发起,以募集方式设立的股份有限公司,于1999年3月成立并在上海证券交易所挂牌上市，历史封板率1%，半导体靶材+存储芯片+央企",
-        "reason_tag": "涨停",
-        "reason_tag_class": "tag-bullish",
-        "related_industry": "国家大基金持股",
-        "in_concept": true
-      }
-    },
-    {
       "code": "885959",
       "name": "PCB概念",
       "type": "concept",
-      "frequency": 2,
-      "avg_change": 9.92,
+      "frequency": 4,
+      "avg_change": 12.74,
       "today_change": 10.43,
-      "amount_trend": 380000,
-      "net_inflow": 380000,
-      "leading_stock": "金安国纪",
+      "amount_trend": -130000,
+      "net_inflow": -130000,
+      "leading_stock": "贤丰控股",
       "leading_change": 0,
       "up_count": 0,
       "down_count": 0,
-      "driver": "10日板块轮动上榜2次",
-      "score": 61,
+      "driver": "10日板块轮动上榜4次",
+      "score": 79,
       "related_industries": [
         "元件",
         "印制电路板",
@@ -1433,19 +1385,19 @@
       ],
       "ai_analysis": {
         "persistence": "短期(1-3天)",
-        "persistence_reason": "近10日仅2天上榜，今日暴涨10.43%且主力巨量流入，缺乏持续催化，情绪过热易回调",
+        "persistence_reason": "涨幅大但主力净流出13亿，资金获利了结迹象明显，板块冲高回落风险大",
         "heat_transfer": true,
-        "transfer_direction": "上游半导体、元件，下游消费电子、通信设备",
-        "transfer_reason": "PCB上下游关联度强（factor>0.5），资金可能沿产业链扩散至半导体、元件及消费电子等",
-        "risk_warning": "短期涨幅过大，警惕主力获利了结导致回落"
+        "transfer_direction": "向上游半导体、元件及下游消费电子、通信设备传导",
+        "transfer_reason": "PCB供需联动性强，上下游关联因子高，今日热度或引发补涨行情",
+        "risk_warning": "主力资金大幅流出，警惕高位回调及追涨风险"
       },
       "main_stocks": [
         {
-          "code": "603186",
-          "name": "华正新材",
+          "code": "002141",
+          "name": "贤丰控股",
           "industry": "PCB概念",
           "score": 85,
-          "reason": "历史封板率1%，覆铜板+AI算力+定增扩产",
+          "reason": "历史封板率1%，覆铜板+PCB上游+扭亏为盈",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
@@ -1453,17 +1405,49 @@
           "chain_position": "核心",
           "related_industry": "PCB概念",
           "overlap_ratio": 1,
-          "price": 206.06,
-          "change_pct": 10
+          "price": 4.71,
+          "change_pct": 10.05
+        },
+        {
+          "code": "603186",
+          "name": "华正新材",
+          "industry": "PCB概念",
+          "score": 70.1,
+          "reason": "量价齐升，涨幅5.0%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "PCB概念",
+          "overlap_ratio": 1,
+          "price": 238.11,
+          "change_pct": 5.05
+        },
+        {
+          "code": "002579",
+          "name": "中京电子",
+          "industry": "印制电路板",
+          "score": 60.8,
+          "reason": "历史封板率1%，定增通过+PCB+高阶HDI+AIPC",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "PCB概念",
+          "in_concept": true,
+          "price": 20.32,
+          "change_pct": 10.0162,
+          "chain_position": "核心",
+          "related_industry": "印制电路板",
+          "overlap_ratio": 0.21
         },
         {
           "code": "301176",
           "name": "逸豪新材",
           "industry": "PCB概念",
-          "score": 70,
-          "reason": "历史封板率1%，PCB铜箔+AI算力+产能扩张",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
+          "score": 60,
+          "reason": "概念板块龙头",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
@@ -1473,184 +1457,152 @@
           "change_pct": 0
         },
         {
-          "code": "002636",
-          "name": "金安国纪",
-          "industry": "PCB概念",
-          "score": 68.5,
-          "reason": "涨幅4.3%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "PCB概念",
-          "overlap_ratio": 1,
-          "price": 101.49,
-          "change_pct": 4.26
-        },
-        {
-          "code": "300964",
-          "name": "本川智能",
-          "industry": "印制电路板",
-          "score": 52.7,
-          "reason": "历史封板率1%，AI服务器电源+PCB+机器人",
-          "reason_tag": "概念共振",
+          "code": "300319",
+          "name": "麦捷科技",
+          "industry": "元件",
+          "score": 44.8,
+          "reason": "英伟达电感+光模块+深圳国资",
+          "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
-          "source": "PCB概念",
-          "in_concept": true,
-          "price": 113.06,
-          "change_pct": 19.9958,
+          "source": "涨停",
+          "in_concept": false,
+          "price": 27.76,
+          "change_pct": 20.0173,
           "chain_position": "核心",
-          "related_industry": "印制电路板",
-          "overlap_ratio": 0.21
-        },
-        {
-          "code": "920125",
-          "name": "鸿仕达",
-          "industry": "自动化设备",
-          "score": 45.3,
-          "reason": "连续3日上涨",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "PCB概念",
-          "in_concept": true,
-          "price": 227.99,
-          "change_pct": 23.5718,
-          "chain_position": "核心",
-          "related_industry": "自动化设备",
-          "overlap_ratio": 0.11
+          "related_industry": "元件",
+          "overlap_ratio": 0.215
         }
       ],
       "upstream_stocks": [
         {
-          "code": "688484",
-          "name": "南芯科技",
+          "code": "688478",
+          "name": "晶升股份",
           "industry": "半导体",
-          "score": 45,
-          "reason": "可转债发行+AI算力电源+芯片",
+          "score": 47.1,
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 52.67,
-          "change_pct": 20.0046,
+          "price": 80.44,
+          "change_pct": 20.006,
           "chain_position": "上游",
-          "transmission_factor": 0.656,
+          "transmission_factor": 0.688,
           "source_industry": "自动化设备"
         },
         {
-          "code": "301666",
-          "name": "大普微",
+          "code": "688515",
+          "name": "裕太微",
           "industry": "半导体",
-          "score": 19.2,
-          "reason": "量价齐升，涨幅10.1%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "score": 46.3,
+          "reason": "定增+高速通信芯片+人形机器人",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 673.6,
-          "change_pct": 10.0654,
+          "price": 238.8,
+          "change_pct": 20,
           "chain_position": "上游",
-          "transmission_factor": 0.656,
+          "transmission_factor": 0.688,
           "source_industry": "自动化设备"
         },
         {
-          "code": "920015",
-          "name": "锦华新材",
+          "code": "300727",
+          "name": "润禾材料",
           "industry": "有机硅",
-          "score": 28.5,
-          "reason": "连续3日上涨",
-          "reason_tag": "连续上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "连续上涨",
-          "in_concept": false,
-          "price": 57.73,
-          "change_pct": 11.0192,
-          "chain_position": "上游",
-          "transmission_factor": 0.633,
-          "source_industry": "元件"
-        },
-        {
-          "code": "301099",
-          "name": "雅创电子",
-          "industry": "其他电子",
-          "score": 28.2,
-          "reason": "MLCC分销+存储芯片+人形机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 88.87,
-          "change_pct": 19.9973,
-          "chain_position": "上游",
-          "transmission_factor": 0.568,
-          "source_industry": "印制电路板"
-        },
-        {
-          "code": "603979",
-          "name": "金诚信",
-          "industry": "铜",
-          "score": 15.2,
+          "score": 15.6,
           "reason": "主力资金关注",
           "reason_tag": "资金关注",
           "reason_tag_class": "tag-fund",
           "source": "资金关注",
           "in_concept": false,
-          "price": 72.73,
-          "change_pct": -6.5647,
+          "price": 34.89,
+          "change_pct": -8.4972,
           "chain_position": "上游",
-          "transmission_factor": 0.544,
-          "source_industry": "印制电路板"
-        }
-      ],
-      "downstream_stocks": [
-        {
-          "code": "300450",
-          "name": "先导智能",
-          "industry": "锂电专用设备",
-          "score": 46.6,
-          "reason": "量价齐升，涨幅16.0%",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "PCB概念",
-          "in_concept": true,
-          "price": 49.4,
-          "change_pct": 15.9624,
-          "chain_position": "下游",
-          "transmission_factor": 0.599,
-          "source_industry": "自动化设备"
+          "transmission_factor": 0.627,
+          "source_industry": "元件"
         },
         {
-          "code": "000810",
-          "name": "创维数字",
-          "industry": "黑色家电",
-          "score": 29.7,
-          "reason": "涨幅6.9%",
+          "code": "688172",
+          "name": "燕东微",
+          "industry": "分立器件",
+          "score": 44.6,
+          "reason": "涨幅12.5%",
           "reason_tag": "强势上涨",
           "reason_tag_class": "tag-bullish",
           "source": "强势上涨",
           "in_concept": false,
-          "price": 11.57,
-          "change_pct": 6.9316,
+          "price": 75.01,
+          "change_pct": 12.5263,
+          "chain_position": "上游",
+          "transmission_factor": 0.546,
+          "source_industry": "自动化设备"
+        }
+      ],
+      "downstream_stocks": [
+        {
+          "code": "300457",
+          "name": "赢合科技",
+          "industry": "锂电专用设备",
+          "score": 20.7,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 23.48,
+          "change_pct": -6.1926,
           "chain_position": "下游",
-          "transmission_factor": 0.58,
-          "source_industry": "元件"
+          "transmission_factor": 0.585,
+          "source_industry": "自动化设备"
         },
         {
           "code": "688001",
           "name": "华兴源创",
           "industry": "其他专用设备",
-          "score": 32.2,
-          "reason": "涨幅14.0%",
+          "score": 30.7,
+          "reason": "涨幅10.0%",
           "reason_tag": "强势上涨",
           "reason_tag_class": "tag-bullish",
           "source": "强势上涨",
           "in_concept": false,
-          "price": 70.64,
-          "change_pct": 14.0274,
+          "price": 81.09,
+          "change_pct": 10.0421,
           "chain_position": "下游",
-          "transmission_factor": 0.556,
+          "transmission_factor": 0.572,
           "source_industry": "自动化设备"
+        },
+        {
+          "code": "001339",
+          "name": "智微智能",
+          "industry": "计算机设备",
+          "score": 41.1,
+          "reason": "历史封板率1%，算力+人形机器人+定增募资+一季报增长",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 126.93,
+          "change_pct": 10.0009,
+          "chain_position": "下游",
+          "transmission_factor": 0.569,
+          "source_industry": "元件"
+        },
+        {
+          "code": "001339",
+          "name": "智微智能",
+          "industry": "其他计算机设备",
+          "score": 41.1,
+          "reason": "历史封板率1%，算力+人形机器人+定增募资+一季报增长",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 126.93,
+          "change_pct": 10.0009,
+          "chain_position": "下游",
+          "transmission_factor": 0.568,
+          "source_industry": "印制电路板"
         }
       ],
       "flow_data": {
@@ -1691,19 +1643,19 @@
             "label": "有机硅"
           },
           {
-            "id": "金属新材料",
-            "type": "upstream",
-            "label": "金属新材料"
-          },
-          {
             "id": "半导体材料",
             "type": "upstream",
             "label": "半导体材料"
           },
           {
-            "id": "其他电子",
+            "id": "金属新材料",
             "type": "upstream",
-            "label": "其他电子"
+            "label": "金属新材料"
+          },
+          {
+            "id": "被动元件",
+            "type": "upstream",
+            "label": "被动元件"
           },
           {
             "id": "铜",
@@ -1711,9 +1663,9 @@
             "label": "铜"
           },
           {
-            "id": "被动元件",
+            "id": "其他电子",
             "type": "upstream",
-            "label": "被动元件"
+            "label": "其他电子"
           },
           {
             "id": "锂电专用设备",
@@ -1726,19 +1678,19 @@
             "label": "其他专用设备"
           },
           {
-            "id": "黑色家电",
+            "id": "计算机设备",
             "type": "downstream",
-            "label": "黑色家电"
+            "label": "计算机设备"
           },
           {
-            "id": "其他电子Ⅲ",
+            "id": "通信设备",
             "type": "downstream",
-            "label": "其他电子Ⅲ"
+            "label": "通信设备"
           },
           {
-            "id": "消费电子零部件及组装",
+            "id": "安防设备",
             "type": "downstream",
-            "label": "消费电子零部件及组装"
+            "label": "安防设备"
           },
           {
             "id": "其他计算机设备",
@@ -1749,6 +1701,11 @@
             "id": "通信网络设备及器件",
             "type": "downstream",
             "label": "通信网络设备及器件"
+          },
+          {
+            "id": "消费电子零部件及组装",
+            "type": "downstream",
+            "label": "消费电子零部件及组装"
           }
         ],
         "links": [
@@ -1773,122 +1730,122 @@
           {
             "source": "半导体",
             "target": "自动化设备",
-            "factor": 0.656,
+            "factor": 0.688,
             "direction": "upstream"
           },
           {
             "source": "元件",
             "target": "自动化设备",
-            "factor": 0.633,
+            "factor": 0.665,
             "direction": "upstream"
           },
           {
             "source": "分立器件",
             "target": "自动化设备",
-            "factor": 0.538,
+            "factor": 0.546,
             "direction": "upstream"
           },
           {
             "source": "有机硅",
             "target": "元件",
-            "factor": 0.633,
-            "direction": "upstream"
-          },
-          {
-            "source": "金属新材料",
-            "target": "元件",
-            "factor": 0.517,
+            "factor": 0.627,
             "direction": "upstream"
           },
           {
             "source": "半导体材料",
             "target": "元件",
-            "factor": 0.469,
+            "factor": 0.504,
             "direction": "upstream"
           },
           {
-            "source": "其他电子",
-            "target": "印制电路板",
-            "factor": 0.568,
-            "direction": "upstream"
-          },
-          {
-            "source": "铜",
-            "target": "印制电路板",
-            "factor": 0.544,
+            "source": "金属新材料",
+            "target": "元件",
+            "factor": 0.488,
             "direction": "upstream"
           },
           {
             "source": "被动元件",
             "target": "印制电路板",
-            "factor": 0.538,
+            "factor": 0.585,
+            "direction": "upstream"
+          },
+          {
+            "source": "铜",
+            "target": "印制电路板",
+            "factor": 0.53,
+            "direction": "upstream"
+          },
+          {
+            "source": "其他电子",
+            "target": "印制电路板",
+            "factor": 0.512,
             "direction": "upstream"
           },
           {
             "source": "自动化设备",
             "target": "半导体",
-            "factor": 0.616,
+            "factor": 0.648,
             "direction": "downstream"
           },
           {
             "source": "自动化设备",
             "target": "锂电专用设备",
-            "factor": 0.599,
+            "factor": 0.585,
             "direction": "downstream"
           },
           {
             "source": "自动化设备",
             "target": "其他专用设备",
-            "factor": 0.556,
+            "factor": 0.572,
             "direction": "downstream"
           },
           {
             "source": "元件",
-            "target": "黑色家电",
-            "factor": 0.58,
+            "target": "计算机设备",
+            "factor": 0.569,
             "direction": "downstream"
           },
           {
             "source": "元件",
-            "target": "其他电子",
-            "factor": 0.528,
+            "target": "通信设备",
+            "factor": 0.529,
             "direction": "downstream"
           },
           {
             "source": "元件",
-            "target": "其他电子Ⅲ",
-            "factor": 0.528,
-            "direction": "downstream"
-          },
-          {
-            "source": "印制电路板",
-            "target": "消费电子零部件及组装",
-            "factor": 0.525,
+            "target": "安防设备",
+            "factor": 0.518,
             "direction": "downstream"
           },
           {
             "source": "印制电路板",
             "target": "其他计算机设备",
-            "factor": 0.495,
+            "factor": 0.568,
             "direction": "downstream"
           },
           {
             "source": "印制电路板",
             "target": "通信网络设备及器件",
-            "factor": 0.457,
+            "factor": 0.526,
+            "direction": "downstream"
+          },
+          {
+            "source": "印制电路板",
+            "target": "消费电子零部件及组装",
+            "factor": 0.505,
             "direction": "downstream"
           }
         ],
-        "transfer_direction": "上游半导体、元件，下游消费电子、通信设备"
+        "transfer_direction": "向上游半导体、元件及下游消费电子、通信设备传导"
       },
       "leading_stock_info": {
-        "name": "金安国纪",
-        "code": "002636",
+        "name": "贤丰控股",
+        "code": "002141",
         "industry": "PCB概念",
-        "price": 101.49,
-        "change_pct": 4.26,
-        "reason": "电子行业基础材料覆铜板的研发、生产和销售，连续11日上涨",
-        "reason_tag": "连续上涨",
+        "price": 4.71,
+        "change_pct": 10.05,
+        "reason": "此外,公司主导产品微细及特种漆包线还曾荣获“广东省科技进步三等奖”,“155级聚氨酯漆包铜圆线”获广东省优秀新产品二等奖，历史封板率1%，覆铜板+PCB上游+扭亏为盈",
+        "reason_tag": "涨停",
         "reason_tag_class": "tag-bullish",
         "related_industry": "PCB概念",
         "in_concept": true
@@ -1898,17 +1855,17 @@
       "code": "886009",
       "name": "先进封装",
       "type": "concept",
-      "frequency": 2,
-      "avg_change": 9.41,
+      "frequency": 4,
+      "avg_change": 11.74,
       "today_change": 10.14,
-      "amount_trend": -40000,
-      "net_inflow": -40000,
+      "amount_trend": -190000,
+      "net_inflow": -190000,
       "leading_stock": "旭光电子",
       "leading_change": 0,
       "up_count": 0,
       "down_count": 0,
-      "driver": "10日板块轮动上榜2次",
-      "score": 59,
+      "driver": "10日板块轮动上榜4次",
+      "score": 76,
       "related_industries": [
         "半导体"
       ],
@@ -1923,11 +1880,11 @@
       ],
       "ai_analysis": {
         "persistence": "短期(1-3天)",
-        "persistence_reason": "今日大涨但主力大幅净流出，资金分歧明显，缺乏持续支撑。",
+        "persistence_reason": "主力净流出近19亿元，涨幅已高且资金获利了结，短期冲高后回调风险大。",
         "heat_transfer": true,
-        "transfer_direction": "下游消费电子、通信设备等关联板块",
-        "transfer_reason": "上下游关联度高，先进封装技术利好下游应用，热度可能扩散。",
-        "risk_warning": "资金大幅流出，警惕冲高回落风险。"
+        "transfer_direction": "下游消费电子、光学光电子等板块",
+        "transfer_reason": "先进封装为半导体封装技术，下游消费电子、光学光电子关联度高，资金可能轮动至这些方向。",
+        "risk_warning": "主力资金大幅流出，警惕高位追涨风险。"
       },
       "main_stocks": [
         {
@@ -1935,7 +1892,7 @@
           "name": "旭光电子",
           "industry": "先进封装",
           "score": 85,
-          "reason": "历史封板率1%，氮化铝+韩国客户+真空灭弧室+可控核聚变",
+          "reason": "历史封板率1%，氮化铝+可控核聚变+定增受理",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
@@ -1943,31 +1900,15 @@
           "chain_position": "核心",
           "related_industry": "先进封装",
           "overlap_ratio": 1,
-          "price": 34.72,
-          "change_pct": 10.01
+          "price": 42.01,
+          "change_pct": 10
         },
         {
           "code": "603186",
           "name": "华正新材",
           "industry": "先进封装",
-          "score": 85,
-          "reason": "历史封板率1%，覆铜板+AI算力+定增扩产",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "先进封装",
-          "overlap_ratio": 1,
-          "price": 206.06,
-          "change_pct": 10
-        },
-        {
-          "code": "688549",
-          "name": "N中巨芯-U",
-          "industry": "先进封装",
-          "score": 75,
-          "reason": "量价齐升，涨幅10.6%",
+          "score": 70.1,
+          "reason": "量价齐升，涨幅5.0%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "concept_page",
@@ -1975,37 +1916,53 @@
           "chain_position": "核心",
           "related_industry": "先进封装",
           "overlap_ratio": 1,
-          "price": 29.89,
-          "change_pct": 10.62
+          "price": 238.11,
+          "change_pct": 5.05
         },
         {
-          "code": "688484",
-          "name": "南芯科技",
+          "code": "603002",
+          "name": "宏昌电子",
+          "industry": "先进封装",
+          "score": 63.3,
+          "reason": "涨幅1.6%",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "先进封装",
+          "overlap_ratio": 1,
+          "price": 23.58,
+          "change_pct": 1.64
+        },
+        {
+          "code": "688478",
+          "name": "晶升股份",
           "industry": "半导体",
-          "score": 45,
-          "reason": "可转债发行+AI算力电源+芯片",
+          "score": 47.1,
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 52.67,
-          "change_pct": 20.0046,
+          "price": 80.44,
+          "change_pct": 20.006,
           "chain_position": "核心",
           "related_industry": "半导体",
           "overlap_ratio": 0.28
         },
         {
-          "code": "301666",
-          "name": "大普微",
+          "code": "688515",
+          "name": "裕太微",
           "industry": "半导体",
-          "score": 19.2,
-          "reason": "量价齐升，涨幅10.1%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "score": 46.3,
+          "reason": "定增+高速通信芯片+人形机器人",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 673.6,
-          "change_pct": 10.0654,
+          "price": 238.8,
+          "change_pct": 20,
           "chain_position": "核心",
           "related_industry": "半导体",
           "overlap_ratio": 0.28
@@ -2013,165 +1970,181 @@
       ],
       "upstream_stocks": [
         {
-          "code": "920438",
-          "name": "戈碧迦",
+          "code": "603679",
+          "name": "华体科技",
           "industry": "光学光电子",
-          "score": 42.1,
-          "reason": "涨幅17.6%",
-          "reason_tag": "概念共振",
+          "score": 43,
+          "reason": "历史封板率0%，股份转让+华为超充+低空经济",
+          "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
-          "source": "先进封装",
-          "in_concept": true,
-          "price": 97.96,
-          "change_pct": 17.6273,
+          "source": "涨停",
+          "in_concept": false,
+          "price": 21.43,
+          "change_pct": 10.0103,
           "chain_position": "上游",
-          "transmission_factor": 0.69,
+          "transmission_factor": 0.682,
           "source_industry": "半导体"
         },
         {
-          "code": "300088",
-          "name": "长信科技",
+          "code": "300120",
+          "name": "经纬辉开",
           "industry": "光学光电子",
-          "score": 39.9,
-          "reason": "量价齐升，涨幅12.4%",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "先进封装",
-          "in_concept": true,
-          "price": 8.81,
-          "change_pct": 12.3724,
+          "score": 16.6,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 8.51,
+          "change_pct": -8.984,
           "chain_position": "上游",
-          "transmission_factor": 0.69,
+          "transmission_factor": 0.682,
           "source_industry": "半导体"
         },
         {
-          "code": "002008",
-          "name": "大族激光",
-          "industry": "激光设备",
-          "score": 49.9,
-          "reason": "历史封板率1%，AI算力PCB+一季报增长+半导体设备+商业航天",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "先进封装",
-          "in_concept": true,
-          "price": 136.62,
-          "change_pct": 10,
-          "chain_position": "上游",
-          "transmission_factor": 0.649,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "301526",
-          "name": "国际复材",
+          "code": "605006",
+          "name": "山东玻纤",
           "industry": "玻璃玻纤",
-          "score": 21.9,
-          "reason": "量价齐升，涨幅13.3%",
+          "score": 15.8,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 23.4,
+          "change_pct": -10,
+          "chain_position": "上游",
+          "transmission_factor": 0.629,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "301021",
+          "name": "英诺激光",
+          "industry": "激光设备",
+          "score": 43.8,
+          "reason": "量价齐升，涨幅7.6%",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "先进封装",
+          "in_concept": true,
+          "price": 124.34,
+          "change_pct": 7.5606,
+          "chain_position": "上游",
+          "transmission_factor": 0.607,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 38.68,
-          "change_pct": 13.3314,
+          "price": 89.53,
+          "change_pct": 14.051,
           "chain_position": "上游",
-          "transmission_factor": 0.627,
+          "transmission_factor": 0.547,
           "source_industry": "半导体"
         },
         {
-          "code": "688001",
-          "name": "华兴源创",
-          "industry": "其他专用设备",
-          "score": 32.2,
-          "reason": "涨幅14.0%",
-          "reason_tag": "强势上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "强势上涨",
-          "in_concept": false,
-          "price": 70.64,
-          "change_pct": 14.0274,
-          "chain_position": "上游",
-          "transmission_factor": 0.558,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "920125",
-          "name": "鸿仕达",
-          "industry": "自动化设备",
-          "score": 45.3,
-          "reason": "连续3日上涨",
+          "code": "688535",
+          "name": "华海诚科",
+          "industry": "半导体材料",
+          "score": 49.6,
+          "reason": "量价齐升，涨幅14.1%",
           "reason_tag": "概念共振",
           "reason_tag_class": "tag-bullish",
           "source": "先进封装",
           "in_concept": true,
-          "price": 227.99,
-          "change_pct": 23.5718,
+          "price": 152.9,
+          "change_pct": 14.13,
           "chain_position": "上游",
-          "transmission_factor": 0.552,
+          "transmission_factor": 0.542,
           "source_industry": "半导体"
         }
       ],
       "downstream_stocks": [
         {
-          "code": "300570",
-          "name": "太辰光",
-          "industry": "通信网络设备及器件",
-          "score": 33.6,
-          "reason": "量价齐升，涨幅18.5%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 263.29,
-          "change_pct": 18.5457,
-          "chain_position": "下游",
-          "transmission_factor": 0.645,
-          "source_industry": "半导体"
-        },
-        {
-          "code": "300843",
-          "name": "胜蓝股份",
+          "code": "002655",
+          "name": "共达电声",
           "industry": "消费电子零部件及组装",
-          "score": 46.9,
-          "reason": "数据中心连接器+中标高速线缆+液冷+机器人",
+          "score": 47.2,
+          "reason": "历史封板率1%，激光加工+拟控股浙江镝嘉+车载声学+增持",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 117.62,
-          "change_pct": 19.9959,
+          "price": 42.61,
+          "change_pct": 9.9897,
           "chain_position": "下游",
           "transmission_factor": 0.644,
           "source_industry": "半导体"
         },
         {
-          "code": "300843",
-          "name": "胜蓝股份",
-          "industry": "消费电子",
-          "score": 46.9,
-          "reason": "数据中心连接器+中标高速线缆+液冷+机器人",
+          "code": "603380",
+          "name": "易德龙",
+          "industry": "消费电子零部件及组装",
+          "score": 39.8,
+          "reason": "历史封板率1%，AI服务器+机器人+海外扩产+EMS",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 117.62,
-          "change_pct": 19.9959,
+          "price": 41.03,
+          "change_pct": 10,
           "chain_position": "下游",
-          "transmission_factor": 0.641,
+          "transmission_factor": 0.644,
           "source_industry": "半导体"
         },
         {
-          "code": "688635",
-          "name": "长进光子",
-          "industry": "通信设备",
-          "score": 26.8,
-          "reason": "AI光通信+特种光纤+商业航天+次新",
+          "code": "603380",
+          "name": "易德龙",
+          "industry": "消费电子",
+          "score": 39.8,
+          "reason": "历史封板率1%，AI服务器+机器人+海外扩产+EMS",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "涨停",
           "in_concept": false,
-          "price": 509.99,
-          "change_pct": 20.0005,
+          "price": 41.03,
+          "change_pct": 10,
           "chain_position": "下游",
-          "transmission_factor": 0.636,
+          "transmission_factor": 0.642,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "002281",
+          "name": "光迅科技",
+          "industry": "通信网络设备及器件",
+          "score": 51,
+          "reason": "历史封板率1%，3.2T硅光NPO+CPO+定增+央企",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 266.2,
+          "change_pct": 10,
+          "chain_position": "下游",
+          "transmission_factor": 0.599,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 99.73,
+          "change_pct": 10.0044,
+          "chain_position": "下游",
+          "transmission_factor": 0.589,
           "source_industry": "半导体"
         }
       ],
@@ -2193,24 +2166,24 @@
             "label": "光学光电子"
           },
           {
-            "id": "激光设备",
-            "type": "upstream",
-            "label": "激光设备"
-          },
-          {
             "id": "玻璃玻纤",
             "type": "upstream",
             "label": "玻璃玻纤"
           },
           {
-            "id": "通信网络设备及器件",
-            "type": "downstream",
-            "label": "通信网络设备及器件"
+            "id": "激光设备",
+            "type": "upstream",
+            "label": "激光设备"
           },
           {
             "id": "消费电子零部件及组装",
             "type": "downstream",
             "label": "消费电子零部件及组装"
+          },
+          {
+            "id": "消费电子",
+            "type": "downstream",
+            "label": "消费电子"
           }
         ],
         "links": [
@@ -2223,49 +2196,49 @@
           {
             "source": "光学光电子",
             "target": "半导体",
-            "factor": 0.69,
-            "direction": "upstream"
-          },
-          {
-            "source": "激光设备",
-            "target": "半导体",
-            "factor": 0.649,
+            "factor": 0.682,
             "direction": "upstream"
           },
           {
             "source": "玻璃玻纤",
             "target": "半导体",
-            "factor": 0.627,
+            "factor": 0.629,
             "direction": "upstream"
           },
           {
-            "source": "半导体",
-            "target": "光学光电子",
-            "factor": 0.65,
-            "direction": "downstream"
-          },
-          {
-            "source": "半导体",
-            "target": "通信网络设备及器件",
-            "factor": 0.645,
-            "direction": "downstream"
+            "source": "激光设备",
+            "target": "半导体",
+            "factor": 0.607,
+            "direction": "upstream"
           },
           {
             "source": "半导体",
             "target": "消费电子零部件及组装",
             "factor": 0.644,
             "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "消费电子",
+            "factor": 0.642,
+            "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "光学光电子",
+            "factor": 0.642,
+            "direction": "downstream"
           }
         ],
-        "transfer_direction": "下游消费电子、通信设备等关联板块"
+        "transfer_direction": "下游消费电子、光学光电子等板块"
       },
       "leading_stock_info": {
         "name": "旭光电子",
         "code": "600353",
         "industry": "先进封装",
-        "price": 34.72,
-        "change_pct": 10.01,
-        "reason": "公司目前总资产16亿元,员工2000余人,历经50多年发展,已从单一的电子管研制与生产,演变为电子管、真空灭弧室、固封极柱、高低压成套配电装置(含直流输配电)、光电器件及电子工业专用设备、金属化陶瓷等为核心业务的多元化发展的国内最大的生产企业之一,公司通过了ISO9001质量体系、ISO14001环境管理体系、ISO18001职业健康安全管理体系认证并取得相关军工、保密等资质,是国内唯一一家拥有从陶瓷制造到成套电气全产业链的企业,是经国家科技部、中国科学院认定的高新技术企业，历史封板率1%，氮化铝+韩国客户+真空灭弧室+可控核聚变",
+        "price": 42.01,
+        "change_pct": 10,
+        "reason": "公司目前总资产16亿元,员工2000余人,历经50多年发展,已从单一的电子管研制与生产,演变为电子管、真空灭弧室、固封极柱、高低压成套配电装置(含直流输配电)、光电器件及电子工业专用设备、金属化陶瓷等为核心业务的多元化发展的国内最大的生产企业之一,公司通过了ISO9001质量体系、ISO14001环境管理体系、ISO18001职业健康安全管理体系认证并取得相关军工、保密等资质,是国内唯一一家拥有从陶瓷制造到成套电气全产业链的企业,是经国家科技部、中国科学院认定的高新技术企业，历史封板率1%，氮化铝+可控核聚变+定增受理",
         "reason_tag": "涨停",
         "reason_tag_class": "tag-bullish",
         "related_industry": "先进封装",
@@ -2273,525 +2246,26 @@
       }
     },
     {
-      "code": "885937",
-      "name": "培育钻石",
+      "code": "886042",
+      "name": "存储芯片",
       "type": "concept",
-      "frequency": 2,
-      "avg_change": 7.65,
-      "today_change": 11.35,
-      "amount_trend": 30000,
-      "net_inflow": 30000,
-      "leading_stock": "国机精工",
+      "frequency": 4,
+      "avg_change": 7.03,
+      "today_change": 3.56,
+      "amount_trend": 40000,
+      "net_inflow": 40000,
+      "leading_stock": "太极实业",
       "leading_change": 0,
       "up_count": 0,
       "down_count": 0,
-      "driver": "10日板块轮动上榜2次",
-      "score": 56,
+      "driver": "10日板块轮动上榜4次",
+      "score": 48,
       "related_industries": [
-        "通用设备",
-        "磨具磨料",
-        "军工装备"
+        "半导体"
       ],
       "industry_data": [
         {
-          "name": "通用设备",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "磨具磨料",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "军工装备",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        }
-      ],
-      "ai_analysis": {
-        "persistence": "短期(1-3天)",
-        "persistence_reason": "今日放量暴涨但上榜仅2天，缺乏连续资金接力，情绪驱动为主",
-        "heat_transfer": true,
-        "transfer_direction": "上游磨具磨料、通用设备及军工相关板块",
-        "transfer_reason": "培育钻石上游高度关联磨具磨料、军工装备，资金可能沿产业链扩散",
-        "risk_warning": "短期涨幅过大，警惕冲高回落及主力资金出逃"
-      },
-      "main_stocks": [
-        {
-          "code": "002345",
-          "name": "潮宏基",
-          "industry": "培育钻石",
-          "score": 64.6,
-          "reason": "涨幅2.3%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "培育钻石",
-          "overlap_ratio": 1,
-          "price": 10.22,
-          "change_pct": 2.3
-        },
-        {
-          "code": "002046",
-          "name": "国机精工",
-          "industry": "培育钻石",
-          "score": 60.3,
-          "reason": "涨幅0.1%",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "培育钻石",
-          "overlap_ratio": 1,
-          "price": 62.59,
-          "change_pct": 0.14
-        },
-        {
-          "code": "605580",
-          "name": "恒盛能源",
-          "industry": "培育钻石",
-          "score": 60,
-          "reason": "概念板块龙头",
-          "reason_tag": "龙头股",
-          "reason_tag_class": "longtou",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "培育钻石",
-          "overlap_ratio": 1,
-          "price": 0,
-          "change_pct": 0
-        },
-        {
-          "code": "688237",
-          "name": "超卓航科",
-          "industry": "军工装备",
-          "score": 45.5,
-          "reason": "量价齐升，涨幅11.4%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 58.51,
-          "change_pct": 11.4052,
-          "chain_position": "核心",
-          "related_industry": "军工装备",
-          "overlap_ratio": 0.111
-        },
-        {
-          "code": "600172",
-          "name": "黄河旋风",
-          "industry": "磨具磨料",
-          "score": 43.5,
-          "reason": "连续3日上涨",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "培育钻石",
-          "in_concept": true,
-          "price": 12.9,
-          "change_pct": 3.8647,
-          "chain_position": "核心",
-          "related_industry": "磨具磨料",
-          "overlap_ratio": 0.278
-        }
-      ],
-      "upstream_stocks": [
-        {
-          "code": "920807",
-          "name": "奔朗新材",
-          "industry": "磨具磨料",
-          "score": 30.8,
-          "reason": "连续3日上涨",
-          "reason_tag": "连续上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "连续上涨",
-          "in_concept": false,
-          "price": 12.24,
-          "change_pct": 7.8414,
-          "chain_position": "上游",
-          "transmission_factor": 0.698,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "688484",
-          "name": "南芯科技",
-          "industry": "半导体",
-          "score": 45,
-          "reason": "可转债发行+AI算力电源+芯片",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 52.67,
-          "change_pct": 20.0046,
-          "chain_position": "上游",
-          "transmission_factor": 0.638,
-          "source_industry": "军工装备"
-        },
-        {
-          "code": "300964",
-          "name": "本川智能",
-          "industry": "元件",
-          "score": 36.7,
-          "reason": "历史封板率1%，AI服务器电源+PCB+机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 113.06,
-          "change_pct": 19.9958,
-          "chain_position": "上游",
-          "transmission_factor": 0.603,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "002160",
-          "name": "常铝股份",
-          "industry": "工业金属",
-          "score": 30.5,
-          "reason": "历史封板率1%，复牌+济南起步区管委会入主+锂电池+空调箔",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 4.59,
-          "change_pct": 10.0719,
-          "chain_position": "上游",
-          "transmission_factor": 0.58,
-          "source_industry": "军工装备"
-        },
-        {
-          "code": "600549",
-          "name": "厦门钨业",
-          "industry": "钨",
-          "score": 49.5,
-          "reason": "历史封板率1%，钨全产业链+一季报高增+福建国资",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 78.41,
-          "change_pct": 10.0028,
-          "chain_position": "上游",
-          "transmission_factor": 0.568,
-          "source_industry": "军工装备"
-        }
-      ],
-      "downstream_stocks": [
-        {
-          "code": "600392",
-          "name": "盛和资源",
-          "industry": "小金属",
-          "score": 50.3,
-          "reason": "历史封板率1%，稀土+小金属概念+收购江阴加华+央企",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 29.03,
-          "change_pct": 10.0038,
-          "chain_position": "下游",
-          "transmission_factor": 0.574,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "603407",
-          "name": "长裕集团",
-          "industry": "小金属",
-          "score": 39.9,
-          "reason": "历史封板率1%，氧氯化锆+陶瓷载板+光通讯+业绩增长",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 62.87,
-          "change_pct": 10.0087,
-          "chain_position": "下游",
-          "transmission_factor": 0.574,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "002008",
-          "name": "大族激光",
-          "industry": "激光设备",
-          "score": 37.9,
-          "reason": "历史封板率1%，AI算力PCB+一季报增长+半导体设备+商业航天",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 136.62,
-          "change_pct": 10,
-          "chain_position": "下游",
-          "transmission_factor": 0.568,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "000791",
-          "name": "甘肃能源",
-          "industry": "火电",
-          "score": 38.9,
-          "reason": "历史封板率1%，拟129亿投建新能源+东数西算绿电+综合能源",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 9.28,
-          "change_pct": 9.9526,
-          "chain_position": "下游",
-          "transmission_factor": 0.526,
-          "source_industry": "通用设备"
-        },
-        {
-          "code": "600292",
-          "name": "电投水电",
-          "industry": "水电",
-          "score": 15.8,
-          "reason": "主力资金关注",
-          "reason_tag": "资金关注",
-          "reason_tag_class": "tag-fund",
-          "source": "资金关注",
-          "in_concept": false,
-          "price": 14.22,
-          "change_pct": -3.0014,
-          "chain_position": "下游",
-          "transmission_factor": 0.499,
-          "source_industry": "通用设备"
-        }
-      ],
-      "flow_data": {
-        "nodes": [
-          {
-            "id": "培育钻石",
-            "type": "main",
-            "label": "培育钻石"
-          },
-          {
-            "id": "通用设备",
-            "type": "related",
-            "label": "通用设备"
-          },
-          {
-            "id": "磨具磨料",
-            "type": "related",
-            "label": "磨具磨料"
-          },
-          {
-            "id": "军工装备",
-            "type": "related",
-            "label": "军工装备"
-          },
-          {
-            "id": "元件",
-            "type": "upstream",
-            "label": "元件"
-          },
-          {
-            "id": "金属新材料",
-            "type": "upstream",
-            "label": "金属新材料"
-          },
-          {
-            "id": "半导体",
-            "type": "upstream",
-            "label": "半导体"
-          },
-          {
-            "id": "工业金属",
-            "type": "upstream",
-            "label": "工业金属"
-          },
-          {
-            "id": "钨",
-            "type": "upstream",
-            "label": "钨"
-          },
-          {
-            "id": "非金属材料Ⅲ",
-            "type": "upstream",
-            "label": "非金属材料Ⅲ"
-          },
-          {
-            "id": "化学原料",
-            "type": "upstream",
-            "label": "化学原料"
-          },
-          {
-            "id": "小金属",
-            "type": "downstream",
-            "label": "小金属"
-          },
-          {
-            "id": "激光设备",
-            "type": "downstream",
-            "label": "激光设备"
-          },
-          {
-            "id": "钢铁",
-            "type": "downstream",
-            "label": "钢铁"
-          }
-        ],
-        "links": [
-          {
-            "source": "培育钻石",
-            "target": "通用设备",
-            "factor": 0.278,
-            "direction": "related"
-          },
-          {
-            "source": "培育钻石",
-            "target": "磨具磨料",
-            "factor": 0.278,
-            "direction": "related"
-          },
-          {
-            "source": "培育钻石",
-            "target": "军工装备",
-            "factor": 0.111,
-            "direction": "related"
-          },
-          {
-            "source": "磨具磨料",
-            "target": "通用设备",
-            "factor": 0.698,
-            "direction": "upstream"
-          },
-          {
-            "source": "元件",
-            "target": "通用设备",
-            "factor": 0.603,
-            "direction": "upstream"
-          },
-          {
-            "source": "金属新材料",
-            "target": "通用设备",
-            "factor": 0.483,
-            "direction": "upstream"
-          },
-          {
-            "source": "半导体",
-            "target": "军工装备",
-            "factor": 0.638,
-            "direction": "upstream"
-          },
-          {
-            "source": "工业金属",
-            "target": "军工装备",
-            "factor": 0.58,
-            "direction": "upstream"
-          },
-          {
-            "source": "钨",
-            "target": "军工装备",
-            "factor": 0.568,
-            "direction": "upstream"
-          },
-          {
-            "source": "非金属材料Ⅲ",
-            "target": "磨具磨料",
-            "factor": 0.282,
-            "direction": "upstream"
-          },
-          {
-            "source": "化学原料",
-            "target": "磨具磨料",
-            "factor": 0.28,
-            "direction": "upstream"
-          },
-          {
-            "source": "通用设备",
-            "target": "小金属",
-            "factor": 0.574,
-            "direction": "downstream"
-          },
-          {
-            "source": "通用设备",
-            "target": "激光设备",
-            "factor": 0.568,
-            "direction": "downstream"
-          },
-          {
-            "source": "通用设备",
-            "target": "工业金属",
-            "factor": 0.54,
-            "direction": "downstream"
-          },
-          {
-            "source": "磨具磨料",
-            "target": "钢铁",
-            "factor": 0.428,
-            "direction": "downstream"
-          },
-          {
-            "source": "磨具磨料",
-            "target": "通用设备",
-            "factor": 0.336,
-            "direction": "downstream"
-          }
-        ],
-        "transfer_direction": "上游磨具磨料、通用设备及军工相关板块"
-      },
-      "leading_stock_info": {
-        "name": "国机精工",
-        "code": "002046",
-        "industry": "培育钻石",
-        "price": 62.59,
-        "change_pct": 0.14,
-        "reason": "在磨料磨具行业，公司产品技术门类较全、装备档次较高、产能规模较大，在超硬材料制品行业处于技术领先地位，是中国超硬材料行业的引领者、推动者，连续3日上涨",
-        "reason_tag": "连续上涨",
-        "reason_tag_class": "tag-bullish",
-        "related_industry": "培育钻石",
-        "in_concept": true
-      }
-    },
-    {
-      "code": "886084",
-      "name": "光纤概念",
-      "type": "concept",
-      "frequency": 5,
-      "avg_change": 3.19,
-      "today_change": 3.97,
-      "amount_trend": 630000,
-      "net_inflow": 630000,
-      "leading_stock": "太辰光",
-      "leading_change": 0,
-      "up_count": 0,
-      "down_count": 0,
-      "driver": "10日板块轮动上榜5次",
-      "score": 43,
-      "related_industries": [
-        "通信设备",
-        "通信网络设备及器件",
-        "通信线缆及配套"
-      ],
-      "industry_data": [
-        {
-          "name": "通信设备",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "通信网络设备及器件",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "通信线缆及配套",
+          "name": "半导体",
           "change": 0,
           "up_count": 0,
           "down_count": 0,
@@ -2800,264 +2274,1157 @@
       ],
       "ai_analysis": {
         "persistence": "中期(1-2周)",
-        "persistence_reason": "主力资金大幅流入，产业链联动性强，受益于AI算力需求，但短期涨幅已高需震荡消化。",
+        "persistence_reason": "连续上榜且涨幅可观，主力资金持续流入，但今日涨幅收窄，短期获利盘压力增大",
         "heat_transfer": true,
-        "transfer_direction": "上游光学光电子、通信线缆及配套；下游通信网络设备及器件",
-        "transfer_reason": "上下游因子均高于0.6，光纤概念爆发将带动光器件、线缆及网络设备需求。",
-        "risk_warning": "短期涨幅过大，注意获利回吐及板块轮动风险。"
+        "transfer_direction": "上游半导体设备/材料、下游消费电子/其他电子",
+        "transfer_reason": "上下游关联因子高，资金有向高关联度板块扩散迹象",
+        "risk_warning": "短期涨幅较大，注意获利回吐及板块轮动风险"
       },
       "main_stocks": [
         {
-          "code": "600500",
-          "name": "中化国际",
-          "industry": "光纤概念",
+          "code": "600667",
+          "name": "太极实业",
+          "industry": "存储芯片",
           "score": 85,
-          "reason": "历史封板率1%，收购南通星辰+PPE树脂+覆铜板上游+央企",
+          "reason": "历史封板率1%，HBM后工序+存储芯片+先进封装+无锡国资",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
-          "related_industry": "光纤概念",
+          "related_industry": "存储芯片",
           "overlap_ratio": 1,
-          "price": 9.06,
-          "change_pct": 9.95
+          "price": 20.92,
+          "change_pct": 9.99
         },
         {
-          "code": "603260",
-          "name": "合盛硅业",
-          "industry": "光纤概念",
+          "code": "688478",
+          "name": "晶升股份",
+          "industry": "存储芯片",
           "score": 85,
-          "reason": "历史封板率1%，碳化硅+有机硅+硅基新材料",
+          "reason": "历史封板率1%，碳化硅+半导体设备+订单增长",
           "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
-          "related_industry": "光纤概念",
+          "related_industry": "存储芯片",
           "overlap_ratio": 1,
-          "price": 51.03,
-          "change_pct": 10
+          "price": 80.44,
+          "change_pct": 20.01
         },
         {
-          "code": "300570",
-          "name": "太辰光",
-          "industry": "光纤概念",
+          "code": "688300",
+          "name": "联瑞新材",
+          "industry": "存储芯片",
           "score": 75,
-          "reason": "量价齐升，涨幅18.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
+          "reason": "涨幅15.0%",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
           "source": "concept_page",
           "in_concept": true,
           "chain_position": "核心",
-          "related_industry": "光纤概念",
+          "related_industry": "存储芯片",
           "overlap_ratio": 1,
-          "price": 263.29,
-          "change_pct": 18.55
+          "price": 270.47,
+          "change_pct": 14.98
         },
         {
-          "code": "688143",
-          "name": "长盈通",
-          "industry": "通信线缆及配套",
-          "score": 49,
-          "reason": "量价齐升，涨幅15.2%",
-          "reason_tag": "概念共振",
+          "code": "688515",
+          "name": "裕太微",
+          "industry": "半导体",
+          "score": 46.3,
+          "reason": "定增+高速通信芯片+人形机器人",
+          "reason_tag": "涨停",
           "reason_tag_class": "tag-bullish",
-          "source": "光纤概念",
-          "in_concept": true,
-          "price": 218,
-          "change_pct": 15.222,
+          "source": "涨停",
+          "in_concept": false,
+          "price": 238.8,
+          "change_pct": 20,
           "chain_position": "核心",
-          "related_industry": "通信线缆及配套",
-          "overlap_ratio": 0.103
-        },
-        {
-          "code": "300620",
-          "name": "光库科技",
-          "industry": "通信网络设备及器件",
-          "score": 47.1,
-          "reason": "量价齐升，涨幅14.4%",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "光纤概念",
-          "in_concept": true,
-          "price": 392.49,
-          "change_pct": 14.4119,
-          "chain_position": "核心",
-          "related_industry": "通信网络设备及器件",
-          "overlap_ratio": 0.14
+          "related_industry": "半导体",
+          "overlap_ratio": 0.393
         }
       ],
       "upstream_stocks": [
         {
-          "code": "920438",
-          "name": "戈碧迦",
-          "industry": "光学光电子",
-          "score": 30.1,
-          "reason": "涨幅17.6%",
-          "reason_tag": "强势上涨",
+          "code": "688729",
+          "name": "屹唐股份",
+          "industry": "半导体设备",
+          "score": 54.4,
+          "reason": "干法刻蚀设备+干法去胶+募投完成+北京国资",
+          "reason_tag": "概念共振",
           "reason_tag_class": "tag-bullish",
-          "source": "强势上涨",
-          "in_concept": false,
-          "price": 97.96,
-          "change_pct": 17.6273,
+          "source": "存储芯片",
+          "in_concept": true,
+          "price": 33.07,
+          "change_pct": 19.9927,
           "chain_position": "上游",
-          "transmission_factor": 0.719,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.692,
+          "source_industry": "半导体"
         },
         {
-          "code": "300088",
-          "name": "长信科技",
-          "industry": "光学光电子",
-          "score": 27.9,
-          "reason": "量价齐升，涨幅12.4%",
+          "code": "688535",
+          "name": "华海诚科",
+          "industry": "半导体材料",
+          "score": 49.6,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "存储芯片",
+          "in_concept": true,
+          "price": 152.9,
+          "change_pct": 14.13,
+          "chain_position": "上游",
+          "transmission_factor": 0.613,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 8.81,
-          "change_pct": 12.3724,
+          "price": 89.53,
+          "change_pct": 14.051,
           "chain_position": "上游",
-          "transmission_factor": 0.719,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.612,
+          "source_industry": "半导体"
         },
         {
-          "code": "688498",
-          "name": "源杰科技",
-          "industry": "分立器件",
-          "score": 49.3,
-          "reason": "量价齐升，涨幅9.8%",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "光纤概念",
-          "in_concept": true,
-          "price": 1608.88,
-          "change_pct": 9.8302,
-          "chain_position": "上游",
-          "transmission_factor": 0.68,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "688635",
-          "name": "长进光子",
-          "industry": "通信线缆及配套",
-          "score": 38.8,
-          "reason": "AI光通信+特种光纤+商业航天+次新",
-          "reason_tag": "概念共振",
-          "reason_tag_class": "tag-bullish",
-          "source": "光纤概念",
-          "in_concept": true,
-          "price": 509.99,
-          "change_pct": 20.0005,
-          "chain_position": "上游",
-          "transmission_factor": 0.68,
-          "source_industry": "通信网络设备及器件"
-        },
-        {
-          "code": "603989",
-          "name": "艾华集团",
-          "industry": "被动元件",
-          "score": 44.6,
-          "reason": "历史封板率1%，MLPC+AI服务器+铝电解电容+薄膜电容",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "code": "301021",
+          "name": "英诺激光",
+          "industry": "激光设备",
+          "score": 31.8,
+          "reason": "量价齐升，涨幅7.6%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 34.3,
-          "change_pct": 10.0064,
+          "price": 124.34,
+          "change_pct": 7.5606,
           "chain_position": "上游",
-          "transmission_factor": 0.677,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.534,
+          "source_industry": "半导体"
         },
         {
-          "code": "300843",
-          "name": "胜蓝股份",
-          "industry": "消费电子零部件及组装",
-          "score": 46.9,
-          "reason": "数据中心连接器+中标高速线缆+液冷+机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
+          "code": "300435",
+          "name": "中泰股份",
+          "industry": "专用设备",
+          "score": 25.2,
+          "reason": "量价齐升，涨幅13.0%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
           "in_concept": false,
-          "price": 117.62,
-          "change_pct": 19.9959,
+          "price": 23.95,
+          "change_pct": 12.9717,
           "chain_position": "上游",
-          "transmission_factor": 0.668,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.506,
+          "source_industry": "半导体"
         }
       ],
       "downstream_stocks": [
         {
-          "code": "300249",
-          "name": "依米康",
-          "industry": "计算机设备",
-          "score": 38.7,
-          "reason": "量价齐升，涨幅11.2%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "600353",
+          "name": "旭光电子",
+          "industry": "其他电子",
+          "score": 54.3,
+          "reason": "历史封板率1%，氮化铝+可控核聚变+定增受理",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 17.12,
-          "change_pct": 11.1688,
+          "price": 42.01,
+          "change_pct": 10.0026,
           "chain_position": "下游",
-          "transmission_factor": 0.515,
-          "source_industry": "通信网络设备及器件"
+          "transmission_factor": 0.578,
+          "source_industry": "半导体"
         },
         {
-          "code": "000889",
-          "name": "中嘉博创",
-          "industry": "通信工程及服务",
-          "score": 32.3,
-          "reason": "量价齐升，涨幅6.2%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 3.77,
-          "change_pct": 6.1972,
+          "price": 99.73,
+          "change_pct": 10.0044,
           "chain_position": "下游",
-          "transmission_factor": 0.473,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.578,
+          "source_industry": "半导体"
         },
         {
-          "code": "688343",
-          "name": "云天励飞",
-          "industry": "IT服务",
-          "score": 36.9,
-          "reason": "量价齐升，涨幅15.0%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子Ⅲ",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
           "in_concept": false,
-          "price": 73.5,
-          "change_pct": 15.0415,
+          "price": 99.73,
+          "change_pct": 10.0044,
           "chain_position": "下游",
-          "transmission_factor": 0.421,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.578,
+          "source_industry": "半导体"
         },
         {
-          "code": "688343",
-          "name": "云天励飞",
-          "industry": "IT服务Ⅲ",
-          "score": 36.9,
-          "reason": "量价齐升，涨幅15.0%",
+          "code": "002150",
+          "name": "正泰电源",
+          "industry": "逆变器",
+          "score": 25.6,
+          "reason": "涨幅3.9%",
+          "reason_tag": "强势上涨",
+          "reason_tag_class": "tag-bullish",
+          "source": "强势上涨",
+          "in_concept": false,
+          "price": 26.54,
+          "change_pct": 3.8748,
+          "chain_position": "下游",
+          "transmission_factor": 0.453,
+          "source_industry": "半导体"
+        },
+        {
+          "code": "301213",
+          "name": "观想科技",
+          "industry": "军工电子",
+          "score": 38.6,
+          "reason": "量价齐升，涨幅10.6%",
           "reason_tag": "量价齐升",
           "reason_tag_class": "tag-trend",
           "source": "量价齐升",
           "in_concept": false,
-          "price": 73.5,
-          "change_pct": 15.0415,
+          "price": 52.3,
+          "change_pct": 10.5942,
           "chain_position": "下游",
-          "transmission_factor": 0.421,
-          "source_industry": "通信设备"
+          "transmission_factor": 0.445,
+          "source_industry": "半导体"
         }
       ],
       "flow_data": {
         "nodes": [
           {
-            "id": "光纤概念",
+            "id": "存储芯片",
             "type": "main",
-            "label": "光纤概念"
+            "label": "存储芯片"
+          },
+          {
+            "id": "半导体",
+            "type": "related",
+            "label": "半导体"
+          },
+          {
+            "id": "半导体设备",
+            "type": "upstream",
+            "label": "半导体设备"
+          },
+          {
+            "id": "半导体材料",
+            "type": "upstream",
+            "label": "半导体材料"
+          },
+          {
+            "id": "电子化学品",
+            "type": "upstream",
+            "label": "电子化学品"
+          },
+          {
+            "id": "其他电子",
+            "type": "downstream",
+            "label": "其他电子"
+          },
+          {
+            "id": "其他电子Ⅲ",
+            "type": "downstream",
+            "label": "其他电子Ⅲ"
+          },
+          {
+            "id": "激光设备",
+            "type": "downstream",
+            "label": "激光设备"
+          }
+        ],
+        "links": [
+          {
+            "source": "存储芯片",
+            "target": "半导体",
+            "factor": 0.393,
+            "direction": "related"
+          },
+          {
+            "source": "半导体设备",
+            "target": "半导体",
+            "factor": 0.692,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体材料",
+            "target": "半导体",
+            "factor": 0.613,
+            "direction": "upstream"
+          },
+          {
+            "source": "电子化学品",
+            "target": "半导体",
+            "factor": 0.612,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体",
+            "target": "其他电子",
+            "factor": 0.578,
+            "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "其他电子Ⅲ",
+            "factor": 0.578,
+            "direction": "downstream"
+          },
+          {
+            "source": "半导体",
+            "target": "激光设备",
+            "factor": 0.494,
+            "direction": "downstream"
+          }
+        ],
+        "transfer_direction": "上游半导体设备/材料、下游消费电子/其他电子"
+      },
+      "leading_stock_info": {
+        "name": "太极实业",
+        "code": "600667",
+        "industry": "存储芯片",
+        "price": 20.92,
+        "change_pct": 9.99,
+        "reason": "半导体业务、工程技术服务业务、光伏电站投资运营业务和涤纶化纤业务，历史封板率1%，HBM后工序+存储芯片+先进封装+无锡国资",
+        "reason_tag": "涨停",
+        "reason_tag_class": "tag-bullish",
+        "related_industry": "存储芯片",
+        "in_concept": true
+      }
+    },
+    {
+      "code": "885875",
+      "name": "MiniLED",
+      "type": "concept",
+      "frequency": 2,
+      "avg_change": 12.47,
+      "today_change": 12.03,
+      "amount_trend": -340000,
+      "net_inflow": -340000,
+      "leading_stock": "科翔股份",
+      "leading_change": 0,
+      "up_count": 0,
+      "down_count": 0,
+      "driver": "10日板块轮动上榜2次",
+      "score": 71,
+      "related_industries": [
+        "光学光电子",
+        "LED",
+        "面板"
+      ],
+      "industry_data": [
+        {
+          "name": "光学光电子",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        },
+        {
+          "name": "LED",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        },
+        {
+          "name": "面板",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        }
+      ],
+      "ai_analysis": {
+        "persistence": "短期(1-3天)",
+        "persistence_reason": "近两日涨幅过大，主力资金大幅净流出，获利盘回吐压力大。",
+        "heat_transfer": true,
+        "transfer_direction": "上游LED、面板及下游消费电子零部件",
+        "transfer_reason": "上下游关联因子高（0.67-0.68），资金可能向核心受益环节扩散。",
+        "risk_warning": "板块短期过热，警惕冲高回落及主力出货风险。"
+      },
+      "main_stocks": [
+        {
+          "code": "603186",
+          "name": "华正新材",
+          "industry": "MiniLED",
+          "score": 70.1,
+          "reason": "量价齐升，涨幅5.0%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "MiniLED",
+          "overlap_ratio": 1,
+          "price": 238.11,
+          "change_pct": 5.05
+        },
+        {
+          "code": "300903",
+          "name": "科翔股份",
+          "industry": "MiniLED",
+          "score": 67,
+          "reason": "涨幅3.5%",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "MiniLED",
+          "overlap_ratio": 1,
+          "price": 101.58,
+          "change_pct": 3.48
+        },
+        {
+          "code": "301176",
+          "name": "逸豪新材",
+          "industry": "MiniLED",
+          "score": 60,
+          "reason": "概念板块龙头",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "MiniLED",
+          "overlap_ratio": 1,
+          "price": 0,
+          "change_pct": 0
+        },
+        {
+          "code": "603679",
+          "name": "华体科技",
+          "industry": "光学光电子",
+          "score": 43,
+          "reason": "历史封板率0%，股份转让+华为超充+低空经济",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 21.43,
+          "change_pct": 10.0103,
+          "chain_position": "核心",
+          "related_industry": "光学光电子",
+          "overlap_ratio": 0.385
+        },
+        {
+          "code": "002723",
+          "name": "小崧股份",
+          "industry": "LED",
+          "score": 29.6,
+          "reason": "量价齐升，涨幅7.0%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 8.69,
+          "change_pct": 7.0197,
+          "chain_position": "核心",
+          "related_industry": "LED",
+          "overlap_ratio": 0.192
+        }
+      ],
+      "upstream_stocks": [
+        {
+          "code": "688079",
+          "name": "美迪凯",
+          "industry": "光学元件",
+          "score": 18.1,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 29.56,
+          "change_pct": -7.4515,
+          "chain_position": "上游",
+          "transmission_factor": 0.666,
+          "source_industry": "LED"
+        },
+        {
+          "code": "605006",
+          "name": "山东玻纤",
+          "industry": "玻璃玻纤",
+          "score": 15.8,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 23.4,
+          "change_pct": -10,
+          "chain_position": "上游",
+          "transmission_factor": 0.633,
+          "source_industry": "面板"
+        },
+        {
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 89.53,
+          "change_pct": 14.051,
+          "chain_position": "上游",
+          "transmission_factor": 0.575,
+          "source_industry": "光学光电子"
+        },
+        {
+          "code": "300285",
+          "name": "国瓷材料",
+          "industry": "电子化学品Ⅲ",
+          "score": 39.1,
+          "reason": "量价齐升，涨幅14.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "量价齐升",
+          "in_concept": false,
+          "price": 89.53,
+          "change_pct": 14.051,
+          "chain_position": "上游",
+          "transmission_factor": 0.575,
+          "source_industry": "面板"
+        }
+      ],
+      "downstream_stocks": [
+        {
+          "code": "600707",
+          "name": "彩虹股份",
+          "industry": "面板",
+          "score": 18.1,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 11.71,
+          "change_pct": -7.5039,
+          "chain_position": "下游",
+          "transmission_factor": 0.684,
+          "source_industry": "LED"
+        },
+        {
+          "code": "300120",
+          "name": "经纬辉开",
+          "industry": "面板",
+          "score": 16.6,
+          "reason": "主力资金关注",
+          "reason_tag": "资金关注",
+          "reason_tag_class": "tag-fund",
+          "source": "资金关注",
+          "in_concept": false,
+          "price": 8.51,
+          "change_pct": -8.984,
+          "chain_position": "下游",
+          "transmission_factor": 0.684,
+          "source_industry": "LED"
+        },
+        {
+          "code": "603380",
+          "name": "易德龙",
+          "industry": "消费电子零部件及组装",
+          "score": 39.8,
+          "reason": "历史封板率1%，AI服务器+机器人+海外扩产+EMS",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 41.03,
+          "change_pct": 10,
+          "chain_position": "下游",
+          "transmission_factor": 0.663,
+          "source_industry": "LED"
+        },
+        {
+          "code": "603380",
+          "name": "易德龙",
+          "industry": "消费电子",
+          "score": 39.8,
+          "reason": "历史封板率1%，AI服务器+机器人+海外扩产+EMS",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 41.03,
+          "change_pct": 10,
+          "chain_position": "下游",
+          "transmission_factor": 0.66,
+          "source_industry": "光学光电子"
+        },
+        {
+          "code": "003031",
+          "name": "中瓷电子",
+          "industry": "通信设备",
+          "score": 45.6,
+          "reason": "历史封板率1%，光通信陶瓷外壳+SiC功率器件+央企",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 176.29,
+          "change_pct": 10.0025,
+          "chain_position": "下游",
+          "transmission_factor": 0.626,
+          "source_industry": "光学光电子"
+        },
+        {
+          "code": "301310",
+          "name": "鑫宏业",
+          "industry": "汽车电子电气系统",
+          "score": 34.8,
+          "reason": "高速铜缆连接+人形机器人线缆+可控核聚变",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 46.75,
+          "change_pct": 19.9949,
+          "chain_position": "下游",
+          "transmission_factor": 0.622,
+          "source_industry": "LED"
+        }
+      ],
+      "flow_data": {
+        "nodes": [
+          {
+            "id": "MiniLED",
+            "type": "main",
+            "label": "MiniLED"
+          },
+          {
+            "id": "光学光电子",
+            "type": "related",
+            "label": "光学光电子"
+          },
+          {
+            "id": "LED",
+            "type": "related",
+            "label": "LED"
+          },
+          {
+            "id": "面板",
+            "type": "related",
+            "label": "面板"
+          },
+          {
+            "id": "玻璃玻纤",
+            "type": "upstream",
+            "label": "玻璃玻纤"
+          },
+          {
+            "id": "电子化学品Ⅲ",
+            "type": "upstream",
+            "label": "电子化学品Ⅲ"
+          },
+          {
+            "id": "光学元件",
+            "type": "upstream",
+            "label": "光学元件"
+          },
+          {
+            "id": "半导体设备",
+            "type": "upstream",
+            "label": "半导体设备"
+          },
+          {
+            "id": "电子化学品",
+            "type": "upstream",
+            "label": "电子化学品"
+          },
+          {
+            "id": "膜材料",
+            "type": "upstream",
+            "label": "膜材料"
+          },
+          {
+            "id": "半导体材料",
+            "type": "upstream",
+            "label": "半导体材料"
+          },
+          {
+            "id": "消费电子零部件及组装",
+            "type": "downstream",
+            "label": "消费电子零部件及组装"
+          },
+          {
+            "id": "汽车电子电气系统",
+            "type": "downstream",
+            "label": "汽车电子电气系统"
+          },
+          {
+            "id": "消费电子",
+            "type": "downstream",
+            "label": "消费电子"
+          },
+          {
+            "id": "通信设备",
+            "type": "downstream",
+            "label": "通信设备"
+          },
+          {
+            "id": "军工电子",
+            "type": "downstream",
+            "label": "军工电子"
+          },
+          {
+            "id": "通信终端及配件",
+            "type": "downstream",
+            "label": "通信终端及配件"
+          },
+          {
+            "id": "计算机设备",
+            "type": "downstream",
+            "label": "计算机设备"
+          },
+          {
+            "id": "白色家电",
+            "type": "downstream",
+            "label": "白色家电"
+          }
+        ],
+        "links": [
+          {
+            "source": "MiniLED",
+            "target": "光学光电子",
+            "factor": 0.385,
+            "direction": "related"
+          },
+          {
+            "source": "MiniLED",
+            "target": "LED",
+            "factor": 0.192,
+            "direction": "related"
+          },
+          {
+            "source": "MiniLED",
+            "target": "面板",
+            "factor": 0.173,
+            "direction": "related"
+          },
+          {
+            "source": "LED",
+            "target": "面板",
+            "factor": 0.672,
+            "direction": "upstream"
+          },
+          {
+            "source": "玻璃玻纤",
+            "target": "面板",
+            "factor": 0.633,
+            "direction": "upstream"
+          },
+          {
+            "source": "电子化学品Ⅲ",
+            "target": "面板",
+            "factor": 0.575,
+            "direction": "upstream"
+          },
+          {
+            "source": "光学元件",
+            "target": "LED",
+            "factor": 0.666,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体设备",
+            "target": "LED",
+            "factor": 0.479,
+            "direction": "upstream"
+          },
+          {
+            "source": "电子化学品",
+            "target": "光学光电子",
+            "factor": 0.575,
+            "direction": "upstream"
+          },
+          {
+            "source": "膜材料",
+            "target": "光学光电子",
+            "factor": 0.539,
+            "direction": "upstream"
+          },
+          {
+            "source": "半导体材料",
+            "target": "光学光电子",
+            "factor": 0.535,
+            "direction": "upstream"
+          },
+          {
+            "source": "LED",
+            "target": "面板",
+            "factor": 0.684,
+            "direction": "downstream"
+          },
+          {
+            "source": "LED",
+            "target": "消费电子零部件及组装",
+            "factor": 0.663,
+            "direction": "downstream"
+          },
+          {
+            "source": "LED",
+            "target": "汽车电子电气系统",
+            "factor": 0.622,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "消费电子",
+            "factor": 0.66,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "通信设备",
+            "factor": 0.626,
+            "direction": "downstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "军工电子",
+            "factor": 0.605,
+            "direction": "downstream"
+          },
+          {
+            "source": "面板",
+            "target": "通信终端及配件",
+            "factor": 0.604,
+            "direction": "downstream"
+          },
+          {
+            "source": "面板",
+            "target": "计算机设备",
+            "factor": 0.511,
+            "direction": "downstream"
+          },
+          {
+            "source": "面板",
+            "target": "白色家电",
+            "factor": 0.491,
+            "direction": "downstream"
+          }
+        ],
+        "transfer_direction": "上游LED、面板及下游消费电子零部件"
+      },
+      "leading_stock_info": {
+        "name": "科翔股份",
+        "code": "300903",
+        "industry": "MiniLED",
+        "price": 101.58,
+        "change_pct": 3.48,
+        "reason": "科翔电子竭力为客户提供快捷、安全、可靠的印制电路板产品及服务，致力于打造世界领先的电子电路企业，连续4日上涨",
+        "reason_tag": "连续上涨",
+        "reason_tag_class": "tag-bullish",
+        "related_industry": "MiniLED",
+        "in_concept": true
+      }
+    },
+    {
+      "code": "886033",
+      "name": "共封装光学(CPO)",
+      "type": "concept",
+      "frequency": 3,
+      "avg_change": 9.83,
+      "today_change": 1.23,
+      "amount_trend": 730000,
+      "net_inflow": 730000,
+      "leading_stock": "光华科技",
+      "leading_change": 0,
+      "up_count": 0,
+      "down_count": 0,
+      "driver": "10日板块轮动上榜3次",
+      "score": 47,
+      "related_industries": [
+        "元件",
+        "印制电路板",
+        "通信设备"
+      ],
+      "industry_data": [
+        {
+          "name": "元件",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        },
+        {
+          "name": "印制电路板",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        },
+        {
+          "name": "通信设备",
+          "change": 0,
+          "up_count": 0,
+          "down_count": 0,
+          "leading_stock": "--"
+        }
+      ],
+      "ai_analysis": {
+        "persistence": "中期(1-2周)",
+        "persistence_reason": "主力净流入73亿且产业链关联度高，但涨幅趋缓，短期震荡后仍有上行空间。",
+        "heat_transfer": true,
+        "transfer_direction": "向上游消费电子零部件、光学光电子及下游通信设备、消费电子传递",
+        "transfer_reason": "上下游关联系数高（>0.6），产业链协同效应明显，资金可能向相关板块扩散。",
+        "risk_warning": "短期涨幅较大，追高需谨慎，关注量能变化。"
+      },
+      "main_stocks": [
+        {
+          "code": "603011",
+          "name": "合锻智能",
+          "industry": "共封装光学(CPO)",
+          "score": 85,
+          "reason": "历史封板率1%，PCB层压设备+光模块结构件+核聚变概念",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "共封装光学(CPO)",
+          "overlap_ratio": 1,
+          "price": 39.55,
+          "change_pct": 10.01
+        },
+        {
+          "code": "688662",
+          "name": "富信科技",
+          "industry": "共封装光学(CPO)",
+          "score": 70.2,
+          "reason": "量价齐升，涨幅5.1%",
+          "reason_tag": "量价齐升",
+          "reason_tag_class": "tag-trend",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "共封装光学(CPO)",
+          "overlap_ratio": 1,
+          "price": 142.91,
+          "change_pct": 5.08
+        },
+        {
+          "code": "002741",
+          "name": "光华科技",
+          "industry": "共封装光学(CPO)",
+          "score": 69.4,
+          "reason": "涨幅4.7%",
+          "reason_tag": "龙头股",
+          "reason_tag_class": "longtou",
+          "source": "concept_page",
+          "in_concept": true,
+          "chain_position": "核心",
+          "related_industry": "共封装光学(CPO)",
+          "overlap_ratio": 1,
+          "price": 41.3,
+          "change_pct": 4.72
+        },
+        {
+          "code": "002281",
+          "name": "光迅科技",
+          "industry": "通信设备",
+          "score": 63,
+          "reason": "历史封板率1%，3.2T硅光NPO+CPO+定增+央企",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "共封装光学(CPO)",
+          "in_concept": true,
+          "price": 266.2,
+          "change_pct": 10,
+          "chain_position": "核心",
+          "related_industry": "通信设备",
+          "overlap_ratio": 0.164
+        },
+        {
+          "code": "002579",
+          "name": "中京电子",
+          "industry": "印制电路板",
+          "score": 60.8,
+          "reason": "历史封板率1%，定增通过+PCB+高阶HDI+AIPC",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "共封装光学(CPO)",
+          "in_concept": true,
+          "price": 20.32,
+          "change_pct": 10.0162,
+          "chain_position": "核心",
+          "related_industry": "印制电路板",
+          "overlap_ratio": 0.169
+        }
+      ],
+      "upstream_stocks": [
+        {
+          "code": "002655",
+          "name": "共达电声",
+          "industry": "消费电子零部件及组装",
+          "score": 47.2,
+          "reason": "历史封板率1%，激光加工+拟控股浙江镝嘉+车载声学+增持",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 42.61,
+          "change_pct": 9.9897,
+          "chain_position": "上游",
+          "transmission_factor": 0.722,
+          "source_industry": "通信设备"
+        },
+        {
+          "code": "603380",
+          "name": "易德龙",
+          "industry": "消费电子零部件及组装",
+          "score": 39.8,
+          "reason": "历史封板率1%，AI服务器+机器人+海外扩产+EMS",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 41.03,
+          "change_pct": 10,
+          "chain_position": "上游",
+          "transmission_factor": 0.722,
+          "source_industry": "通信设备"
+        },
+        {
+          "code": "688172",
+          "name": "燕东微",
+          "industry": "分立器件",
+          "score": 44.6,
+          "reason": "涨幅12.5%",
+          "reason_tag": "强势上涨",
+          "reason_tag_class": "tag-bullish",
+          "source": "强势上涨",
+          "in_concept": false,
+          "price": 75.01,
+          "change_pct": 12.5263,
+          "chain_position": "上游",
+          "transmission_factor": 0.715,
+          "source_industry": "通信设备"
+        },
+        {
+          "code": "603679",
+          "name": "华体科技",
+          "industry": "光学光电子",
+          "score": 43,
+          "reason": "历史封板率0%，股份转让+华为超充+低空经济",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 21.43,
+          "change_pct": 10.0103,
+          "chain_position": "上游",
+          "transmission_factor": 0.709,
+          "source_industry": "通信设备"
+        },
+        {
+          "code": "300319",
+          "name": "麦捷科技",
+          "industry": "被动元件",
+          "score": 56.8,
+          "reason": "英伟达电感+光模块+深圳国资",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "共封装光学(CPO)",
+          "in_concept": true,
+          "price": 27.76,
+          "change_pct": 20.0173,
+          "chain_position": "上游",
+          "transmission_factor": 0.691,
+          "source_industry": "印制电路板"
+        },
+        {
+          "code": "002859",
+          "name": "洁美科技",
+          "industry": "其他电子",
+          "score": 53.3,
+          "reason": "历史封板率1%，MLCC离型膜+HVLP铜箔+转债强赎",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 99.73,
+          "change_pct": 10.0044,
+          "chain_position": "上游",
+          "transmission_factor": 0.644,
+          "source_industry": "印制电路板"
+        }
+      ],
+      "downstream_stocks": [
+        {
+          "code": "301310",
+          "name": "鑫宏业",
+          "industry": "汽车电子电气系统",
+          "score": 34.8,
+          "reason": "高速铜缆连接+人形机器人线缆+可控核聚变",
+          "reason_tag": "涨停",
+          "reason_tag_class": "tag-bullish",
+          "source": "涨停",
+          "in_concept": false,
+          "price": 46.75,
+          "change_pct": 19.9949,
+          "chain_position": "下游",
+          "transmission_factor": 0.633,
+          "source_industry": "元件"
+        },
+        {
+          "code": "003031",
+          "name": "中瓷电子",
+          "industry": "通信设备",
+          "score": 57.6,
+          "reason": "历史封板率1%，光通信陶瓷外壳+SiC功率器件+央企",
+          "reason_tag": "概念共振",
+          "reason_tag_class": "tag-bullish",
+          "source": "共封装光学(CPO)",
+          "in_concept": true,
+          "price": 176.29,
+          "change_pct": 10.0025,
+          "chain_position": "下游",
+          "transmission_factor": 0.632,
+          "source_industry": "元件"
+        }
+      ],
+      "flow_data": {
+        "nodes": [
+          {
+            "id": "共封装光学(CPO)",
+            "type": "main",
+            "label": "共封装光学(CPO)"
+          },
+          {
+            "id": "元件",
+            "type": "related",
+            "label": "元件"
+          },
+          {
+            "id": "印制电路板",
+            "type": "related",
+            "label": "印制电路板"
           },
           {
             "id": "通信设备",
@@ -3065,19 +3432,9 @@
             "label": "通信设备"
           },
           {
-            "id": "通信网络设备及器件",
-            "type": "related",
-            "label": "通信网络设备及器件"
-          },
-          {
-            "id": "通信线缆及配套",
-            "type": "related",
-            "label": "通信线缆及配套"
-          },
-          {
-            "id": "光学光电子",
+            "id": "消费电子零部件及组装",
             "type": "upstream",
-            "label": "光学光电子"
+            "label": "消费电子零部件及组装"
           },
           {
             "id": "分立器件",
@@ -3085,19 +3442,29 @@
             "label": "分立器件"
           },
           {
+            "id": "光学光电子",
+            "type": "upstream",
+            "label": "光学光电子"
+          },
+          {
             "id": "被动元件",
             "type": "upstream",
             "label": "被动元件"
           },
           {
-            "id": "数字芯片设计",
+            "id": "其他电子",
             "type": "upstream",
-            "label": "数字芯片设计"
+            "label": "其他电子"
           },
           {
-            "id": "橡胶制品",
+            "id": "电子化学品",
             "type": "upstream",
-            "label": "橡胶制品"
+            "label": "电子化学品"
+          },
+          {
+            "id": "半导体材料",
+            "type": "upstream",
+            "label": "半导体材料"
           },
           {
             "id": "塑料制品",
@@ -3105,14 +3472,29 @@
             "label": "塑料制品"
           },
           {
-            "id": "金属新材料",
+            "id": "有机硅",
             "type": "upstream",
-            "label": "金属新材料"
+            "label": "有机硅"
           },
           {
-            "id": "计算机设备",
+            "id": "通信网络设备及器件",
             "type": "downstream",
-            "label": "计算机设备"
+            "label": "通信网络设备及器件"
+          },
+          {
+            "id": "军工电子Ⅲ",
+            "type": "downstream",
+            "label": "军工电子Ⅲ"
+          },
+          {
+            "id": "消费电子",
+            "type": "downstream",
+            "label": "消费电子"
+          },
+          {
+            "id": "汽车电子电气系统",
+            "type": "downstream",
+            "label": "汽车电子电气系统"
           },
           {
             "id": "通信工程及服务",
@@ -3132,639 +3514,144 @@
         ],
         "links": [
           {
-            "source": "光纤概念",
+            "source": "共封装光学(CPO)",
+            "target": "元件",
+            "factor": 0.205,
+            "direction": "related"
+          },
+          {
+            "source": "共封装光学(CPO)",
+            "target": "印制电路板",
+            "factor": 0.169,
+            "direction": "related"
+          },
+          {
+            "source": "共封装光学(CPO)",
             "target": "通信设备",
-            "factor": 0.28,
+            "factor": 0.164,
             "direction": "related"
           },
           {
-            "source": "光纤概念",
-            "target": "通信网络设备及器件",
-            "factor": 0.14,
-            "direction": "related"
-          },
-          {
-            "source": "光纤概念",
-            "target": "通信线缆及配套",
-            "factor": 0.103,
-            "direction": "related"
-          },
-          {
-            "source": "光学光电子",
+            "source": "消费电子零部件及组装",
             "target": "通信设备",
-            "factor": 0.719,
+            "factor": 0.722,
             "direction": "upstream"
           },
           {
             "source": "分立器件",
             "target": "通信设备",
-            "factor": 0.68,
+            "factor": 0.715,
+            "direction": "upstream"
+          },
+          {
+            "source": "光学光电子",
+            "target": "通信设备",
+            "factor": 0.709,
             "direction": "upstream"
           },
           {
             "source": "被动元件",
-            "target": "通信设备",
-            "factor": 0.677,
+            "target": "印制电路板",
+            "factor": 0.691,
             "direction": "upstream"
           },
           {
-            "source": "通信线缆及配套",
-            "target": "通信网络设备及器件",
-            "factor": 0.68,
+            "source": "其他电子",
+            "target": "印制电路板",
+            "factor": 0.644,
             "direction": "upstream"
           },
           {
-            "source": "数字芯片设计",
-            "target": "通信网络设备及器件",
-            "factor": 0.581,
+            "source": "电子化学品",
+            "target": "印制电路板",
+            "factor": 0.579,
             "direction": "upstream"
           },
           {
-            "source": "橡胶制品",
-            "target": "通信线缆及配套",
-            "factor": 0.521,
+            "source": "半导体材料",
+            "target": "元件",
+            "factor": 0.551,
             "direction": "upstream"
           },
           {
             "source": "塑料制品",
-            "target": "通信线缆及配套",
-            "factor": 0.462,
+            "target": "元件",
+            "factor": 0.537,
             "direction": "upstream"
           },
           {
-            "source": "金属新材料",
-            "target": "通信线缆及配套",
-            "factor": 0.458,
+            "source": "有机硅",
+            "target": "元件",
+            "factor": 0.509,
             "direction": "upstream"
           },
           {
-            "source": "通信线缆及配套",
-            "target": "通信网络设备及器件",
-            "factor": 0.678,
+            "source": "印制电路板",
+            "target": "消费电子零部件及组装",
+            "factor": 0.682,
             "direction": "downstream"
           },
           {
-            "source": "通信网络设备及器件",
-            "target": "计算机设备",
-            "factor": 0.515,
+            "source": "印制电路板",
+            "target": "通信网络设备及器件",
+            "factor": 0.656,
+            "direction": "downstream"
+          },
+          {
+            "source": "印制电路板",
+            "target": "军工电子Ⅲ",
+            "factor": 0.609,
+            "direction": "downstream"
+          },
+          {
+            "source": "元件",
+            "target": "消费电子",
+            "factor": 0.68,
+            "direction": "downstream"
+          },
+          {
+            "source": "元件",
+            "target": "汽车电子电气系统",
+            "factor": 0.633,
+            "direction": "downstream"
+          },
+          {
+            "source": "元件",
+            "target": "通信设备",
+            "factor": 0.632,
             "direction": "downstream"
           },
           {
             "source": "通信设备",
             "target": "通信工程及服务",
-            "factor": 0.473,
+            "factor": 0.497,
             "direction": "downstream"
           },
           {
             "source": "通信设备",
             "target": "IT服务",
-            "factor": 0.421,
+            "factor": 0.45,
             "direction": "downstream"
           },
           {
             "source": "通信设备",
             "target": "IT服务Ⅲ",
-            "factor": 0.421,
+            "factor": 0.45,
             "direction": "downstream"
           }
         ],
-        "transfer_direction": "上游光学光电子、通信线缆及配套；下游通信网络设备及器件"
+        "transfer_direction": "向上游消费电子零部件、光学光电子及下游通信设备、消费电子传递"
       },
       "leading_stock_info": {
-        "name": "太辰光",
-        "code": "300570",
-        "industry": "光纤概念",
-        "price": 263.29,
-        "change_pct": 18.55,
-        "reason": "深圳太辰光通信股份有限公司成立于2000年,是一家集研发、生产、销售为一体的高科技企业,是中国陶瓷插芯行业的主导企业之一；在光通信领域,太辰光的光器件产品得到国内外用户的高度认可,优良的产品品质与服务使企业保持着持续的增长;在光纤传感领域,公司在智能电网的配电使用安全监控上处于国内领先的地位，量价齐升，涨幅18.6%",
-        "reason_tag": "量价齐升",
-        "reason_tag_class": "tag-trend",
-        "related_industry": "光纤概念",
-        "in_concept": true
-      }
-    },
-    {
-      "code": "886073",
-      "name": "铜缆高速连接",
-      "type": "concept",
-      "frequency": 4,
-      "avg_change": 3.46,
-      "today_change": 4.19,
-      "amount_trend": -230000,
-      "net_inflow": -230000,
-      "leading_stock": "太辰光",
-      "leading_change": 0,
-      "up_count": 0,
-      "down_count": 0,
-      "driver": "10日板块轮动上榜4次",
-      "score": 39,
-      "related_industries": [
-        "通信设备",
-        "通信网络设备及器件",
-        "消费电子"
-      ],
-      "industry_data": [
-        {
-          "name": "通信设备",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "通信网络设备及器件",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        },
-        {
-          "name": "消费电子",
-          "change": 0,
-          "up_count": 0,
-          "down_count": 0,
-          "leading_stock": "--"
-        }
-      ],
-      "ai_analysis": {
-        "persistence": "短期(1-3天)",
-        "persistence_reason": "主力资金大幅净流出23亿元，资金背离明显，短期获利盘抛压较大",
-        "heat_transfer": true,
-        "transfer_direction": "向上游传递，如光学光电子、通信线缆及配套等",
-        "transfer_reason": "上游产业因子关联度高（0.7左右），资金可能向产业链上游扩散",
-        "risk_warning": "主力资金流出，追高须谨慎，警惕回调风险"
-      },
-      "main_stocks": [
-        {
-          "code": "300843",
-          "name": "胜蓝股份",
-          "industry": "铜缆高速连接",
-          "score": 85,
-          "reason": "数据中心连接器+中标高速线缆+液冷+机器人",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "铜缆高速连接",
-          "overlap_ratio": 1,
-          "price": 117.62,
-          "change_pct": 20
-        },
-        {
-          "code": "603042",
-          "name": "华脉科技",
-          "industry": "铜缆高速连接",
-          "score": 85,
-          "reason": "历史封板率1%，光纤光缆+分红送转+解除质押",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "铜缆高速连接",
-          "overlap_ratio": 1,
-          "price": 20.97,
-          "change_pct": 10.02
-        },
-        {
-          "code": "300570",
-          "name": "太辰光",
-          "industry": "铜缆高速连接",
-          "score": 75,
-          "reason": "量价齐升，涨幅18.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "concept_page",
-          "in_concept": true,
-          "chain_position": "核心",
-          "related_industry": "铜缆高速连接",
-          "overlap_ratio": 1,
-          "price": 263.29,
-          "change_pct": 18.55
-        },
-        {
-          "code": "300620",
-          "name": "光库科技",
-          "industry": "通信网络设备及器件",
-          "score": 35.1,
-          "reason": "量价齐升，涨幅14.4%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 392.49,
-          "change_pct": 14.4119,
-          "chain_position": "核心",
-          "related_industry": "通信网络设备及器件",
-          "overlap_ratio": 0.174
-        },
-        {
-          "code": "300709",
-          "name": "精研科技",
-          "industry": "消费电子",
-          "score": 29.6,
-          "reason": "量价齐升，涨幅16.7%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 60.1,
-          "change_pct": 16.7217,
-          "chain_position": "核心",
-          "related_industry": "消费电子",
-          "overlap_ratio": 0.174
-        }
-      ],
-      "upstream_stocks": [
-        {
-          "code": "920438",
-          "name": "戈碧迦",
-          "industry": "光学光电子",
-          "score": 30.1,
-          "reason": "涨幅17.6%",
-          "reason_tag": "强势上涨",
-          "reason_tag_class": "tag-bullish",
-          "source": "强势上涨",
-          "in_concept": false,
-          "price": 97.96,
-          "change_pct": 17.6273,
-          "chain_position": "上游",
-          "transmission_factor": 0.719,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "300088",
-          "name": "长信科技",
-          "industry": "光学光电子",
-          "score": 27.9,
-          "reason": "量价齐升，涨幅12.4%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 8.81,
-          "change_pct": 12.3724,
-          "chain_position": "上游",
-          "transmission_factor": 0.719,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "603989",
-          "name": "艾华集团",
-          "industry": "被动元件",
-          "score": 44.6,
-          "reason": "历史封板率1%，MLPC+AI服务器+铝电解电容+薄膜电容",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 34.3,
-          "change_pct": 10.0064,
-          "chain_position": "上游",
-          "transmission_factor": 0.696,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "688635",
-          "name": "长进光子",
-          "industry": "通信线缆及配套",
-          "score": 26.8,
-          "reason": "AI光通信+特种光纤+商业航天+次新",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 509.99,
-          "change_pct": 20.0005,
-          "chain_position": "上游",
-          "transmission_factor": 0.666,
-          "source_industry": "通信网络设备及器件"
-        },
-        {
-          "code": "002008",
-          "name": "大族激光",
-          "industry": "激光设备",
-          "score": 37.9,
-          "reason": "历史封板率1%，AI算力PCB+一季报增长+半导体设备+商业航天",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 136.62,
-          "change_pct": 10,
-          "chain_position": "上游",
-          "transmission_factor": 0.653,
-          "source_industry": "消费电子"
-        }
-      ],
-      "downstream_stocks": [
-        {
-          "code": "002990",
-          "name": "盛视科技",
-          "industry": "计算机设备",
-          "score": 46.2,
-          "reason": "历史封板率1%，算力产业合作协议+人形机器人+智慧口岸",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 54.41,
-          "change_pct": 10.0081,
-          "chain_position": "下游",
-          "transmission_factor": 0.516,
-          "source_industry": "通信网络设备及器件"
-        },
-        {
-          "code": "300249",
-          "name": "依米康",
-          "industry": "计算机设备",
-          "score": 38.7,
-          "reason": "量价齐升，涨幅11.2%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 17.12,
-          "change_pct": 11.1688,
-          "chain_position": "下游",
-          "transmission_factor": 0.516,
-          "source_industry": "通信网络设备及器件"
-        },
-        {
-          "code": "000889",
-          "name": "中嘉博创",
-          "industry": "通信工程及服务",
-          "score": 32.3,
-          "reason": "量价齐升，涨幅6.2%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 3.77,
-          "change_pct": 6.1972,
-          "chain_position": "下游",
-          "transmission_factor": 0.46,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "300921",
-          "name": "南凌科技",
-          "industry": "通信应用增值服务",
-          "score": 31.9,
-          "reason": "量价齐升，涨幅14.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 20.73,
-          "change_pct": 14.5937,
-          "chain_position": "下游",
-          "transmission_factor": 0.423,
-          "source_industry": "通信设备"
-        },
-        {
-          "code": "000564",
-          "name": "供销大集",
-          "industry": "零售",
-          "score": 47,
-          "reason": "历史封板率1%，股份回购+零售+供销社+海南自贸港",
-          "reason_tag": "涨停",
-          "reason_tag_class": "tag-bullish",
-          "source": "涨停",
-          "in_concept": false,
-          "price": 1.6,
-          "change_pct": 10.3448,
-          "chain_position": "下游",
-          "transmission_factor": 0.419,
-          "source_industry": "消费电子"
-        },
-        {
-          "code": "300921",
-          "name": "南凌科技",
-          "industry": "通信服务",
-          "score": 31.9,
-          "reason": "量价齐升，涨幅14.6%",
-          "reason_tag": "量价齐升",
-          "reason_tag_class": "tag-trend",
-          "source": "量价齐升",
-          "in_concept": false,
-          "price": 20.73,
-          "change_pct": 14.5937,
-          "chain_position": "下游",
-          "transmission_factor": 0.406,
-          "source_industry": "通信设备"
-        }
-      ],
-      "flow_data": {
-        "nodes": [
-          {
-            "id": "铜缆高速连接",
-            "type": "main",
-            "label": "铜缆高速连接"
-          },
-          {
-            "id": "通信设备",
-            "type": "related",
-            "label": "通信设备"
-          },
-          {
-            "id": "通信网络设备及器件",
-            "type": "related",
-            "label": "通信网络设备及器件"
-          },
-          {
-            "id": "消费电子",
-            "type": "related",
-            "label": "消费电子"
-          },
-          {
-            "id": "光学光电子",
-            "type": "upstream",
-            "label": "光学光电子"
-          },
-          {
-            "id": "被动元件",
-            "type": "upstream",
-            "label": "被动元件"
-          },
-          {
-            "id": "消费电子零部件及组装",
-            "type": "upstream",
-            "label": "消费电子零部件及组装"
-          },
-          {
-            "id": "通信线缆及配套",
-            "type": "upstream",
-            "label": "通信线缆及配套"
-          },
-          {
-            "id": "数字芯片设计",
-            "type": "upstream",
-            "label": "数字芯片设计"
-          },
-          {
-            "id": "激光设备",
-            "type": "upstream",
-            "label": "激光设备"
-          },
-          {
-            "id": "磁性材料",
-            "type": "upstream",
-            "label": "磁性材料"
-          },
-          {
-            "id": "自动化设备",
-            "type": "upstream",
-            "label": "自动化设备"
-          },
-          {
-            "id": "计算机设备",
-            "type": "downstream",
-            "label": "计算机设备"
-          },
-          {
-            "id": "通信工程及服务",
-            "type": "downstream",
-            "label": "通信工程及服务"
-          },
-          {
-            "id": "通信应用增值服务",
-            "type": "downstream",
-            "label": "通信应用增值服务"
-          },
-          {
-            "id": "通信服务",
-            "type": "downstream",
-            "label": "通信服务"
-          },
-          {
-            "id": "零售",
-            "type": "downstream",
-            "label": "零售"
-          },
-          {
-            "id": "专业连锁",
-            "type": "downstream",
-            "label": "专业连锁"
-          }
-        ],
-        "links": [
-          {
-            "source": "铜缆高速连接",
-            "target": "通信设备",
-            "factor": 0.283,
-            "direction": "related"
-          },
-          {
-            "source": "铜缆高速连接",
-            "target": "通信网络设备及器件",
-            "factor": 0.174,
-            "direction": "related"
-          },
-          {
-            "source": "铜缆高速连接",
-            "target": "消费电子",
-            "factor": 0.174,
-            "direction": "related"
-          },
-          {
-            "source": "光学光电子",
-            "target": "通信设备",
-            "factor": 0.719,
-            "direction": "upstream"
-          },
-          {
-            "source": "被动元件",
-            "target": "通信设备",
-            "factor": 0.696,
-            "direction": "upstream"
-          },
-          {
-            "source": "消费电子零部件及组装",
-            "target": "通信设备",
-            "factor": 0.679,
-            "direction": "upstream"
-          },
-          {
-            "source": "通信线缆及配套",
-            "target": "通信网络设备及器件",
-            "factor": 0.666,
-            "direction": "upstream"
-          },
-          {
-            "source": "数字芯片设计",
-            "target": "通信网络设备及器件",
-            "factor": 0.593,
-            "direction": "upstream"
-          },
-          {
-            "source": "激光设备",
-            "target": "消费电子",
-            "factor": 0.653,
-            "direction": "upstream"
-          },
-          {
-            "source": "磁性材料",
-            "target": "消费电子",
-            "factor": 0.569,
-            "direction": "upstream"
-          },
-          {
-            "source": "自动化设备",
-            "target": "消费电子",
-            "factor": 0.556,
-            "direction": "upstream"
-          },
-          {
-            "source": "通信网络设备及器件",
-            "target": "计算机设备",
-            "factor": 0.516,
-            "direction": "downstream"
-          },
-          {
-            "source": "通信设备",
-            "target": "通信工程及服务",
-            "factor": 0.46,
-            "direction": "downstream"
-          },
-          {
-            "source": "通信设备",
-            "target": "通信应用增值服务",
-            "factor": 0.423,
-            "direction": "downstream"
-          },
-          {
-            "source": "通信设备",
-            "target": "通信服务",
-            "factor": 0.406,
-            "direction": "downstream"
-          },
-          {
-            "source": "消费电子",
-            "target": "零售",
-            "factor": 0.419,
-            "direction": "downstream"
-          },
-          {
-            "source": "消费电子",
-            "target": "专业连锁",
-            "factor": 0.386,
-            "direction": "downstream"
-          }
-        ],
-        "transfer_direction": "向上游传递，如光学光电子、通信线缆及配套等"
-      },
-      "leading_stock_info": {
-        "name": "太辰光",
-        "code": "300570",
-        "industry": "铜缆高速连接",
-        "price": 263.29,
-        "change_pct": 18.55,
-        "reason": "深圳太辰光通信股份有限公司成立于2000年,是一家集研发、生产、销售为一体的高科技企业,是中国陶瓷插芯行业的主导企业之一；在光通信领域,太辰光的光器件产品得到国内外用户的高度认可,优良的产品品质与服务使企业保持着持续的增长;在光纤传感领域,公司在智能电网的配电使用安全监控上处于国内领先的地位，量价齐升，涨幅18.6%",
-        "reason_tag": "量价齐升",
-        "reason_tag_class": "tag-trend",
-        "related_industry": "铜缆高速连接",
+        "name": "光华科技",
+        "code": "002741",
+        "industry": "共封装光学(CPO)",
+        "price": 41.3,
+        "change_pct": 4.72,
+        "reason": "广东光华科技股份有限公司始创于1980年,现已形成以“高性能电子化学品”、“高品质化学试剂”和“新能源材料”为主导的,集研发、生产、销售和服务为一体的专用化学品产业体系；自成立以来,光华科技坚持自主品牌运营,为广大客户提供高品质的产品与服务,提供全面系统的技术解决方案,是电子、表面处理、日化、生物医药、陶瓷、环保能源等领域标杆企业的整体服务方案提供商，连续5日上涨",
+        "reason_tag": "连续上涨",
+        "reason_tag_class": "tag-bullish",
+        "related_industry": "共封装光学(CPO)",
         "in_concept": true
       }
     }
