@@ -16,6 +16,7 @@
 import pool from '../db';
 import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
+import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
 
 // ==================== 类型定义 ====================
 
@@ -67,6 +68,10 @@ interface StockResonanceSignal {
     articles: { id: string; title: string; source: string; time: string }[];
     /** 检测时间 */
     detectedAt: string;
+    /** 三重共振状态 */
+    resonance1: { verified: boolean; conceptName: string; clsCount: number; glhCount: number };
+    resonance2: { verified: boolean; rank?: number; sectorName?: string };
+    resonance3: { verified: boolean; reportCount: number; latestReportTime?: string };
 }
 
 interface HotspotOutbreakResult {
@@ -347,11 +352,35 @@ export class HotspotOutbreakService {
                 } : null,
                 articles: stock.articles,
                 detectedAt: stock.detectedAt,
+                resonance1: { verified: false, conceptName: '', clsCount: 0, glhCount: 0 },
+                resonance2: { verified: false },
+                resonance3: { verified: false, reportCount: 0 },
             });
         }
 
         // 按共振评分降序
         outbreaks.sort((a, b) => b.resonanceScore - a.resonanceScore);
+
+        // 补充三重共振状态
+        for (const signal of outbreaks) {
+            const reports = await findResearchReportMessagesForStock(signal.symbol, 24);
+            signal.resonance1 = {
+                verified: !!signal.conceptResonance?.conceptVerified,
+                conceptName: signal.conceptResonance?.conceptName || '',
+                clsCount: signal.conceptResonance?.clsCount || 0,
+                glhCount: signal.conceptResonance?.glhCount || 0,
+            };
+            signal.resonance2 = {
+                verified: signal.thsVerified,
+                rank: signal.thsSectorRank,
+                sectorName: signal.thsSectorName,
+            };
+            signal.resonance3 = {
+                verified: reports.length > 0,
+                reportCount: reports.length,
+                latestReportTime: reports[0]?.receivedAt,
+            };
+        }
 
         console.log(`[HotspotOutbreak] 检测完成: ${outbreaks.length} 个共振信号`);
 
