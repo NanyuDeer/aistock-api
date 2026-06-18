@@ -572,7 +572,7 @@ export class WechatPushService {
         return `${pct.toFixed(2)}%`;
     }
 
-    static async dispatchLeaderStocks(stocks: LeaderStockPushItem[]): Promise<PushResult> {
+    static async dispatchLeaderStocks(stocks: LeaderStockPushItem[], force: boolean = false): Promise<PushResult> {
         const openids = await WechatPushService.getAllWechatOpenids();
         const today = new Date().toISOString().slice(0, 10);
         const eventId = `leader:${today}`;
@@ -586,7 +586,7 @@ export class WechatPushService {
         };
 
         for (const openid of openids) {
-            if (await WechatPushService.hasPushed(eventId, openid)) {
+            if (!force && await WechatPushService.hasPushed(eventId, openid)) {
                 pushResult.skipped += 1;
                 pushResult.logs.push({ openid, status: 'skipped', reason: 'duplicate_event' });
                 continue;
@@ -686,7 +686,7 @@ export class WechatPushService {
 
     // ==================== 风口爆发推送 ====================
 
-    static async dispatchOutbreakStocks(stocks: OutbreakPushItem[]): Promise<PushResult> {
+    static async dispatchOutbreakStocks(stocks: OutbreakPushItem[], force: boolean = false): Promise<PushResult> {
         const openids = await WechatPushService.getAllWechatOpenids();
         const today = new Date().toISOString().slice(0, 10);
 
@@ -702,7 +702,7 @@ export class WechatPushService {
             const eventId = `outbreak:${stock.code}:${today}`;
 
             for (const openid of openids) {
-                if (await WechatPushService.hasPushed(eventId, openid)) {
+                if (!force && await WechatPushService.hasPushed(eventId, openid)) {
                     pushResult.skipped += 1;
                     pushResult.logs.push({ openid, status: 'skipped', reason: 'duplicate_event' });
                     continue;

@@ -12,7 +12,9 @@ import { HotspotOutbreakService } from '../services/HotspotOutbreakService';
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || 'crawler-int-2026-token';
 
 function verifyInternalToken(req: Request): boolean {
-    const token = req.headers['x-internal-token'];
+    const headerToken = req.headers['x-internal-token'];
+    const bearerToken = req.headers.authorization?.replace('Bearer ', '');
+    const token = String(Array.isArray(headerToken) ? headerToken[0] : headerToken || '') || bearerToken || '';
     return token === INTERNAL_TOKEN;
 }
 
