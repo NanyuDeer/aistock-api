@@ -38,6 +38,8 @@ import { ConfigController } from './controllers/ConfigController';
 import { MessagePushService } from './services/MessagePushService';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
+import { StockInfoCrawlService } from './services/crawler/StockInfoCrawlService';
+import { HotSectorAnalyzerService } from './services/HotSectorAnalyzerService';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -240,6 +242,35 @@ app.post('/api/internal/push-stock-info', async (req, res) => {
 
 // 公共配置接口
 app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
+
+// 手动触发爬虫抓取（只抓取+研判+入库，不推送）
+app.post('/api/internal/crawl/run', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const result = await StockInfoCrawlService.runOnce(req.body || {});
+        res.json({ success: true, result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 手动触发爬虫完整周期（抓取+研判+入库+推送）
+app.post('/api/internal/crawl/cycle', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const window = req.body?.window || 'morning';
+        const result = await StockInfoCrawlService.runCycle(window, req.body || {});
+        res.json({ success: true, result });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 app.get('/api/potential-stocks/push-history', (req, res, next) => PotentialStockPushController.getHistory(req, res, next));
 app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStockPushController.getRanking(req, res, next));
@@ -452,10 +483,38 @@ cron.schedule('5 19 * * 1-5', async () => {
     }
 });
 
-// 风口爆发股定时分析已迁移到 Python 后端（hot-sector-engine/app.py，每天凌晨3点执行）
-// TS 后端通过 POST /api/internal/hot-sectors 接收 Python 推送的数据
-// 如需恢复 TS 版 cron，取消下方注释：
-// cron.schedule('0 3 * * *', async () => { ... HotSectorAnalyzerService.runFullAnalysis() ... });
+// 风口爆发股定时分析：每天凌晨3点执行
+cron.schedule('0 3 * * *', async () => {
+    console.log('[HotSectorCron] 开始风口爆发股分析');
+    try {
+        const result = await HotSectorAnalyzerService.runFullAnalysis();
+        console.log(`[HotSectorCron] 分析完成: ${result.hot_sectors?.length || 0} 个板块`);
+    } catch (err: any) {
+        console.error('[HotSectorCron] 分析失败:', err?.message || err);
+    }
+});
+
+// 个股资讯爬虫+实时推送：交易日 8:00（早报前）和 15:00（收盘后）
+// runCycle = 抓取 + AI研判 + 入库 + 触发自选股异动实时推送（飞书卡片+微信模板）
+cron.schedule('0 8 * * 1-5', async () => {
+    console.log('[CrawlCron] 开始早盘爬虫周期');
+    try {
+        const result = await StockInfoCrawlService.runCycle('morning', { source: 'favorites', limit: 200 });
+        console.log(`[CrawlCron] 早盘完成: 抓取${result.crawler.submitted}条, 推送候选${result.push.candidates}条`);
+    } catch (err: any) {
+        console.error('[CrawlCron] 早盘失败:', err?.message || err);
+    }
+});
+
+cron.schedule('0 15 * * 1-5', async () => {
+    console.log('[CrawlCron] 开始尾盘爬虫周期');
+    try {
+        const result = await StockInfoCrawlService.runCycle('closing', { source: 'favorites', limit: 200 });
+        console.log(`[CrawlCron] 尾盘完成: 抓取${result.crawler.submitted}条, 推送候选${result.push.candidates}条`);
+    } catch (err: any) {
+        console.error('[CrawlCron] 尾盘失败:', err?.message || err);
+    }
+});
 
 async function start() {
     try {
