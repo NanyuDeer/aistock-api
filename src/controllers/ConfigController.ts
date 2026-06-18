@@ -15,12 +15,16 @@ export class ConfigController {
     static async getPublicConfig(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const config = {
-                // 飞书配置
+                // 飞书 OAuth 配置
                 feishuAppId: process.env.FEISHU_APP_ID || '',
-                
+
+                // 企业邀请配置（企业自建应用需先邀请用户加入企业）
+                feishuEnterpriseInviteLink: process.env.FEISHU_ENTERPRISE_INVITE_LINK || '',
+                feishuEnterpriseInviteQrUrl: process.env.FEISHU_ENTERPRISE_INVITE_QR_URL || '',
+
                 // API 地址（前端已通过 VUE_APP_API_TARGET 获取，这里可选）
                 apiBaseUrl: process.env.FRONTEND_URL || '',
-                
+
                 // 其他公共配置...
             };
             createResponse(res, 200, 'success', config);
