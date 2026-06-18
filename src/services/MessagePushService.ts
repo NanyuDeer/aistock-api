@@ -2,8 +2,8 @@
  * 统一消息推送服务
  *
  * 每日2次推送（9:00 / 17:00）：
- * - 个股资讯 + 风口爆发，合并为一条消息
- * - 标签：【个股资讯】 / 【风口爆发】 / 【个股资讯x风口爆发】
+ * - 股票异动监测提醒 + 爆发风口提醒，合并为一条消息
+ * - 标签：【股票异动监测提醒】 / 【爆发风口提醒】 / 【股票异动监测提醒x爆发风口提醒】
  * - 支持多渠道：飞书卡片 / 微信文本
  */
 
@@ -22,12 +22,12 @@ const PUSH_SCHEDULES = [
 
 // ==================== 标签 ====================
 
-type PushLabel = '【个股资讯】' | '【风口爆发】' | '【个股资讯x风口爆发】';
+type PushLabel = '【股票异动监测提醒】' | '【爆发风口提醒】' | '【股票异动监测提醒x爆发风口提醒】';
 
 function getPushLabel(hasStockInfo: boolean, hasOutbreak: boolean): PushLabel {
-    if (hasStockInfo && hasOutbreak) return '【个股资讯x风口爆发】';
-    if (hasStockInfo) return '【个股资讯】';
-    return '【风口爆发】';
+    if (hasStockInfo && hasOutbreak) return '【股票异动监测提醒x爆发风口提醒】';
+    if (hasStockInfo) return '【股票异动监测提醒】';
+    return '【爆发风口提醒】';
 }
 
 // ==================== 飞书API ====================
@@ -182,11 +182,11 @@ function buildUnifiedCard(
     });
     elements.push({ tag: 'hr' });
 
-    // 个股资讯段
+    // 股票异动监测提醒段
     if (stockInfos.length > 0) {
         elements.push({
             tag: 'div',
-            text: { tag: 'plain_text', content: '📊 个股资讯' },
+            text: { tag: 'plain_text', content: '📊 股票异动监测提醒' },
         });
         for (const info of stockInfos.slice(0, 8)) {
             const kwText = info.keywords.length > 0 ? ` [${info.keywords.slice(0, 3).join('/')}]` : '';
@@ -201,11 +201,11 @@ function buildUnifiedCard(
         }
     }
 
-    // 风口爆发段
+    // 爆发风口提醒段
     if (outbreakStocks.length > 0) {
         elements.push({
             tag: 'div',
-            text: { tag: 'plain_text', content: '🔥 风口爆发' },
+            text: { tag: 'plain_text', content: '🔥 爆发风口提醒' },
         });
         for (const stock of outbreakStocks) {
             const changeStr = stock.change_pct > 0 ? `+${stock.change_pct.toFixed(2)}%` : `${stock.change_pct.toFixed(2)}%`;
@@ -220,7 +220,7 @@ function buildUnifiedCard(
         }
     }
 
-    const headerColor = label.includes('风口爆发') ? 'red' : 'blue';
+    const headerColor = label.includes('爆发风口提醒') ? 'red' : 'blue';
 
     return {
         config: { wide_screen_mode: true },
@@ -240,14 +240,14 @@ function buildWechatText(
     const lines: string[] = [`${label}`];
 
     if (stockInfos.length > 0) {
-        lines.push('\n📊 个股资讯');
+        lines.push('\n📊 股票异动监测提醒');
         for (const info of stockInfos.slice(0, 5)) {
             lines.push(`• ${info.name} ${info.title}`);
         }
     }
 
     if (outbreakStocks.length > 0) {
-        lines.push('\n🔥 风口爆发');
+        lines.push('\n🔥 爆发风口提醒');
         for (const stock of outbreakStocks) {
             const changeStr = stock.change_pct > 0 ? `+${stock.change_pct.toFixed(2)}%` : `${stock.change_pct.toFixed(2)}%`;
             lines.push(`• ${stock.name} ${changeStr} ${stock.concept}`);
@@ -298,7 +298,7 @@ export class MessagePushService {
         let success = 0;
         let fail = 0;
 
-        // 全量获取风口爆发股（所有用户共享）
+        // 全量获取爆发风口提醒股（所有用户共享）
         const outbreakStocks = await getOutbreakStocks();
 
         for (const sub of subscribers) {
@@ -326,7 +326,7 @@ export class MessagePushService {
                             ai_impact: '', ai_horizon: '', ai_keywords: info.keywords, ai_summary: '',
                         });
                     }
-                    // 微信风口爆发暂用飞书兜底，后续可扩展模板消息
+                    // 微信爆发风口提醒暂用飞书兜底，后续可扩展模板消息
                     if (hasOutbreak) {
                         const card = buildUnifiedCard(label, [], outbreakStocks, scheduleLabel);
                         const sent = await sendFeishuCard(sub.feishu_open_id, card);

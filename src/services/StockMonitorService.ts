@@ -63,6 +63,37 @@ function normalizeImpact(value: string | undefined): StockInfoImpact | undefined
         : undefined;
 }
 
+async function enrichIndustry(events: MonitorEventItem[]): Promise<MonitorEventItem[]> {
+    if (events.length === 0) return events;
+    const symbols = [...new Set(events.map(e => e.symbol).filter(Boolean))];
+    if (symbols.length === 0) return events;
+
+    try {
+        const result = await pool.query(
+            `SELECT symbol, sector_name
+             FROM stock_concept_mapping
+             WHERE symbol = ANY($1)
+             ORDER BY symbol, sector_name`,
+            [symbols],
+        );
+
+        const sectorMap = new Map<string, string[]>();
+        for (const row of result.rows) {
+            if (!sectorMap.has(row.symbol)) sectorMap.set(row.symbol, []);
+            sectorMap.get(row.symbol)!.push(row.sector_name);
+        }
+
+        for (const event of events) {
+            const sectors = sectorMap.get(event.symbol);
+            event.industry = sectors ? sectors.slice(0, 2).join(' · ') : '';
+        }
+    } catch (err) {
+        console.error('enrichIndustry failed:', err);
+    }
+
+    return events;
+}
+
 function mapJudgementToEvent(row: StockInfoJudgementRow): MonitorEventItem {
     return {
         event_id: `stock_info:${row.id}`,
@@ -111,6 +142,8 @@ export class StockMonitorService {
         const filteredEvents = cycle
             ? events.filter(event => event.cycle === cycle)
             : events;
+
+        await enrichIndustry(filteredEvents);
 
         return {
             total: cycle ? filteredEvents.length : result.total,
@@ -198,6 +231,8 @@ export class StockMonitorService {
         if (cycle) {
             events = events.filter(event => event.cycle === cycle);
         }
+
+        await enrichIndustry(events);
 
         return {
             total: cycle ? events.length : Number(countResult.rows[0]?.total || 0),
