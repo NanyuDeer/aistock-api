@@ -17,6 +17,7 @@ import pool from '../db';
 import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
 import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
+import { TushareQuoteService } from './TushareQuoteService';
 
 // ==================== 类型定义 ====================
 
@@ -57,6 +58,12 @@ interface StockResonanceSignal {
     resonanceScore: number;
     /** 共振等级 */
     resonanceLevel: 'critical' | 'high' | 'medium' | 'low';
+    /** 最新股价 */
+    price: number | null;
+    /** 涨跌幅(%) */
+    changePct: number | null;
+    /** 板块信息（同花顺验证板块或概念共振） */
+    sectorInfo: string;
     /** 概念共振信息（共振一：细分概念交叉验证） */
     conceptResonance: {
         conceptName: string;       // 匹配到的细分概念
@@ -344,6 +351,9 @@ export class HotBurstService {
                 thsSectorRank,
                 resonanceScore: score,
                 resonanceLevel: level,
+                price: null,
+                changePct: null,
+                sectorInfo: thsSectorName || stockConceptMap.get(stock.symbol)?.conceptName || '',
                 conceptResonance: stockConceptMap.has(stock.symbol) ? {
                     conceptName: stockConceptMap.get(stock.symbol)!.conceptName,
                     clsCount: stockConceptMap.get(stock.symbol)!.clsCount,
@@ -384,6 +394,21 @@ export class HotBurstService {
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个共振信号`);
 
+        // 批量获取股价（并发，限制并发数避免压垮接口）
+        const QUOTE_CONCURRENCY = 5;
+        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
+            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
+            await Promise.all(batch.map(async (signal) => {
+                try {
+                    const quote = await TushareQuoteService.getQuote(signal.symbol, 'core');
+                    signal.price = quote['最新价'] ?? null;
+                    signal.changePct = quote['涨跌幅'] ?? null;
+                } catch (err) {
+                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+                }
+            }));
+        }
+
         const result: HotBurstResult = {
             update_time: now,
             total_stocks_checked: hotStocks.length,
@@ -397,7 +422,54 @@ export class HotBurstService {
         HotBurstService.lastDetectResult = result;
         HotBurstService.lastDetectTime = Date.now();
 
+        // 保存到历史表（不阻塞返回）
+        HotBurstService.saveHistory(result).catch(() => {});
+
         return result;
+    }
+
+    /** 将检测结果保存到历史表 */
+    static async saveHistory(result: HotBurstResult): Promise<void> {
+        if (!result.outbreaks.length) return;
+        try {
+            const detectedAt = result.update_time;
+            const rows = result.outbreaks.map(s => [
+                detectedAt, s.symbol, s.stockName || s.symbol,
+                s.resonanceScore, s.resonanceLevel,
+                s.price, s.changePct, s.sectorInfo,
+                [...new Set([...(s.newsKeywords || []), ...(s.feishuKeywords || [])])].join('、'),
+                s.newsCount, s.feishuMessageCount, s.thsVerified,
+            ]);
+            const placeholders = rows.map((_, i) =>
+                `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, $${i * 12 + 11}, $${i * 12 + 12})`
+            ).join(', ');
+            const values = rows.flat();
+            await pool.query(
+                `INSERT INTO hot_burst_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified)
+                 VALUES ${placeholders}`,
+                values
+            );
+            console.log(`[HotBurst] 保存 ${rows.length} 条历史记录`);
+        } catch (err) {
+            console.error('[HotBurst] 保存历史记录失败:', (err as Error).message);
+        }
+    }
+
+    /** 查询历史热点爆发记录 */
+    static async getHistory(limit: number = 50, offset: number = 0): Promise<{ total: number; records: any[] }> {
+        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM hot_burst_history');
+        const total = countResult.rows[0]?.total || 0;
+
+        const result = await pool.query(
+            `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
+                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+             FROM hot_burst_history
+             ORDER BY detected_at DESC, resonance_score DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+
+        return { total, records: result.rows };
     }
 
     /** 最近一次检测结果缓存 */

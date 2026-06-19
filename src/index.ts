@@ -149,6 +149,7 @@ app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageContro
 // 热点爆发三步检测
 app.post('/api/cn/hot-burst/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
 app.get('/api/cn/hot-burst', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
+app.get('/api/cn/hot-burst/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
 
 // 飞书OAuth授权
 app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
@@ -543,6 +544,30 @@ async function start() {
         console.log('[DB] stock_concept_mapping table ready');
     } catch (err: any) {
         console.warn('[DB] stock_concept_mapping table check:', err.message);
+    }
+
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS hot_burst_history (
+                id SERIAL PRIMARY KEY,
+                detected_at TIMESTAMP NOT NULL,
+                symbol VARCHAR(20) NOT NULL,
+                stock_name VARCHAR(50) NOT NULL,
+                resonance_score INT NOT NULL,
+                resonance_level VARCHAR(20) NOT NULL,
+                price NUMERIC(10,2),
+                change_pct NUMERIC(8,2),
+                sector_info TEXT DEFAULT '',
+                keywords TEXT DEFAULT '',
+                news_count INT DEFAULT 0,
+                feishu_count INT DEFAULT 0,
+                ths_verified BOOLEAN DEFAULT false
+            )
+        `);
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_hot_burst_history_time ON hot_burst_history(detected_at DESC)');
+        console.log('[DB] hot_burst_history table ready');
+    } catch (err: any) {
+        console.warn('[DB] hot_burst_history table check:', err.message);
     }
 
     try {

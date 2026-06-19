@@ -160,4 +160,21 @@ export class WindLeaderController {
             createResponse(res, 500, errMsg);
         }
     }
+
+    /**
+     * GET /api/cn/hot-burst/history
+     * 查询历史热点爆发推送记录
+     */
+    static async getHotBurstHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 200);
+            const offset = Math.max(parseInt(String(req.query.offset || '0'), 10), 0);
+            const result = await HotBurstService.getHistory(limit, offset);
+            createResponse(res, 200, 'success', result);
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[WindLeaderController] getHotBurstHistory error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
 }
