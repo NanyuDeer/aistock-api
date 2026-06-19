@@ -384,7 +384,7 @@ export class HotBurstService {
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个共振信号`);
 
-        return {
+        const result: HotBurstResult = {
             update_time: now,
             total_stocks_checked: hotStocks.length,
             resonance_count: resonanceCount,
@@ -392,13 +392,37 @@ export class HotBurstService {
             outbreaks,
             hot_concepts: hotConcepts,
         };
+
+        // 更新缓存
+        HotBurstService.lastDetectResult = result;
+        HotBurstService.lastDetectTime = Date.now();
+
+        return result;
     }
+
+    /** 最近一次检测结果缓存 */
+    private static lastDetectResult: HotBurstResult | null = null;
+    private static lastDetectTime: number = 0;
+    private static readonly DETECT_CACHE_TTL = 6 * 3600 * 1000; // 6小时缓存
 
     /**
      * 获取最近的热点爆发检测结果
-     * 短期方案：返回 null 让前端调用 detectHotBurst 获取最新数据
+     * 优先返回缓存，缓存过期则执行一次检测
      */
     static async getRecentBursts(_hours: number = 6): Promise<HotBurstResult | null> {
-        return null;
+        // 如果有缓存且未过期，直接返回
+        if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
+            return HotBurstService.lastDetectResult;
+        }
+        // 缓存过期或无缓存，执行一次检测
+        try {
+            const result = await HotBurstService.detectHotBurst();
+            HotBurstService.lastDetectResult = result;
+            HotBurstService.lastDetectTime = Date.now();
+            return result;
+        } catch (err) {
+            console.error('[HotBurst] getRecentBursts 检测失败，返回旧缓存:', (err as Error).message);
+            return HotBurstService.lastDetectResult;
+        }
     }
 }

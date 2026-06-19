@@ -139,38 +139,29 @@ async function getLeaderStocksForPush(): Promise<LeaderStockData[]> {
         const data = JSON.parse(raw);
         const sectors = Array.isArray(data?.hot_sectors) ? data.hot_sectors : [];
 
-        // 收集所有板块的main_stocks，附带板块名
-        const allStocks: LeaderStockData[] = [];
-        for (const sector of sectors) {
+        // 取score最高的前3个板块，每个板块取1只龙头股
+        const sortedSectors = [...sectors]
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+            .slice(0, 3);
+
+        const result: LeaderStockData[] = [];
+        for (const sector of sortedSectors) {
             const sectorName = sector.name || '';
             const mainStocks = Array.isArray(sector.main_stocks) ? sector.main_stocks : [];
-            for (const stock of mainStocks) {
-                allStocks.push({
-                    name: stock.name || '',
-                    code: stock.code || '',
-                    industry: sectorName,
-                    change_pct: Number(stock.change_pct) || 0,
-                    reason: stock.reason || '',
-                    score: Number(stock.score) || 0,
-                });
-            }
+            if (mainStocks.length === 0) continue;
+            // 取该板块得分最高的龙头股
+            const best = [...mainStocks].sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+            result.push({
+                name: best.name || '',
+                code: best.code || '',
+                industry: sectorName,
+                change_pct: Number(best.change_pct) || 0,
+                reason: best.reason || '',
+                score: Number(best.score) || 0,
+            });
         }
 
-        // 按score降序排列
-        allStocks.sort((a, b) => b.score - a.score);
-
-        // 跨板块去重（同一股票只保留得分最高的板块）
-        const usedCodes = new Set<string>();
-        const deduped: LeaderStockData[] = [];
-        for (const stock of allStocks) {
-            if (!usedCodes.has(stock.code)) {
-                usedCodes.add(stock.code);
-                deduped.push(stock);
-            }
-            if (deduped.length >= 3) break;
-        }
-
-        return deduped;
+        return result.slice(0, 3);
     } catch (err: any) {
         console.error('[MessagePush] 读取龙头股数据失败:', err?.message || err);
         return [];

@@ -952,11 +952,12 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
 
     // 构建HotConcept列表
     const candidates: HotConcept[] = aiSectors.map(sector => {
-        // 评分：上榜频次权重最高(60%) + 平均涨幅(25%) + 最新涨幅(15%)
+        // 评分：上榜频次(40%) + 资金净流入(30%) + 平均涨幅(20%) + 最新涨幅(10%)
         const freqScore = Math.min(10, sector.frequency * 1.2);
         const avgChangeScore = Math.min(10, Math.abs(sector.avgZf5) * 1.5);
         const latestChangeScore = Math.min(10, Math.abs(sector.latestZf5) * 1.0);
-        const score = Math.round((freqScore * 6.0 + avgChangeScore * 2.5 + latestChangeScore * 1.5) * 100) / 100;
+        // 资金评分初始为0，补充资金数据后重新计算
+        const score = Math.round((freqScore * 4.0 + avgChangeScore * 2.0 + latestChangeScore * 1.0) * 100) / 100;
 
         return {
             code: sector.code,
@@ -1059,6 +1060,41 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
             }
         }
         console.log(`[HotSectorAnalyzer] 资金流向数据获取成功: ${moneyflowData.length}条`);
+
+        // 补充资金数据后重新计算评分
+        // 收集所有板块的net_inflow用于归一化
+        const inflows = result.map(c => c.net_inflow).filter(v => v !== 0);
+        const hasFundData = inflows.length > 0;
+
+        if (hasFundData) {
+            // 有资金数据：评分 = 频次(40%) + 资金净流入(30%) + 平均涨幅(20%) + 最新涨幅(10%)
+            const maxInflow = Math.max(...inflows);
+            const minOutflow = Math.min(...inflows);
+            const absMax = Math.max(Math.abs(maxInflow), Math.abs(minOutflow), 1);
+
+            for (const concept of result) {
+                const freqScore = Math.min(10, concept.frequency * 1.2);
+                const avgChangeScore = Math.min(10, Math.abs(concept.avg_change) * 1.5);
+                const latestChangeScore = Math.min(10, Math.abs(concept.today_change) * 1.0);
+
+                let fundScore = 5;
+                if (concept.net_inflow > 0) {
+                    fundScore = 5 + 5 * Math.min(1, concept.net_inflow / absMax);
+                } else if (concept.net_inflow < 0) {
+                    fundScore = 5 - 5 * Math.min(1, Math.abs(concept.net_inflow) / absMax);
+                }
+
+                concept.score = Math.round((freqScore * 4.0 + fundScore * 3.0 + avgChangeScore * 2.0 + latestChangeScore * 1.0) * 100) / 100;
+            }
+        } else {
+            // 无资金数据：回退到旧逻辑 评分 = 频次(60%) + 平均涨幅(25%) + 最新涨幅(15%)
+            for (const concept of result) {
+                const freqScore = Math.min(10, concept.frequency * 1.2);
+                const avgChangeScore = Math.min(10, Math.abs(concept.avg_change) * 1.5);
+                const latestChangeScore = Math.min(10, Math.abs(concept.today_change) * 1.0);
+                concept.score = Math.round((freqScore * 6.0 + avgChangeScore * 2.5 + latestChangeScore * 1.5) * 100) / 100;
+            }
+        }
     } catch (err: any) {
         console.warn(`[HotSectorAnalyzer] 资金流向数据获取失败: ${err?.message || err}`);
     }
