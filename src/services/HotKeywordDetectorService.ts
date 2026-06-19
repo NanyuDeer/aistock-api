@@ -15,7 +15,7 @@
 import * as cheerio from 'cheerio';
 import { formatToChinaTime } from '../utils/datetime';
 import { cailianpressThrottler } from '../utils/throttlers';
-import { getThsIndex } from './TushareService';
+import { getThsIndex, tushareRequest } from './TushareService';
 import pool from '../db';
 
 // ==================== 9维度关键词体系 ====================
