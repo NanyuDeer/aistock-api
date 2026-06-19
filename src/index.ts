@@ -531,6 +531,21 @@ async function start() {
     }
 
     try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS stock_concept_mapping (
+                id SERIAL PRIMARY KEY,
+                symbol VARCHAR(20) NOT NULL,
+                sector_name VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(symbol, sector_name)
+            )
+        `);
+        console.log('[DB] stock_concept_mapping table ready');
+    } catch (err: any) {
+        console.warn('[DB] stock_concept_mapping table check:', err.message);
+    }
+
+    try {
         await redis.ping();
         console.log('[Redis] Connected successfully');
     } catch (err: any) {
