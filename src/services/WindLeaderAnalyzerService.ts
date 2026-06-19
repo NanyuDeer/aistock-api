@@ -704,7 +704,7 @@ async function isAIRelatedByAI(name: string): Promise<boolean | null> {
 
         const resp = await fetch(chatUrl, {
             method: 'POST',
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(20000),  // 20秒超时，32B模型响应较慢
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
@@ -938,11 +938,15 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
             unknownSectors.push(stat);
         }
     }
-    // 对未命中关键词的板块，查询AI判断缓存或调用AI
-    for (const stat of unknownSectors) {
-        const isRelated = await isAIRelatedSector(stat.name);
-        if (isRelated) {
-            aiSectors.push(stat);
+    // 对未命中关键词的板块，查询AI判断缓存或调用AI（并发执行，限制并发数避免压垮AI API）
+    const AI_JUDGE_CONCURRENCY = 5;
+    for (let i = 0; i < unknownSectors.length; i += AI_JUDGE_CONCURRENCY) {
+        const batch = unknownSectors.slice(i, i + AI_JUDGE_CONCURRENCY);
+        const results = await Promise.all(
+            batch.map(async stat => ({ stat, isRelated: await isAIRelatedSector(stat.name) }))
+        );
+        for (const { stat, isRelated } of results) {
+            if (isRelated) aiSectors.push(stat);
         }
     }
     console.log(`[HotSectorAnalyzer] AI相关板块: ${aiSectors.length} 个 (共 ${sectorStats.size} 个板块)`);
@@ -1600,7 +1604,7 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
 
         const resp = await fetch(chatUrl, {
             method: 'POST',
-            signal: AbortSignal.timeout(15000),  // 15秒超时，免费API响应较慢
+            signal: AbortSignal.timeout(45000),  // 45秒超时，32B模型复杂分析需要更长时间
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,

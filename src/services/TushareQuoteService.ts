@@ -103,17 +103,23 @@ export class TushareQuoteService {
         ]);
         const basic = basicRow.length > 0 ? basicRow[0] : null;
 
-        if (!dailyRow) {
-            throw new Error(`Tushare行情接口无数据: ${symbol}`);
+        // 节假日/休市时 fetchDaily 返回 null，回退到 fetchRecentDaily 查询最近有数据的交易日
+        let daily = dailyRow;
+        if (!daily) {
+            const recentRows = await fetchRecentDaily(symbol, tradeDate, 1);
+            if (recentRows.length === 0) {
+                throw new Error(`Tushare行情接口无数据: ${symbol}`);
+            }
+            daily = recentRows[0];
         }
 
         let volumeRatio: number | null = null;
         if (level === 'activity') {
-            const todayVol = Number(dailyRow.vol) || 0;
+            const todayVol = Number(daily.vol) || 0;
             volumeRatio = await calcVolumeRatio(symbol, tradeDate, todayVol);
         }
 
-        return this.buildQuote(symbol, dailyRow, basic, level, volumeRatio);
+        return this.buildQuote(symbol, daily, basic, level, volumeRatio);
     }
 
     private static buildQuote(
