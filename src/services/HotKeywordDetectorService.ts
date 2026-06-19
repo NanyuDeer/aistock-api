@@ -151,14 +151,56 @@ const STOCK_CODE_RE = /\b([036]\d{5})\b/g;
 /** 匹配 "中际旭创(300308)" "宁德时代：300750" "茅台-600519" 等模式 */
 const STOCK_NAME_CODE_RE = /([\u4e00-\u9fff]{2,8})\s*[（(:：\-—]\s*([036]\d{5})\s*[）):]?/g;
 
+// ==================== A股名称→代码映射 ====================
+
+let stockNameMap = new Map<string, { symbol: string; name: string }>();
+let stockNameMapLoaded = false;
+let stockNameMapLoading: Promise<void> | null = null;
+
+/** 按名称长度降序排列的名称数组，用于匹配 */
+let sortedNames: { symbol: string; name: string }[] = [];
+
+/** 加载 A 股名称→代码映射（懒加载，首次调用时从 Tushare 拉取） */
+export async function loadStockNameMap(): Promise<void> {
+    if (stockNameMapLoaded) return;
+    if (stockNameMapLoading) {
+        await stockNameMapLoading;
+        return;
+    }
+    stockNameMapLoading = (async () => {
+        try {
+            const rows = await tushareRequest('stock_basic', { exchange: '', list_status: 'L' }, 'ts_code,symbol,name');
+            for (const row of rows) {
+                const name = (row.name || '').trim();
+                const symbol = (row.symbol || '').trim();
+                if (name && symbol && name.length >= 2) {
+                    stockNameMap.set(name.toLowerCase(), { symbol, name });
+                }
+            }
+            // 按名称长度降序排列，优先匹配更长的名称（如"中际旭创"优先于"中际"）
+            sortedNames = Array.from(stockNameMap.values()).sort((a, b) => b.name.length - a.name.length);
+            console.log(`[HotKeywordDetector] A股名称映射加载完成: ${stockNameMap.size} 只`);
+            stockNameMapLoaded = true;
+        } catch (err) {
+            console.warn('[HotKeywordDetector] A股名称映射加载失败:', (err as Error).message);
+            stockNameMapLoaded = true; // 失败也标记为已加载，避免反复重试
+        } finally {
+            stockNameMapLoading = null;
+        }
+    })();
+    await stockNameMapLoading;
+}
+
 /**
  * 从文本中提取所有 A 股代码及其关联名称
  * 返回 Map<symbol, stockName | ''>
+ *
+ * 注意：调用前需先 await loadStockNameMap() 预加载名称映射，否则仅匹配代码
  */
 export function extractStockCodes(text: string): Map<string, string> {
     const stocks = new Map<string, string>();
 
-    // 优先匹配"名称(代码)"模式，可获取名称
+    // 1. 优先匹配"名称(代码)"模式，可获取名称
     for (const m of text.matchAll(STOCK_NAME_CODE_RE)) {
         const name = m[1].trim();
         const code = m[2];
@@ -167,11 +209,21 @@ export function extractStockCodes(text: string): Map<string, string> {
         }
     }
 
-    // 补充匹配裸代码，补充可能遗漏的代码
+    // 2. 补充匹配裸代码，补充可能遗漏的代码
     for (const m of text.matchAll(STOCK_CODE_RE)) {
         const code = m[0];
         if (!stocks.has(code)) {
             stocks.set(code, '');
+        }
+    }
+
+    // 3. 通过 A 股名称匹配（解决快讯中只有公司名称、无代码的情况）
+    // 遍历名称列表，用 includes 检查文本中是否包含公司名称
+    for (const entry of sortedNames) {
+        if (text.includes(entry.name)) {
+            if (!stocks.has(entry.symbol) || !stocks.get(entry.symbol)) {
+                stocks.set(entry.symbol, entry.name);
+            }
         }
     }
 
@@ -249,43 +301,124 @@ async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100): Pro
 
 // ==================== 格隆汇快讯爬取 ====================
 
-const GELONGHUI_URL = 'https://www.gelonghui.com/api/live/v3/live/list';
+const GELONGHUI_URL = 'https://www.gelonghui.com/live/?channelId=AStock';
 const GELONGHUI_HEADERS: Record<string, string> = {
-    'Accept': 'application/json, text/plain, */*',
-    'Content-Type': 'application/json;charset=UTF-8',
-    'Origin': 'https://www.gelonghui.com',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
     'Referer': 'https://www.gelonghui.com/live',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
 };
+
+/**
+ * 解析格隆汇网页中的 window.__NUXT__ 数据，提取快讯列表
+ *
+ * 格隆汇使用 Nuxt.js SSR，页面内嵌 window.__NUXT__=(function(a,b,c){...})("arg1","arg2",...)
+ * 需要解析 IIFE 的实参列表，建立变量名→值的映射，再匹配快讯条目
+ */
+export function parseGelonghuiNuxtData(html: string): any[] {
+    const marker = 'window.__NUXT__=';
+    const idx = html.indexOf(marker);
+    if (idx < 0) return [];
+
+    const dataStart = idx + marker.length;
+    const scriptEnd = html.indexOf('</script>', dataStart);
+    const nuxtData = scriptEnd > 0 ? html.substring(dataStart, scriptEnd) : html.substring(dataStart);
+
+    // 解析 IIFE 实参：window.__NUXT__=(function(a,b,c){...})("arg1","arg2",...)
+    // 注意：格隆汇的实参列表分隔符是 }(" 而非 })("，需要用 lastIndexOf('}(') 定位
+    const lastParen = nuxtData.lastIndexOf('}(');
+    const argValues: string[] = [];
+    if (lastParen > 0) {
+        let argStr = nuxtData.substring(lastParen + 2).trim();
+        // 去除结尾的 ); 或 )
+        argStr = argStr.replace(/\)\s*;?\s*$/, '');
+        // 匹配字符串、数字、布尔、null、undefined 实参
+        const argRegex = /("(?:[^"\\]|\\.)*"|\d+|true|false|null|undefined)/g;
+        let am: RegExpExecArray | null;
+        while ((am = argRegex.exec(argStr)) !== null) {
+            let val = am[1];
+            if (val.startsWith('"')) {
+                // 字符串字面量，去除引号并反转义
+                val = val.slice(1, -1).replace(/\\u002F/g, '/').replace(/\\n/g, '\n').replace(/\\"/g, '"');
+            }
+            argValues.push(val);
+        }
+    }
+
+    // 建立变量名→实参值的映射：a→argValues[0], b→argValues[1], ...
+    const varMap: Record<string, string> = {};
+    const varNames = 'abcdefghijklmnopqrstuvwxyz';
+    for (let i = 0; i < argValues.length && i < varNames.length; i++) {
+        varMap[varNames[i]] = argValues[i];
+    }
+
+    // 匹配快讯条目：{id:123,title:d,content:"...",createTimestamp:i,...}
+    // title 和 createTimestamp 可能是变量引用（如 d、i），需要从 varMap 解析
+    const entryRegex = /\{id:(\d+),title:([^,]+?),createTimestamp:([a-z0-9]+)[\s\S]*?content:"((?:[^"\\]|\\.)*)"/g;
+    const entries: any[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = entryRegex.exec(nuxtData)) !== null) {
+        const id = match[1];
+        const titleRaw = match[2];
+        const tsRaw = match[3];
+        let content = match[4];
+
+        // 反转义 content
+        content = content.replace(/\\u002F/g, '/').replace(/\\n/g, '\n').replace(/\\"/g, '"');
+
+        // 解析 title：可能是变量引用（如 d）或字符串字面量
+        let title = '';
+        if (/^[a-z]$/.test(titleRaw)) {
+            title = varMap[titleRaw] || '';
+        } else if (titleRaw.startsWith('"')) {
+            title = titleRaw.replace(/^"|"$/g, '').replace(/\\u002F/g, '/').replace(/\\"/g, '"');
+        } else {
+            title = titleRaw;
+        }
+
+        // 解析 createTimestamp：可能是变量引用或数字字面量
+        let ts = 0;
+        if (/^[a-z]$/.test(tsRaw)) {
+            ts = Number(varMap[tsRaw]) || 0;
+        } else {
+            ts = Number(tsRaw) || 0;
+        }
+
+        entries.push({ id, title, content, createTimestamp: ts });
+    }
+
+    return entries;
+}
 
 async function fetchGelonghuiNews(limit: number = 50): Promise<TelegraphItem[]> {
     try {
-        const response = await fetch(`${GELONGHUI_URL}?count=${limit}`, {
+        const response = await fetch(GELONGHUI_URL, {
             method: 'GET',
             headers: GELONGHUI_HEADERS,
         });
 
-        if (!response.ok) return [];
+        if (!response.ok) {
+            console.warn(`[HotKeywordDetector] 格隆汇网页请求失败: HTTP ${response.status}`);
+            return [];
+        }
 
-        const rawData: any = await response.json();
-        const entries = rawData?.data?.list || rawData?.data || [];
+        const html = await response.text();
+        const entries = parseGelonghuiNuxtData(html);
+
         const items: TelegraphItem[] = [];
-
         for (const entry of entries) {
-            if (!entry || typeof entry !== 'object') continue;
-            const text = (entry.title || entry.content || entry.text || '').trim();
+            const text = (entry.title || entry.content || '').trim();
             if (!text) continue;
 
-            const ts = entry.created_at || entry.timestamp || 0;
-            const tsNumber = Number(ts);
-
+            const ts = entry.createTimestamp || 0;
             items.push({
-                id: String(entry.id || entry.sn || ''),
+                id: String(entry.id || ''),
                 title: text.slice(0, 100),
-                content: text,
-                time: tsNumber ? formatToChinaTime(tsNumber < 1e12 ? tsNumber * 1000 : tsNumber) : '',
-                timestamp: tsNumber,
+                content: entry.content || text,
+                time: ts ? formatToChinaTime(ts < 1e12 ? ts * 1000 : ts) : '',
+                timestamp: ts,
             });
+            if (items.length >= limit) break;
         }
 
         return items;
@@ -494,15 +627,18 @@ async function saveStockMentionSnapshot(
     }
 }
 
-/** 查询个股历史提及频次（最近N小时） */
-async function getStockMentionHistory(symbol: string, hours: number = 2): Promise<{
+/** 查询个股历史提及频次（滚动窗口，默认最近7天，排除本次刚写入的快照） */
+async function getStockMentionHistory(symbol: string, hours: number = 168): Promise<{
     snapshot_time: string;
     mention_count: number;
 }[]> {
+    // 排除最近10分钟内的快照（本次运行刚写入的），只统计历史基准
     const result = await pool.query(
         `SELECT snapshot_time, mention_count
          FROM stock_mention_snapshots
-         WHERE symbol = $1 AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+         WHERE symbol = $1
+           AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+           AND snapshot_time < NOW() - INTERVAL '10 minutes'
          ORDER BY snapshot_time ASC`,
         [symbol]
     );
@@ -535,15 +671,18 @@ async function saveConceptMentionSnapshot(
     }
 }
 
-/** 查询概念历史提及频次（最近N小时） */
+/** 查询概念历史提及频次（滚动窗口，默认最近7天，排除本次刚写入的快照） */
 async function getConceptMentionHistory(
     conceptName: string,
-    hours: number = 2,
+    hours: number = 168,
 ): Promise<{ snapshot_time: string; mention_count: number; source: string }[]> {
+    // 排除最近10分钟内的快照（本次运行刚写入的），只统计历史基准
     const result = await pool.query(
         `SELECT snapshot_time, mention_count, source
          FROM concept_mention_snapshots
-         WHERE concept_name = $1 AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+         WHERE concept_name = $1
+           AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+           AND snapshot_time < NOW() - INTERVAL '10 minutes'
          ORDER BY snapshot_time ASC`,
         [conceptName],
     );
@@ -810,7 +949,7 @@ export class HotKeywordDetectorService {
         }
         await saveStockMentionSnapshot(glhStockMap, '格隆汇');
 
-        // 4. 爆发检测
+        // 4. 爆发检测（滚动窗口：与最近7天日均频次对比）
         const hotStocks: HotStockResult[] = [];
         const now = new Date().toISOString();
 
@@ -818,11 +957,12 @@ export class HotKeywordDetectorService {
             // 仅出现1次的噪声过滤
             if (data.count < 2) continue;
 
-            const history = await getStockMentionHistory(symbol, 2);
+            const history = await getStockMentionHistory(symbol);
+            // 计算最近7天的日均提及频次作为历史基准
             let previousCount = 0;
-            if (history.length > 1) {
-                const prev = history.slice(0, -1);
-                previousCount = prev.reduce((sum, h) => sum + h.mention_count, 0);
+            if (history.length > 0) {
+                const totalMentions = history.reduce((sum, h) => sum + h.mention_count, 0);
+                previousCount = Math.round((totalMentions / 7) * 100) / 100; // 日均
             }
 
             let surgeRatio = 0;
@@ -952,7 +1092,7 @@ export class HotKeywordDetectorService {
 
         console.log(`[HotKeywordDetector] 共振一交叉验证: ${crossVerifiedConcepts.size} 个概念通过`);
 
-        // 5. 爆发检测：对交叉验证通过的概念，与历史对比
+        // 5. 爆发检测：对交叉验证通过的概念，与最近7天日均频次对比
         const hotConcepts: HotConceptResult[] = [];
         const now = new Date().toISOString();
 
@@ -960,13 +1100,13 @@ export class HotKeywordDetectorService {
             // 至少两个源各出现1次（合计>=2）
             if (data.totalCount < 2) continue;
 
-            const history = await getConceptMentionHistory(conceptName, 2);
+            const history = await getConceptMentionHistory(conceptName);
 
-            // 计算历史平均频次
+            // 计算最近7天的日均提及频次作为历史基准
             let previousCount = 0;
-            if (history.length > 1) {
-                const previousSnapshots = history.slice(0, -1);
-                previousCount = previousSnapshots.reduce((sum, h) => sum + h.mention_count, 0);
+            if (history.length > 0) {
+                const totalMentions = history.reduce((sum, h) => sum + h.mention_count, 0);
+                previousCount = Math.round((totalMentions / 7) * 100) / 100; // 日均
             }
 
             // 爆发比率

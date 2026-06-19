@@ -1,5 +1,5 @@
 import pool from '../db';
-import { extractStockCodes } from './HotKeywordDetectorService';
+import { extractStockCodes, loadStockNameMap } from './HotKeywordDetectorService';
 
 export interface ResearchReportStock {
   symbol: string;
@@ -26,6 +26,9 @@ export async function findResearchReportMessagesForStock(
   symbol: string,
   hours: number = 24,
 ): Promise<ResearchReportStock[]> {
+  // 预加载 A 股名称映射（用于公司名称→代码匹配）
+  await loadStockNameMap();
+
   const result = await pool.query(
     `SELECT id, chat_name, message_id, text, stock_codes, received_at
      FROM feishu_messages
