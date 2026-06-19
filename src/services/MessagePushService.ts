@@ -1,17 +1,19 @@
 /**
  * 统一消息推送服务
  *
- * 每日2次推送（9:00 / 17:00）：
- * - 股票异动监测提醒 + 爆发风口提醒，合并为一条消息
- * - 标签：【股票异动监测提醒】 / 【爆发风口提醒】 / 【股票异动监测提醒x爆发风口提醒】
- * - 支持多渠道：飞书卡片 / 微信文本
+ * 推送架构：
+ * 1. 龙头股日报推送（8:30）：定时读取 hot-sectors.json → 微信+飞书
+ * 2. 热点爆发推送（9:00/17:00）：定时检测三重共振信号 → 微信+飞书
+ * 3. 自选股异动推送（事件驱动）：爬虫周期中检测到重大利好/利空 → 微信+飞书
+ *    - 由 StockInfoCrawlService.runCycle() 在8:00/15:00触发
+ *    - 不在此处定时推送，而是通过 StockInfoPushService.push() 事件驱动
  */
 
 import pool from '../db';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import { HotspotOutbreakService } from './HotspotOutbreakService';
+import { HotBurstService } from './HotBurstService';
 
 const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
 const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
@@ -25,14 +27,6 @@ const PUSH_SCHEDULES = [
 ];
 
 // ==================== 标签 ====================
-
-type PushLabel = '【股票异动监测提醒】' | '【爆发风口提醒】' | '【股票异动监测提醒x爆发风口提醒】';
-
-function getPushLabel(hasStockInfo: boolean, hasOutbreak: boolean): PushLabel {
-    if (hasStockInfo && hasOutbreak) return '【股票异动监测提醒x爆发风口提醒】';
-    if (hasStockInfo) return '【股票异动监测提醒】';
-    return '【爆发风口提醒】';
-}
 
 // ==================== 飞书API ====================
 
@@ -75,70 +69,18 @@ interface Subscriber {
     feishu_open_id: string;
     feishu_name: string;
     wechat_openid: string;
-    channel: 'feishu' | 'wechat';
 }
 
 async function getSubscribers(): Promise<Subscriber[]> {
     try {
         const result = await pool.query(
-            `SELECT us.id AS user_id, us.feishu_open_id, us.feishu_name, us.user_openid AS wechat_openid,
-                    CASE WHEN us.feishu_open_id IS NOT NULL AND us.feishu_open_id != '' THEN 'feishu' ELSE 'wechat' END AS channel
+            `SELECT us.id AS user_id, us.feishu_open_id, us.feishu_name, us.user_openid AS wechat_openid
              FROM user_subscriptions us
              WHERE us.status = 'subscribed'
-               AND (us.feishu_open_id != '' OR us.user_openid != '')`,
+               AND (us.feishu_open_id IS NOT NULL AND us.feishu_open_id != ''
+                    OR us.user_openid IS NOT NULL AND us.user_openid != '')`,
         );
         return result.rows;
-    } catch {
-        return [];
-    }
-}
-
-interface FavoriteStock {
-    symbol: string;
-    name: string;
-}
-
-async function getUserFavorites(userId: number): Promise<FavoriteStock[]> {
-    try {
-        const result = await pool.query(
-            `SELECT s.symbol, s.name
-             FROM user_favorites uf
-             JOIN stocks s ON uf.stock_id = s.id
-             WHERE uf.user_id = $1
-             ORDER BY uf.created_at DESC
-             LIMIT 10`,
-            [userId],
-        );
-        return result.rows;
-    } catch {
-        return [];
-    }
-}
-
-interface StockInfoItem {
-    symbol: string;
-    name: string;
-    title: string;
-    source: string;
-    keywords: string[];
-    published_at: string;
-}
-
-async function getRecentStockInfo(symbols: string[], hours: number = 6): Promise<StockInfoItem[]> {
-    try {
-        if (symbols.length === 0) return [];
-        const result = await pool.query(
-            `SELECT DISTINCT ON (si.symbol, si.title) si.symbol, si.name, si.title, si.source, si.keywords, si.published_at
-             FROM stock_info si
-             WHERE si.symbol = ANY($1) AND si.published_at > NOW() - INTERVAL '${hours} hours'
-             ORDER BY si.symbol, si.title, si.published_at DESC
-             LIMIT 20`,
-            [symbols],
-        );
-        return result.rows.map((row: any) => ({
-            ...row,
-            keywords: typeof row.keywords === 'string' ? JSON.parse(row.keywords) : row.keywords || [],
-        }));
     } catch {
         return [];
     }
@@ -151,18 +93,31 @@ interface OutbreakStock {
     reason: string;
 }
 
-async function getOutbreakStocks(): Promise<OutbreakStock[]> {
+async function getOutbreakData(): Promise<{ feishu: OutbreakStock[]; wechat: OutbreakPushData[] }> {
     try {
-        const result = await HotspotOutbreakService.detectOutbreak();
-        return result.outbreaks.slice(0, 3).map(signal => ({
-            name: signal.stockName || signal.symbol,
-            concept: signal.thsSectorName || signal.newsKeywords.join('、'),
-            change_pct: signal.resonanceScore,
-            reason: buildOutbreakReason(signal),
-        }));
+        console.log('[MessagePush] 开始获取热点爆发数据...');
+        const result = await HotBurstService.detectHotBurst();
+        const signals = result.outbreaks.slice(0, 3);
+        console.log(`[MessagePush] 热点爆发检测完成: ${signals.length} 个共振信号`);
+        return {
+            feishu: signals.map(signal => ({
+                name: signal.stockName || signal.symbol,
+                concept: signal.thsSectorName || signal.newsKeywords.join('、'),
+                change_pct: signal.resonanceScore,
+                reason: buildOutbreakReason(signal),
+            })),
+            wechat: signals.map(signal => ({
+                name: signal.stockName || signal.symbol,
+                code: signal.symbol,
+                sector: signal.thsSectorName || signal.newsKeywords.join('、'),
+                resonance_score: signal.resonanceScore,
+                resonance_level: signal.resonanceLevel === 'critical' ? '极高' : signal.resonanceLevel === 'high' ? '高' : signal.resonanceLevel === 'medium' ? '中' : '低',
+                trigger_reason: buildOutbreakReason(signal),
+            })),
+        };
     } catch (err: any) {
-        console.error('[MessagePush] 获取风口爆发数据失败:', err?.message || err);
-        return [];
+        console.error('[MessagePush] 获取热点爆发数据失败:', err?.message || err, err?.stack || '');
+        return { feishu: [], wechat: [] };
     }
 }
 
@@ -222,7 +177,7 @@ async function getLeaderStocksForPush(): Promise<LeaderStockData[]> {
     }
 }
 
-// ==================== 风口爆发数据提取（扩展字段，供微信模板使用） ====================
+// ==================== 热点爆发数据提取（扩展字段，供微信模板使用） ====================
 
 interface OutbreakPushData {
     name: string;
@@ -231,23 +186,6 @@ interface OutbreakPushData {
     resonance_score: number;
     resonance_level: string;
     trigger_reason: string;
-}
-
-async function getOutbreakStocksForWechat(): Promise<OutbreakPushData[]> {
-    try {
-        const result = await HotspotOutbreakService.detectOutbreak();
-        return result.outbreaks.slice(0, 3).map(signal => ({
-            name: signal.stockName || signal.symbol,
-            code: signal.symbol,
-            sector: signal.thsSectorName || signal.newsKeywords.join('、'),
-            resonance_score: signal.resonanceScore,
-            resonance_level: signal.resonanceLevel === 'critical' ? '极高' : signal.resonanceLevel === 'high' ? '高' : signal.resonanceLevel === 'medium' ? '中' : '低',
-            trigger_reason: buildOutbreakReason(signal),
-        }));
-    } catch (err: any) {
-        console.error('[MessagePush] 获取风口爆发微信数据失败:', err?.message || err);
-        return [];
-    }
 }
 
 function buildOutbreakReason(signal: any): string {
@@ -315,7 +253,7 @@ function buildOutbreakFeishuCard(stocks: OutbreakPushData[]): any {
 
     elements.push({
         tag: 'div',
-        text: { tag: 'lark_md', content: '**风口爆发检测到共振信号**' },
+        text: { tag: 'lark_md', content: '**热点爆发检测到共振信号**' },
     });
     elements.push({ tag: 'hr' });
 
@@ -339,7 +277,7 @@ function buildOutbreakFeishuCard(stocks: OutbreakPushData[]): any {
     return {
         config: { wide_screen_mode: true },
         header: {
-            title: { tag: 'plain_text', content: '【风口爆发预警】' },
+            title: { tag: 'plain_text', content: '【热点爆发预警】' },
             template: 'red',
         },
         elements,
@@ -391,99 +329,6 @@ function buildStockInfoFeishuCard(event: StockInfoPushEventData): any {
         },
         elements,
     };
-}
-
-function buildUnifiedCard(
-    label: PushLabel,
-    stockInfos: StockInfoItem[],
-    outbreakStocks: OutbreakStock[],
-    scheduleLabel: string,
-): any {
-    const elements: any[] = [];
-
-    // 标题行
-    elements.push({
-        tag: 'div',
-        text: {
-            tag: 'lark_md',
-            content: `${label} ${scheduleLabel}`,
-        },
-    });
-    elements.push({ tag: 'hr' });
-
-    // 股票异动监测提醒段
-    if (stockInfos.length > 0) {
-        elements.push({
-            tag: 'div',
-            text: { tag: 'plain_text', content: '📊 股票异动监测提醒' },
-        });
-        for (const info of stockInfos.slice(0, 8)) {
-            const kwText = info.keywords.length > 0 ? ` [${info.keywords.slice(0, 3).join('/')}]` : '';
-            elements.push({
-                tag: 'div',
-                text: {
-                    tag: 'lark_md',
-                    content: `**${info.name}**${kwText}\n${info.title}\n<font color="grey">${info.source}</font>`,
-                },
-            });
-            elements.push({ tag: 'hr' });
-        }
-    }
-
-    // 爆发风口提醒段
-    if (outbreakStocks.length > 0) {
-        elements.push({
-            tag: 'div',
-            text: { tag: 'plain_text', content: '🔥 爆发风口提醒' },
-        });
-        for (const stock of outbreakStocks) {
-            const changeStr = stock.change_pct > 0 ? `+${stock.change_pct.toFixed(2)}%` : `${stock.change_pct.toFixed(2)}%`;
-            elements.push({
-                tag: 'div',
-                text: {
-                    tag: 'lark_md',
-                    content: `**${stock.name}** <font color="red">${changeStr}</font>\n板块: ${stock.concept}\n${stock.reason || ''}`,
-                },
-            });
-            elements.push({ tag: 'hr' });
-        }
-    }
-
-    const headerColor = label.includes('爆发风口提醒') ? 'red' : 'blue';
-
-    return {
-        config: { wide_screen_mode: true },
-        header: {
-            title: { tag: 'plain_text', content: label },
-            template: headerColor,
-        },
-        elements,
-    };
-}
-
-function buildWechatText(
-    label: PushLabel,
-    stockInfos: StockInfoItem[],
-    outbreakStocks: OutbreakStock[],
-): string {
-    const lines: string[] = [`${label}`];
-
-    if (stockInfos.length > 0) {
-        lines.push('\n📊 股票异动监测提醒');
-        for (const info of stockInfos.slice(0, 5)) {
-            lines.push(`• ${info.name} ${info.title}`);
-        }
-    }
-
-    if (outbreakStocks.length > 0) {
-        lines.push('\n🔥 爆发风口提醒');
-        for (const stock of outbreakStocks) {
-            const changeStr = stock.change_pct > 0 ? `+${stock.change_pct.toFixed(2)}%` : `${stock.change_pct.toFixed(2)}%`;
-            lines.push(`• ${stock.name} ${changeStr} ${stock.concept}`);
-        }
-    }
-
-    return lines.join('\n');
 }
 
 // ==================== 推送执行 ====================
@@ -575,22 +420,23 @@ export class MessagePushService {
         return { success, fail, detail: { wxMatched: wxResult.matched_users, wxSkipped: wxResult.skipped, feishuCount: feishuSubs.length, logs: wxResult.logs } };
     }
 
-    // ==================== 风口爆发+个股资讯推送 ====================
+    // ==================== 热点爆发+个股资讯推送 ====================
 
-    /** 手动触发风口爆发推送（测试用） */
+    /** 手动触发热点爆发推送（测试用） */
     static async executeOutbreakPush(testData?: any[], force: boolean = false): Promise<{ success: number; fail: number; detail?: any }> {
         const { WechatPushService } = await import('./WechatPushService');
         let outbreakData: OutbreakPushData[];
         if (testData && testData.length > 0) {
             outbreakData = testData;
         } else {
-            outbreakData = await getOutbreakStocksForWechat();
+            const { wechat } = await getOutbreakData();
+            outbreakData = wechat;
         }
         if (outbreakData.length === 0) {
-            console.log('[MessagePush] 无风口爆发数据，跳过推送');
-            return { success: 0, fail: 0, detail: { message: '无风口爆发数据' } };
+            console.log('[MessagePush] 无热点爆发数据，跳过推送');
+            return { success: 0, fail: 0, detail: { message: '无热点爆发数据' } };
         }
-        console.log(`[MessagePush] 检测到 ${outbreakData.length} 只风口爆发股，开始推送`);
+        console.log(`[MessagePush] 检测到 ${outbreakData.length} 只热点爆发股，开始推送`);
 
         // 微信推送
         const wxResult = await WechatPushService.dispatchOutbreakStocks(outbreakData, force);
@@ -621,59 +467,41 @@ export class MessagePushService {
     }
 
     static async executeOutbreakAndStockPush(scheduleLabel: string): Promise<{ success: number; fail: number }> {
-        const subscribers = await getSubscribers();
-        console.log(`[MessagePush] ${scheduleLabel}: ${subscribers.length} 个订阅用户`);
-
+        // 热点爆发定时推送（9:00/17:00）
+        // 注意：自选股异动推送由 StockInfoCrawlService.runCycle() 事件驱动，
+        // 在8:00/15:00爬虫周期中自动触发，不在此处处理
         let success = 0;
         let fail = 0;
 
-        // 全量获取爆发风口提醒股（所有用户共享）
-        const outbreakStocks = await getOutbreakStocks();
+        // 获取热点爆发数据（一次检测，同时生成飞书和微信格式）
+        const { feishu: outbreakFeishu, wechat: outbreakWechat } = await getOutbreakData();
+        if (outbreakWechat.length === 0 && outbreakFeishu.length === 0) {
+            console.log(`[MessagePush] ${scheduleLabel}: 无热点爆发数据，跳过推送`);
+            return { success: 0, fail: 0 };
+        }
 
-        for (const sub of subscribers) {
-            try {
-                // 获取用户自选股资讯
-                const favorites = await getUserFavorites(sub.user_id);
-                const symbols = favorites.map(f => f.symbol);
-                const stockInfos = await getRecentStockInfo(symbols, 6);
+        console.log(`[MessagePush] ${scheduleLabel}: 检测到${outbreakWechat.length}个热点爆发信号`);
 
-                const hasStockInfo = stockInfos.length > 0;
-                const hasOutbreak = outbreakStocks.length > 0;
+        // 微信推送
+        if (outbreakWechat.length > 0) {
+            const { WechatPushService } = await import('./WechatPushService');
+            const wxResult = await WechatPushService.dispatchOutbreakStocks(outbreakWechat);
+            success += wxResult.sent;
+            fail += wxResult.failed;
+            console.log(`[MessagePush] ${scheduleLabel}微信推送: 发送${wxResult.sent}, 跳过${wxResult.skipped}, 失败${wxResult.failed}`);
+        }
 
-                if (!hasStockInfo && !hasOutbreak) continue;
-
-                const label = getPushLabel(hasStockInfo, hasOutbreak);
-
-                if (sub.channel === 'wechat' && sub.wechat_openid) {
-                    // 微信：逐条模板消息推送
-                    const { WechatPushService } = await import('./WechatPushService');
-                    for (const info of stockInfos) {
-                        await WechatPushService.dispatchStockInfoJudgement({
-                            id: 0, symbol: info.symbol, stock_name: info.name,
-                            info_type: 'news', title: info.title, url: '',
-                            published_at: info.published_at,
-                            ai_impact: '', ai_horizon: '', ai_keywords: info.keywords, ai_summary: '',
-                        });
-                    }
-                    // 微信风口爆发：通过模板消息推送
-                    if (hasOutbreak) {
-                        const outbreakData = await getOutbreakStocksForWechat();
-                        if (outbreakData.length > 0) {
-                            await WechatPushService.dispatchOutbreakStocks(outbreakData);
-                        }
-                    }
-                    success++;
-                } else if (sub.feishu_open_id) {
-                    // 飞书：卡片消息
-                    const card = buildUnifiedCard(label, stockInfos, outbreakStocks, scheduleLabel);
-                    const sent = await sendFeishuCard(sub.feishu_open_id, card);
-                    if (sent) success++;
-                    else fail++;
-                }
-            } catch (err: any) {
-                console.error(`[MessagePush] 用户${sub.user_id}推送失败:`, err.message);
-                fail++;
+        // 飞书推送
+        const subscribers = await getSubscribers();
+        const feishuSubs = subscribers.filter(s => s.feishu_open_id);
+        if (feishuSubs.length > 0 && outbreakFeishu.length > 0) {
+            const card = buildOutbreakFeishuCard(outbreakWechat);
+            for (const sub of feishuSubs) {
+                const sent = await sendFeishuCard(sub.feishu_open_id, card);
+                if (sent) success++;
+                else fail++;
             }
+            console.log(`[MessagePush] ${scheduleLabel}飞书推送: ${feishuSubs.length} 个用户`);
         }
 
         console.log(`[MessagePush] ${scheduleLabel}推送完成: 成功${success}, 失败${fail}`);

@@ -28,7 +28,7 @@ function loadData(): any {
         cachedTime = now;
         return cachedData;
     } catch (err) {
-        console.error('[HotSectorService] read hot-sectors.json failed:', err);
+        console.error('[WindLeaderService] read hot-sectors.json failed:', err);
         return cachedData;
     }
 }
@@ -91,7 +91,7 @@ function safeIdPart(value: unknown, fallback: string, maxLength: number): string
 function buildPushId(pushDate: string, stock: any, sectorName: string, chainPosition: string): string {
     const theme = safeIdPart(sectorName, 'theme', 24);
     const chain = safeIdPart(chainPosition, 'core', 12);
-    return `hotsector_${dateCompact(pushDate)}_${stock.code}_${theme}_${chain}`;
+    return `windleader_${dateCompact(pushDate)}_${stock.code}_${theme}_${chain}`;
 }
 
 function formatStock(s: any): any {
@@ -150,7 +150,7 @@ function selectHomeRecommendedStocks(data: any): Array<{ stock: any; sector: any
 
 function collectPushRecordsFromData(data: any): any[] {
     const pushDate = normalizeDateText(data?.update_time);
-    const pushBatchId = `hotsector_${dateCompact(pushDate)}`;
+    const pushBatchId = `windleader_${dateCompact(pushDate)}`;
     const records = new Map<string, any>();
 
     const addStock = (sector: any, stock: any, defaultChainPosition: string, displayRank: number) => {
@@ -172,7 +172,7 @@ function collectPushRecordsFromData(data: any): any[] {
             stock_name: cleanText(stock.name, 80),
             theme: sectorName,
             reason: cleanText(stock.reason || sector?.driver, 1000),
-            strategy_name: 'hot_sector_home_recommendation',
+            strategy_name: 'wind_leader_home_recommendation',
             score: toFiniteNumber(stock.score),
             chain_position: chainPosition,
             source: cleanText(stock.source || sectorName, 120),
@@ -202,7 +202,7 @@ function readPushHistoryFile(): any[] {
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : parsed?.items || [];
     } catch (err) {
-        console.error('[HotSectorService] read push history failed:', err);
+        console.error('[WindLeaderService] read push history failed:', err);
         return [];
     }
 }
@@ -259,7 +259,7 @@ async function enrichPushPricesWithPreviousClose(records: any[]): Promise<any[]>
                 price_basis: previousClose.basis,
             };
         } catch (err) {
-            console.warn(`[HotSectorService] previous close fetch failed: ${record.stock_code}`, (err as Error).message);
+            console.warn(`[WindLeaderService] previous close fetch failed: ${record.stock_code}`, (err as Error).message);
             return record;
         }
     }));
@@ -277,7 +277,7 @@ function mergePushRecord(existing: any, next: any): any {
     };
 }
 
-export class HotSectorService {
+export class WindLeaderService {
     static getAnalysis(limit: number = 8): {
         update_time: string;
         hot_sectors: any[];
@@ -326,7 +326,7 @@ export class HotSectorService {
             await this.appendPotentialPushHistory(data);
             invalidateCache();
         } catch (err) {
-            console.error('[HotSectorService] save hot-sectors.json failed:', err);
+            console.error('[WindLeaderService] save hot-sectors.json failed:', err);
             throw err;
         }
     }

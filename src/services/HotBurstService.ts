@@ -1,5 +1,5 @@
 /**
- * 风口爆发整合服务
+ * 热点爆发整合服务
  *
  * 整合三步数据源（个股代码驱动）：
  * 1. 财联社/格隆汇快讯中提取个股代码，检测个股爆发（HotKeywordDetectorService）
@@ -74,7 +74,7 @@ interface StockResonanceSignal {
     resonance3: { verified: boolean; reportCount: number; latestReportTime?: string };
 }
 
-interface HotspotOutbreakResult {
+interface HotBurstResult {
     update_time: string;
     total_stocks_checked: number;
     resonance_count: number;
@@ -104,7 +104,7 @@ async function fetchThsHotSectors(): Promise<{ name: string; rank: number; chang
             }
         }
     } catch (err) {
-        console.warn('[HotspotOutbreak] 同花顺热榜获取失败:', (err as Error).message);
+        console.warn('[HotBurst] 同花顺热榜获取失败:', (err as Error).message);
     }
     return [];
 }
@@ -196,27 +196,27 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 
 // ==================== 整合服务 ====================
 
-export class HotspotOutbreakService {
+export class HotBurstService {
     /**
-     * 执行完整的三步风口爆发检测（个股代码驱动）：
+     * 执行完整的三步热点爆发检测（个股代码驱动）：
      * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
      * 2. 飞书群消息关联（同只股票是否在群内讨论）
      * 3. 同花顺热榜验证（股票所属板块是否上榜）
      *
      * 关键词退居辅助解释层：附着在共振信号上说明原因
      */
-    static async detectOutbreak(): Promise<HotspotOutbreakResult> {
-        console.log('[HotspotOutbreak] 开始三步风口爆发检测（个股驱动）...');
+    static async detectHotBurst(): Promise<HotBurstResult> {
+        console.log('[HotBurst] 开始三步热点爆发检测（个股驱动）...');
 
         const now = new Date().toISOString();
 
         // ===== Step 1: 个股爆发检测（代码提取替代关键词匹配） =====
         const hotStocks = await HotKeywordDetectorService.detectHotStocks();
-        console.log(`[HotspotOutbreak] Step1: 检测到 ${hotStocks.length} 只爆发个股`);
+        console.log(`[HotBurst] Step1: 检测到 ${hotStocks.length} 只爆发个股`);
 
         // ===== Step 1.5: 细分概念爆发检测（共振一：交叉验证） =====
         const hotConcepts = await HotKeywordDetectorService.detectHotConcepts();
-        console.log(`[HotspotOutbreak] Step1.5: 检测到 ${hotConcepts.length} 个爆发细分概念`);
+        console.log(`[HotBurst] Step1.5: 检测到 ${hotConcepts.length} 个爆发细分概念`);
 
         // 构建：股票代码 → 匹配到的概念列表
         const stockConceptMap = new Map<string, HotConceptResult>();
@@ -249,7 +249,7 @@ export class HotspotOutbreakService {
 
         // ===== Step 2: 飞书群消息关联 =====
         const feishuMessages = await getFeishuMessages(6);
-        console.log(`[HotspotOutbreak] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
+        console.log(`[HotBurst] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
 
         // 构建：股票代码 → 飞书消息数 + 关键词
         const feishuStockMap = new Map<string, { messageCount: number; keywords: Set<string> }>();
@@ -269,7 +269,7 @@ export class HotspotOutbreakService {
 
         // ===== Step 3: 同花顺热榜验证 =====
         const thsHotSectors = await fetchThsHotSectors();
-        console.log(`[HotspotOutbreak] Step3: 同花顺热榜 ${thsHotSectors.length} 个板块`);
+        console.log(`[HotBurst] Step3: 同花顺热榜 ${thsHotSectors.length} 个板块`);
 
         const thsSectorNameSet = new Set(thsHotSectors.map(s => s.name));
         const thsSectorRankMap = new Map(thsHotSectors.map(s => [s.name, s.rank]));
@@ -382,7 +382,7 @@ export class HotspotOutbreakService {
             };
         }
 
-        console.log(`[HotspotOutbreak] 检测完成: ${outbreaks.length} 个共振信号`);
+        console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个共振信号`);
 
         return {
             update_time: now,
@@ -395,10 +395,10 @@ export class HotspotOutbreakService {
     }
 
     /**
-     * 获取最近的风口爆发检测结果
-     * 短期方案：返回 null 让前端调用 detectOutbreak 获取最新数据
+     * 获取最近的热点爆发检测结果
+     * 短期方案：返回 null 让前端调用 detectHotBurst 获取最新数据
      */
-    static async getRecentOutbreaks(_hours: number = 6): Promise<HotspotOutbreakResult | null> {
+    static async getRecentBursts(_hours: number = 6): Promise<HotBurstResult | null> {
         return null;
     }
 }

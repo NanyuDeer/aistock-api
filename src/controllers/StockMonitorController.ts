@@ -7,7 +7,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import { StockMonitorService } from '../services/StockMonitorService';
-import { getStockResonance } from '../services/StockResonanceService';
 import { verifyJwt } from '../utils/jwt';
 
 export class StockMonitorController {
@@ -73,15 +72,9 @@ export class StockMonitorController {
             const cycle = String(req.query.cycle || 'all');
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '20'), 10), 1), 100);
 
-            const [events, resonance] = await Promise.all([
-                StockMonitorService.getEventsByStockCode(stockCode, { cycle, limit }),
-                getStockResonance(stockCode).catch(err => {
-                    console.warn('[StockMonitorController] getStockResonance failed:', err.message);
-                    return null;
-                }),
-            ]);
+            const events = await StockMonitorService.getEventsByStockCode(stockCode, { cycle, limit });
 
-            createResponse(res, 200, 'success', { events, resonance });
+            createResponse(res, 200, 'success', { events });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
             console.error('[TrendHotspotController] getEventsByStock error:', errMsg);

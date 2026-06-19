@@ -1,5 +1,5 @@
 /**
- * 风口爆发股 - 核心分析引擎（TypeScript 版本）
+ * 风口龙头 - 核心分析引擎（TypeScript 版本）
  *
  * 使用同花顺 API + Tushare 数据源
  *
@@ -2588,9 +2588,9 @@ export interface FullAnalysisResult {
     hot_sectors: any[];
 }
 
-export class HotSectorAnalyzerService {
+export class WindLeaderAnalyzerService {
     /**
-     * 执行完整的风口爆发股分析流程
+     * 执行完整的风口龙头分析流程
      *
      * 流程：
      * 1. 从概念板块中识别风口概念
@@ -2602,7 +2602,7 @@ export class HotSectorAnalyzerService {
      * 7. 构建层级流向图
      */
     static async runFullAnalysis(): Promise<FullAnalysisResult> {
-        console.log('[HotSectorAnalyzer] 开始执行风口爆发股分析...');
+        console.log('[WindLeaderAnalyzer] 开始执行风口龙头分析...');
         // 清除缓存，确保获取最新数据
         clearAllCache();
 
@@ -3017,7 +3017,7 @@ export class HotSectorAnalyzerService {
         }
         const dataFile = path.join(dataDir, 'hot-sectors.json');
         fs.writeFileSync(dataFile, JSON.stringify(result, null, 2), 'utf-8');
-        console.log(`[HotSectorAnalyzer] 风口爆发股分析完成，共 ${result.hot_sectors.length} 个板块，结果已保存到 ${dataFile}`);
+        console.log(`[WindLeaderAnalyzer] 风口龙头分析完成，共 ${result.hot_sectors.length} 个板块，结果已保存到 ${dataFile}`);
 
         return result;
     }

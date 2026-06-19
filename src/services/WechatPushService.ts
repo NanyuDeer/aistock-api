@@ -684,7 +684,7 @@ export class WechatPushService {
         );
     }
 
-    // ==================== 风口爆发推送 ====================
+    // ==================== 热点爆发推送 ====================
 
     static async dispatchOutbreakStocks(stocks: OutbreakPushItem[], force: boolean = false): Promise<PushResult> {
         const openids = await WechatPushService.getAllWechatOpenids();
@@ -741,7 +741,7 @@ export class WechatPushService {
                     touser: openid,
                     template_id: templateId,
                     data: {
-                        first: { value: '风口爆发检测到共振信号', color: '#FF5722' },
+                        first: { value: '热点爆发检测到共振信号', color: '#FF5722' },
                         stock: { value: `${stock.name}(${stock.code})` },
                         sector: { value: stock.sector },
                         resonance: { value: `${stock.resonance_level}（${stock.resonance_score}分）` },
@@ -778,7 +778,7 @@ export class WechatPushService {
                 openid,
                 stock.code,
                 stock.name,
-                '风口爆发',
+                '热点爆发',
                 stock.resonance_level,
                 stock.trigger_reason,
                 process.env.WECHAT_TEMPLATE_OUTBREAK || '',

@@ -3,7 +3,6 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
-import crypto from 'crypto';
 import cron from 'node-cron';
 
 import pool from './db';
@@ -26,7 +25,7 @@ import { TenxScoreController } from './controllers/TenxScoreController';
 import { CapitalFlowController } from './controllers/CapitalFlowController';
 import { StockMonitorController } from './controllers/StockMonitorController';
 import { PotentialStockPushController } from './controllers/PotentialStockPushController';
-import { HotSectorController } from './controllers/HotSectorController';
+import { WindLeaderController } from './controllers/WindLeaderController';
 import { AiGraphController } from './controllers/AiGraphController';
 import { AiGraphService } from './services/AiGraphService';
 import { IndustryKGController } from './controllers/IndustryKGController';
@@ -39,7 +38,7 @@ import { MessagePushService } from './services/MessagePushService';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 import { StockInfoCrawlService } from './services/crawler/StockInfoCrawlService';
-import { HotSectorAnalyzerService } from './services/HotSectorAnalyzerService';
+import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -136,20 +135,20 @@ app.get('/api/cn/trend-hotspots/stats', (req, res, next) => StockMonitorControll
 app.get('/api/cn/favorites/news', (req, res, next) => StockMonitorController.getFavoritesNews(req, res, next));
 app.get('/api/cn/stock-info/judgements', (req, res, next) => StockInfoJudgementController.queryJudgements(req, res, next));
 
-// 风口爆发股
-app.post('/api/cn/hot-sectors/refresh', (req, res, next) => HotSectorController.refreshAnalysis(req, res, next));
-app.get('/api/cn/hot-sectors', (req, res, next) => HotSectorController.getHotSectors(req, res, next));
-app.post('/api/internal/hot-sectors', (req, res, next) => HotSectorController.pushHotSectors(req, res, next));
-app.post('/api/cn/hot-keywords/detect', (req, res, next) => HotSectorController.detectHotKeywords(req, res, next));
-app.get('/api/cn/hot-keywords', (req, res, next) => HotSectorController.getHotKeywords(req, res, next));
+// 风口龙头
+app.post('/api/cn/wind-leaders/refresh', (req, res, next) => WindLeaderController.refreshAnalysis(req, res, next));
+app.get('/api/cn/wind-leaders', (req, res, next) => WindLeaderController.getWindLeaders(req, res, next));
+app.post('/api/internal/wind-leaders', (req, res, next) => WindLeaderController.pushWindLeaders(req, res, next));
+app.post('/api/cn/hot-keywords/detect', (req, res, next) => WindLeaderController.detectHotKeywords(req, res, next));
+app.get('/api/cn/hot-keywords', (req, res, next) => WindLeaderController.getHotKeywords(req, res, next));
 
 // 飞书群消息接收
 app.post('/api/internal/feishu-message', (req, res, next) => FeishuMessageController.receiveMessage(req, res, next));
 app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageController.getMessages(req, res, next));
 
-// 风口爆发三步检测
-app.post('/api/cn/hotspot-outbreak/detect', (req, res, next) => HotSectorController.detectOutbreak(req, res, next));
-app.get('/api/cn/hotspot-outbreak', (req, res, next) => HotSectorController.getOutbreak(req, res, next));
+// 热点爆发三步检测
+app.post('/api/cn/hot-burst/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
+app.get('/api/cn/hot-burst', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
 
 // 飞书OAuth授权
 app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
@@ -176,7 +175,7 @@ app.post('/api/internal/push-leader', async (req, res) => {
     }
 });
 
-// 手动触发风口爆发推送（测试用，支持传入测试数据）
+// 手动触发热点爆发推送（测试用，支持传入测试数据）
 app.post('/api/internal/push-outbreak', async (req, res) => {
     const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
     if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
@@ -483,14 +482,14 @@ cron.schedule('5 19 * * 1-5', async () => {
     }
 });
 
-// 风口爆发股定时分析：每天凌晨3点执行
+// 风口龙头定时分析：每天凌晨3点执行
 cron.schedule('0 3 * * *', async () => {
-    console.log('[HotSectorCron] 开始风口爆发股分析');
+    console.log('[WindLeaderCron] 开始风口龙头分析');
     try {
-        const result = await HotSectorAnalyzerService.runFullAnalysis();
-        console.log(`[HotSectorCron] 分析完成: ${result.hot_sectors?.length || 0} 个板块`);
+        const result = await WindLeaderAnalyzerService.runFullAnalysis();
+        console.log(`[WindLeaderCron] 分析完成: ${result.hot_sectors?.length || 0} 个板块`);
     } catch (err: any) {
-        console.error('[HotSectorCron] 分析失败:', err?.message || err);
+        console.error('[WindLeaderCron] 分析失败:', err?.message || err);
     }
 });
 

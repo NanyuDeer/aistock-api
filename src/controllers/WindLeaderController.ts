@@ -1,13 +1,13 @@
 /**
- * 风口爆发股 API 控制器
+ * 风口龙头 API 控制器
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
-import { HotSectorService } from '../services/HotSectorService';
-import { HotSectorAnalyzerService } from '../services/HotSectorAnalyzerService';
+import { WindLeaderService } from '../services/WindLeaderService';
+import { WindLeaderAnalyzerService } from '../services/WindLeaderAnalyzerService';
 import { HotKeywordDetectorService } from '../services/HotKeywordDetectorService';
-import { HotspotOutbreakService } from '../services/HotspotOutbreakService';
+import { HotBurstService } from '../services/HotBurstService';
 
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || 'crawler-int-2026-token';
 
@@ -18,37 +18,37 @@ function verifyInternalToken(req: Request): boolean {
     return token === INTERNAL_TOKEN;
 }
 
-export class HotSectorController {
+export class WindLeaderController {
     /**
-     * GET /api/cn/hot-sectors
-     * 获取风口爆发股分析结果
+     * GET /api/cn/wind-leaders
+     * 获取风口龙头分析结果
      *
      * Query params:
      *   - limit: 返回的风口板块数量，默认8
      */
-    static async getHotSectors(req: Request, res: Response, _next: NextFunction): Promise<void> {
+    static async getWindLeaders(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '8'), 10), 1), 20);
-            const data = HotSectorService.getAnalysis(limit);
+            const data = WindLeaderService.getAnalysis(limit);
 
             if (!data) {
-                createResponse(res, 404, '暂无风口爆发股数据，请先执行分析');
+                createResponse(res, 404, '暂无风口龙头数据，请先执行分析');
                 return;
             }
 
             createResponse(res, 200, 'success', data);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] getHotSectors error:', errMsg);
+            console.error('[WindLeaderController] getWindLeaders error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * POST /api/internal/hot-sectors
-     * 内部接口：接收外部推送的风口爆发股数据（兼容旧Python引擎）
+     * POST /api/internal/wind-leaders
+     * 内部接口：接收外部推送的风口龙头数据（兼容旧Python引擎）
      */
-    static async pushHotSectors(req: Request, res: Response, _next: NextFunction): Promise<void> {
+    static async pushWindLeaders(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             if (!verifyInternalToken(req)) {
                 createResponse(res, 401, 'invalid internal token');
@@ -61,31 +61,31 @@ export class HotSectorController {
                 return;
             }
 
-            await HotSectorService.saveData(data);
-            console.log(`[HotSectorController] 收到风口爆发股数据推送，共 ${data.hot_sectors.length} 个板块，更新时间: ${data.update_time || '未知'}`);
+            await WindLeaderService.saveData(data);
+            console.log(`[WindLeaderController] 收到风口龙头数据推送，共 ${data.hot_sectors.length} 个板块，更新时间: ${data.update_time || '未知'}`);
             createResponse(res, 200, 'success', { count: data.hot_sectors.length, update_time: data.update_time });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] pushHotSectors error:', errMsg);
+            console.error('[WindLeaderController] pushWindLeaders error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * POST /api/cn/hot-sectors/refresh
-     * 使用TS版分析引擎重新执行风口爆发股分析（已替代Python引擎）
+     * POST /api/cn/wind-leaders/refresh
+     * 使用TS版分析引擎重新执行风口龙头分析（已替代Python引擎）
      */
     static async refreshAnalysis(_req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
-            console.log('[HotSectorController] 触发TS分析引擎重新分析...');
-            const result = await HotSectorAnalyzerService.runFullAnalysis();
+            console.log('[WindLeaderController] 触发TS分析引擎重新分析...');
+            const result = await WindLeaderAnalyzerService.runFullAnalysis();
             createResponse(res, 200, 'success', {
                 count: result.hot_sectors?.length || 0,
                 update_time: result.update_time || '',
             });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] refreshAnalysis error:', errMsg);
+            console.error('[WindLeaderController] refreshAnalysis error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
@@ -100,7 +100,7 @@ export class HotSectorController {
             createResponse(res, 200, 'success', { count: hotKeywords.length, keywords: hotKeywords });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] detectHotKeywords error:', errMsg);
+            console.error('[WindLeaderController] detectHotKeywords error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
@@ -121,42 +121,42 @@ export class HotSectorController {
             createResponse(res, 200, 'success', { count: keywords.length, keywords });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] getHotKeywords error:', errMsg);
+            console.error('[WindLeaderController] getHotKeywords error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * POST /api/cn/hotspot-outbreak/detect
-     * 执行三步风口爆发检测（关键词爆发+飞书消息+同花顺验证）
+     * POST /api/cn/hot-burst/detect
+     * 执行三步热点爆发检测（关键词爆发+飞书消息+同花顺验证）
      */
-    static async detectOutbreak(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+    static async detectHotBurst(_req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
-            const result = await HotspotOutbreakService.detectOutbreak();
+            const result = await HotBurstService.detectHotBurst();
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] detectOutbreak error:', errMsg);
+            console.error('[WindLeaderController] detectHotBurst error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
 
     /**
-     * GET /api/cn/hotspot-outbreak
-     * 查询最近风口爆发检测结果
+     * GET /api/cn/hot-burst
+     * 查询最近热点爆发检测结果
      */
-    static async getOutbreak(req: Request, res: Response, _next: NextFunction): Promise<void> {
+    static async getHotBurst(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
-            const result = await HotspotOutbreakService.getRecentOutbreaks(hours);
+            const result = await HotBurstService.getRecentBursts(hours);
             if (!result) {
-                createResponse(res, 404, '暂无风口爆发检测数据');
+                createResponse(res, 404, '暂无热点爆发检测数据');
                 return;
             }
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.error('[HotSectorController] getOutbreak error:', errMsg);
+            console.error('[WindLeaderController] getHotBurst error:', errMsg);
             createResponse(res, 500, errMsg);
         }
     }
