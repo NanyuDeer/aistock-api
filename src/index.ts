@@ -146,10 +146,10 @@ app.get('/api/cn/hot-keywords', (req, res, next) => WindLeaderController.getHotK
 app.post('/api/internal/feishu-message', (req, res, next) => FeishuMessageController.receiveMessage(req, res, next));
 app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageController.getMessages(req, res, next));
 
-// 热点爆发三步检测
-app.post('/api/cn/hot-burst/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
-app.get('/api/cn/hot-burst', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
-app.get('/api/cn/hot-burst/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
+// 媒体关注榜三步检测
+app.post('/api/cn/media-attention/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
+app.get('/api/cn/media-attention', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
+app.get('/api/cn/media-attention/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
 
 // 飞书OAuth授权
 app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
@@ -176,8 +176,8 @@ app.post('/api/internal/push-leader', async (req, res) => {
     }
 });
 
-// 手动触发热点爆发推送（测试用，支持传入测试数据）
-app.post('/api/internal/push-outbreak', async (req, res) => {
+// 手动触发媒体关注榜推送（测试用，支持传入测试数据）
+app.post('/api/internal/push-media-attention', async (req, res) => {
     const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
     if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
         return res.status(401).json({ error: 'unauthorized' });
@@ -547,8 +547,19 @@ async function start() {
     }
 
     try {
+        // 兼容旧表名：若 hot_burst_history 存在则重命名为 media_attention_history
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS hot_burst_history (
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'hot_burst_history') THEN
+                    ALTER TABLE hot_burst_history RENAME TO media_attention_history;
+                    ALTER INDEX IF EXISTS idx_hot_burst_history_time RENAME TO idx_media_attention_history_time;
+                    RAISE NOTICE 'Renamed hot_burst_history to media_attention_history';
+                END IF;
+            END $$;
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS media_attention_history (
                 id SERIAL PRIMARY KEY,
                 detected_at TIMESTAMP NOT NULL,
                 symbol VARCHAR(20) NOT NULL,
@@ -564,10 +575,10 @@ async function start() {
                 ths_verified BOOLEAN DEFAULT false
             )
         `);
-        await pool.query('CREATE INDEX IF NOT EXISTS idx_hot_burst_history_time ON hot_burst_history(detected_at DESC)');
-        console.log('[DB] hot_burst_history table ready');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_media_attention_history_time ON media_attention_history(detected_at DESC)');
+        console.log('[DB] media_attention_history table ready');
     } catch (err: any) {
-        console.warn('[DB] hot_burst_history table check:', err.message);
+        console.warn('[DB] media_attention_history table check:', err.message);
     }
 
     try {

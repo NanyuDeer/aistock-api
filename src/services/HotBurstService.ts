@@ -1,5 +1,5 @@
 /**
- * 热点爆发整合服务
+ * 媒体关注榜整合服务
  *
  * 整合三步数据源（个股代码驱动）：
  * 1. 财联社/格隆汇快讯中提取个股代码，检测个股爆发（HotKeywordDetectorService）
@@ -205,7 +205,7 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 
 export class HotBurstService {
     /**
-     * 执行完整的三步热点爆发检测（个股代码驱动）：
+     * 执行完整的三步媒体关注榜检测（个股代码驱动）：
      * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
      * 2. 飞书群消息关联（同只股票是否在群内讨论）
      * 3. 同花顺热榜验证（股票所属板块是否上榜）
@@ -213,7 +213,7 @@ export class HotBurstService {
      * 关键词退居辅助解释层：附着在共振信号上说明原因
      */
     static async detectHotBurst(): Promise<HotBurstResult> {
-        console.log('[HotBurst] 开始三步热点爆发检测（个股驱动）...');
+        console.log('[HotBurst] 开始三步媒体关注榜检测（个股驱动）...');
 
         const now = new Date().toISOString();
 
@@ -392,7 +392,7 @@ export class HotBurstService {
             };
         }
 
-        console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个共振信号`);
+        console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
 
         // 批量获取股价（并发，限制并发数避免压垮接口）
         const QUOTE_CONCURRENCY = 5;
@@ -445,7 +445,7 @@ export class HotBurstService {
             ).join(', ');
             const values = rows.flat();
             await pool.query(
-                `INSERT INTO hot_burst_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified)
+                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified)
                  VALUES ${placeholders}`,
                 values
             );
@@ -455,15 +455,45 @@ export class HotBurstService {
         }
     }
 
-    /** 查询历史热点爆发记录 */
-    static async getHistory(limit: number = 50, offset: number = 0): Promise<{ total: number; records: any[] }> {
-        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM hot_burst_history');
+    /**
+     * 查询历史媒体关注榜记录
+     * @param tripleResonanceOnly 仅返回三重共振（resonance_level=critical 且 ths_verified=true）的记录
+     */
+    static async getHistory(
+        limit: number = 50,
+        offset: number = 0,
+        tripleResonanceOnly: boolean = true
+    ): Promise<{ total: number; records: any[] }> {
+        if (tripleResonanceOnly) {
+            // 三重共振过滤：critical 级别（得分≥80，已含三重共振权重）且同花顺验证通过
+            // resonance_level=critical 隐含 resonance1+resonance2 验证，ths_verified=true 确保板块验证
+            // resonance3（研报验证）通过 feishu_count>0 近似判断（研报来自飞书群消息）
+            const countResult = await pool.query(
+                `SELECT COUNT(*)::int AS total FROM media_attention_history
+                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0`
+            );
+            const total = countResult.rows[0]?.total || 0;
+
+            const result = await pool.query(
+                `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+                 FROM media_attention_history
+                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0
+                 ORDER BY detected_at DESC, resonance_score DESC
+                 LIMIT $1 OFFSET $2`,
+                [limit, offset]
+            );
+
+            return { total, records: result.rows };
+        }
+
+        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM media_attention_history');
         const total = countResult.rows[0]?.total || 0;
 
         const result = await pool.query(
             `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
                     price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
-             FROM hot_burst_history
+             FROM media_attention_history
              ORDER BY detected_at DESC, resonance_score DESC
              LIMIT $1 OFFSET $2`,
             [limit, offset]
@@ -478,12 +508,21 @@ export class HotBurstService {
     private static readonly DETECT_CACHE_TTL = 6 * 3600 * 1000; // 6小时缓存
 
     /**
-     * 获取最近的热点爆发检测结果
+     * 获取最近的媒体关注榜检测结果
      * 优先返回缓存，缓存过期则执行一次检测
+     * @param tripleResonanceOnly 是否仅返回三重共振全通过的信号
      */
-    static async getRecentBursts(_hours: number = 6): Promise<HotBurstResult | null> {
+    static async getRecentBursts(_hours: number = 6, tripleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
         // 如果有缓存且未过期，直接返回
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
+            if (tripleResonanceOnly) {
+                return {
+                    ...HotBurstService.lastDetectResult,
+                    outbreaks: HotBurstService.lastDetectResult.outbreaks.filter(
+                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                    ),
+                };
+            }
             return HotBurstService.lastDetectResult;
         }
         // 缓存过期或无缓存，执行一次检测
@@ -491,6 +530,14 @@ export class HotBurstService {
             const result = await HotBurstService.detectHotBurst();
             HotBurstService.lastDetectResult = result;
             HotBurstService.lastDetectTime = Date.now();
+            if (tripleResonanceOnly) {
+                return {
+                    ...result,
+                    outbreaks: result.outbreaks.filter(
+                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                    ),
+                };
+            }
             return result;
         } catch (err) {
             console.error('[HotBurst] getRecentBursts 检测失败，返回旧缓存:', (err as Error).message);

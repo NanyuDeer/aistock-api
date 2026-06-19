@@ -127,8 +127,8 @@ export class WindLeaderController {
     }
 
     /**
-     * POST /api/cn/hot-burst/detect
-     * 执行三步热点爆发检测（关键词爆发+飞书消息+同花顺验证）
+     * POST /api/cn/media-attention/detect
+     * 执行三步媒体关注榜检测（关键词爆发+飞书消息+同花顺验证）
      */
     static async detectHotBurst(_req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -142,15 +142,17 @@ export class WindLeaderController {
     }
 
     /**
-     * GET /api/cn/hot-burst
-     * 查询最近热点爆发检测结果
+     * GET /api/cn/media-attention
+     * 查询最近媒体关注榜检测结果
+     * 默认仅返回三重共振全通过的信号（triple_resonance_only=true）
      */
     static async getHotBurst(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
-            const result = await HotBurstService.getRecentBursts(hours);
+            const tripleResonanceOnly = String(req.query.triple_resonance_only) !== 'false';
+            const result = await HotBurstService.getRecentBursts(hours, tripleResonanceOnly);
             if (!result) {
-                createResponse(res, 404, '暂无热点爆发检测数据');
+                createResponse(res, 404, '暂无媒体关注榜检测数据');
                 return;
             }
             createResponse(res, 200, 'success', result);
@@ -162,14 +164,16 @@ export class WindLeaderController {
     }
 
     /**
-     * GET /api/cn/hot-burst/history
-     * 查询历史热点爆发推送记录
+     * GET /api/cn/media-attention/history
+     * 查询历史媒体关注榜记录
+     * 默认仅返回三重共振全通过的记录（triple_resonance_only=true）
      */
     static async getHotBurstHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 200);
             const offset = Math.max(parseInt(String(req.query.offset || '0'), 10), 0);
-            const result = await HotBurstService.getHistory(limit, offset);
+            const tripleResonanceOnly = String(req.query.triple_resonance_only) !== 'false';
+            const result = await HotBurstService.getHistory(limit, offset, tripleResonanceOnly);
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
