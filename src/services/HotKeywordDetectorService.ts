@@ -1003,7 +1003,7 @@ export class HotKeywordDetectorService {
 
         const result = await pool.query(
             `SELECT keyword, dimension, dimension_label, article_count, snapshot_time,
-                    array_length(article_ids, 1) as article_total
+                    MAX(array_length(article_ids, 1)) as article_total
              FROM hot_keyword_snapshots
              WHERE snapshot_time > NOW() - INTERVAL '${hours} hours'
              GROUP BY keyword, dimension, dimension_label, article_count, snapshot_time

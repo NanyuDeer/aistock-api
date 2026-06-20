@@ -39,6 +39,7 @@ import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 import { StockInfoCrawlService } from './services/crawler/StockInfoCrawlService';
 import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
+import { HotBurstService } from './services/HotBurstService';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -493,6 +494,21 @@ cron.schedule('0 3 * * *', async () => {
         console.error('[WindLeaderCron] 分析失败:', err?.message || err);
     }
 });
+
+// 媒体关注榜定时检测：交易日 10:30、13:30、15:05
+// 10:30 开盘后一小时新闻积累充足；13:30 午盘开盘捕捉午间新闻；15:05 收盘后生成最终结果
+const runMediaAttentionDetect = async (label: string) => {
+    console.log(`[MediaAttentionCron] ${label} 开始媒体关注榜检测`);
+    try {
+        const result = await HotBurstService.detectHotBurst();
+        console.log(`[MediaAttentionCron] ${label} 检测完成: ${result.outbreaks.length} 个信号, 共振 ${result.resonance_count} 个`);
+    } catch (err: any) {
+        console.error(`[MediaAttentionCron] ${label} 检测失败:`, err?.message || err);
+    }
+};
+cron.schedule('30 10 * * 1-5', () => runMediaAttentionDetect('上午'));
+cron.schedule('30 13 * * 1-5', () => runMediaAttentionDetect('午盘'));
+cron.schedule('5 15 * * 1-5', () => runMediaAttentionDetect('收盘'));
 
 // 个股资讯爬虫+实时推送：交易日 8:00（早报前）和 15:00（收盘后）
 // runCycle = 抓取 + AI研判 + 入库 + 触发自选股异动实时推送（飞书卡片+微信模板）
