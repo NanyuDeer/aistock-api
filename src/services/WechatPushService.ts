@@ -698,39 +698,50 @@ export class WechatPushService {
             logs: [],
         };
 
-        for (const stock of stocks) {
-            const eventId = `outbreak:${stock.code}:${today}`;
+        if (stocks.length === 0) return pushResult;
 
-            for (const openid of openids) {
-                if (!force && await WechatPushService.hasPushed(eventId, openid)) {
-                    pushResult.skipped += 1;
-                    pushResult.logs.push({ openid, status: 'skipped', reason: 'duplicate_event' });
-                    continue;
-                }
+        // 合并为一条消息：每只股票一个 eventId，但只发一条合并消息
+        const eventId = `outbreak:${today}:${stocks.map(s => s.code).join(',')}`;
+        const stockSummary = stocks.map(s => `${s.name}(${s.code})`).join('、');
+        const sectorSummary = stocks.map(s => s.sector).join('；');
 
-                try {
-                    const wxResponse = await WechatPushService.sendOutbreakTemplateMessage(stock, openid);
-                    await WechatPushService.insertOutbreakPushLog(eventId, openid, 'sent', null, wxResponse, stock);
-                    pushResult.sent += 1;
-                    pushResult.logs.push({ openid, status: 'sent', reason: null, wechat_response: wxResponse });
-                } catch (err: any) {
-                    const errorMsg = err instanceof Error ? err.message : String(err);
-                    WechatPushService.log('outbreak', 'template send failed', { openid, event_id: eventId, error: errorMsg });
-                    await WechatPushService.insertOutbreakPushLog(eventId, openid, 'failed', errorMsg, null, stock);
-                    pushResult.failed += 1;
-                    pushResult.logs.push({ openid, status: 'failed', reason: errorMsg });
-                }
+        for (const openid of openids) {
+            if (!force && await WechatPushService.hasPushed(eventId, openid)) {
+                pushResult.skipped += 1;
+                pushResult.logs.push({ openid, status: 'skipped', reason: 'duplicate_event' });
+                continue;
+            }
+
+            try {
+                const wxResponse = await WechatPushService.sendOutbreakTemplateMessage(stocks, openid);
+                await WechatPushService.insertOutbreakPushLog(eventId, openid, 'sent', null, wxResponse, stocks[0], stockSummary, sectorSummary);
+                pushResult.sent += 1;
+                pushResult.logs.push({ openid, status: 'sent', reason: null, wechat_response: wxResponse });
+            } catch (err: any) {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                WechatPushService.log('outbreak', 'template send failed', { openid, event_id: eventId, error: errorMsg });
+                await WechatPushService.insertOutbreakPushLog(eventId, openid, 'failed', errorMsg, null, stocks[0], stockSummary, sectorSummary);
+                pushResult.failed += 1;
+                pushResult.logs.push({ openid, status: 'failed', reason: errorMsg });
             }
         }
 
         return pushResult;
     }
 
-    private static async sendOutbreakTemplateMessage(stock: OutbreakPushItem, openid: string): Promise<any> {
+    private static async sendOutbreakTemplateMessage(stocks: OutbreakPushItem[], openid: string): Promise<any> {
         const templateId = process.env.WECHAT_TEMPLATE_OUTBREAK;
         if (!templateId) throw new Error('WECHAT_TEMPLATE_OUTBREAK is not configured');
 
         const accessToken = await ScanLoginController.getServerAccessToken();
+
+        // 合并所有股票信息为一条消息
+        const stockLines = stocks.map((s, i) =>
+            `${i + 1}. ${s.name}(${s.code}) [${s.resonance_level} ${s.resonance_score}分] ${s.sector}`
+        ).join('\n');
+        const triggerLines = stocks.map((s, i) =>
+            `${i + 1}. ${s.trigger_reason}`
+        ).join('\n');
 
         const res = await fetch(
             `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
@@ -741,11 +752,9 @@ export class WechatPushService {
                     touser: openid,
                     template_id: templateId,
                     data: {
-                        first: { value: '媒体关注榜检测到共振信号', color: '#FF5722' },
-                        stock: { value: `${stock.name}(${stock.code})` },
-                        sector: { value: stock.sector },
-                        resonance: { value: `${stock.resonance_level}（${stock.resonance_score}分）` },
-                        trigger: { value: stock.trigger_reason },
+                        first: { value: `媒体关注榜检测到${stocks.length}只共振信号`, color: '#FF5722' },
+                        stocks: { value: stockLines },
+                        trigger: { value: triggerLines },
                         remark: { value: '三步验证通过，点击查看详情', color: '#009688' },
                     },
                 }),
@@ -765,6 +774,8 @@ export class WechatPushService {
         errorMsg: string | null,
         responseJson: any,
         stock: OutbreakPushItem,
+        stockSummary?: string,
+        sectorSummary?: string,
     ): Promise<void> {
         await pool.query(
             `INSERT INTO wechat_push_logs (
@@ -777,7 +788,7 @@ export class WechatPushService {
                 eventId,
                 openid,
                 stock.code,
-                stock.name,
+                stockSummary || stock.name,
                 '媒体关注榜',
                 stock.resonance_level,
                 stock.trigger_reason,

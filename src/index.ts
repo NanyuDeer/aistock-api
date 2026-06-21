@@ -597,6 +597,24 @@ async function start() {
         console.warn('[DB] media_attention_history table check:', err.message);
     }
 
+    // 业绩预测表
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS earnings_forecast (
+                id SERIAL PRIMARY KEY,
+                symbol VARCHAR(20) NOT NULL,
+                update_time VARCHAR(30) NOT NULL,
+                summary TEXT DEFAULT '',
+                forecast_detail JSONB DEFAULT '[]',
+                forecast_netprofit_yoy NUMERIC(10,2)
+            )
+        `);
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_earnings_forecast_symbol ON earnings_forecast(symbol)');
+        console.log('[DB] earnings_forecast table ready');
+    } catch (err: any) {
+        console.warn('[DB] earnings_forecast table check:', err.message);
+    }
+
     try {
         await redis.ping();
         console.log('[Redis] Connected successfully');
