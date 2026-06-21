@@ -610,12 +610,15 @@ async function saveSnapshot(keywordMatches: Map<string, KeywordMatch>, source: s
     }
 }
 
-/** 获取关键词历史频次（最近N小时） */
-async function getKeywordHistory(keyword: string, hours: number = 2): Promise<{ snapshot_time: string; article_count: number }[]> {
+/** 获取关键词历史频次（滚动窗口，默认最近7天，排除本次刚写入的快照） */
+async function getKeywordHistory(keyword: string, hours: number = 168): Promise<{ snapshot_time: string; article_count: number }[]> {
+    // 排除最近10分钟内的快照（本次运行刚写入的），只统计历史基准
     const result = await pool.query(
         `SELECT snapshot_time, article_count
          FROM hot_keyword_snapshots
-         WHERE keyword = $1 AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+         WHERE keyword = $1
+           AND snapshot_time > NOW() - INTERVAL '${hours} hours'
+           AND snapshot_time < NOW() - INTERVAL '10 minutes'
          ORDER BY snapshot_time ASC`,
         [keyword],
     );
