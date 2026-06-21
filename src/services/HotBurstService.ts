@@ -18,6 +18,7 @@ import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } f
 import { getThsHot, type ThsHotRow } from './TushareService';
 import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
 import { TushareQuoteService } from './TushareQuoteService';
+import { TradingCalendarService } from './TradingCalendarService';
 
 // ==================== 类型定义 ====================
 
@@ -281,7 +282,9 @@ export class HotBurstService {
         }
 
         // ===== Step 2: 飞书群消息关联 =====
-        const feishuMessages = await getFeishuMessages(6);
+        const feishuWindowHours = TradingCalendarService.getFeishuWindowHours();
+        console.log(`[HotBurst] 飞书消息查询窗口: ${feishuWindowHours}h`);
+        const feishuMessages = await getFeishuMessages(feishuWindowHours);
         console.log(`[HotBurst] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
 
         // 构建：股票代码 → 飞书消息数 + 关键词
