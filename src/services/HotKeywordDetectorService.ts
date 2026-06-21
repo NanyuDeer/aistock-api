@@ -861,14 +861,14 @@ export class HotKeywordDetectorService {
             if (match.count < 2) continue;
 
             const dim = KEYWORD_DIMENSIONS[match.dimension];
-            const history = await getKeywordHistory(kw, 2);
+            const history = await getKeywordHistory(kw);
 
-            // 计算历史平均频次
+            // 历史基准：按实际快照次数平均（非直接求和）
+            // getKeywordHistory 已排除本次快照（10分钟内），此处直接用全部历史
             let previousCount = 0;
-            if (history.length > 1) {
-                // 排除最新快照，计算之前的平均
-                const previousSnapshots = history.slice(0, -1);
-                previousCount = previousSnapshots.reduce((sum, h) => sum + h.article_count, 0);
+            if (history.length > 0) {
+                const totalMentions = history.reduce((sum, h) => sum + h.article_count, 0);
+                previousCount = Math.round((totalMentions / history.length) * 100) / 100;
             }
 
             // 爆发比率：当前频次 / 历史平均频次
@@ -876,12 +876,12 @@ export class HotKeywordDetectorService {
             if (previousCount > 0) {
                 surgeRatio = match.count / previousCount;
             } else {
-                // 无历史数据时，频次>=3即视为爆发
-                surgeRatio = match.count >= 3 ? 3 : 0;
+                // 无历史数据时，频次>=2即视为爆发
+                surgeRatio = match.count >= 2 ? 2 : 0;
             }
 
-            // 爆发阈值：频次是历史的2倍以上，或首次出现且频次>=3
-            if (surgeRatio >= 2 || (previousCount === 0 && match.count >= 3)) {
+            // 爆发阈值：surgeRatio>=1.5 或首次出现且频次>=2（与概念/个股检测一致）
+            if (surgeRatio >= 1.5 || (previousCount === 0 && match.count >= 2)) {
                 hotKeywords.push({
                     keyword: kw,
                     dimension: match.dimension,
