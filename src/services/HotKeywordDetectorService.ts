@@ -903,6 +903,9 @@ export class HotKeywordDetectorService {
     static async detectHotStocks(): Promise<HotStockResult[]> {
         console.log('[HotKeywordDetector] 开始个股爆发检测...');
 
+        // 0. 预加载 A 股名称映射（用于公司名称→代码匹配，幂等调用）
+        await loadStockNameMap();
+
         // 1. 爬取快讯
         const [clsArticles, glhArticles] = await Promise.all([
             fetchClsTelegraph(0, 100).catch(err => {
