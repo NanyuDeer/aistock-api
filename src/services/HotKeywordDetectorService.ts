@@ -1037,6 +1037,9 @@ export class HotKeywordDetectorService {
     static async detectHotConcepts(): Promise<HotConceptResult[]> {
         console.log('[HotKeywordDetector] 开始细分概念爆发检测...');
 
+        // 0. 预加载 A 股名称映射（用于概念关联个股的代码提取，幂等调用）
+        await loadStockNameMap();
+
         // 1. 爬取快讯
         const [clsArticles, glhArticles] = await Promise.all([
             fetchClsTelegraph(0, 100).catch(err => {
