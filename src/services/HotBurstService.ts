@@ -535,16 +535,16 @@ export class HotBurstService {
     /**
      * 获取最近的媒体关注榜检测结果
      * 优先返回缓存，缓存过期则执行一次检测
-     * @param tripleResonanceOnly 是否仅返回三重共振全通过的信号
+     * @param doubleResonanceOnly 是否仅返回二重共振及以上（resonance_count >= 2）的信号
      */
-    static async getRecentBursts(_hours: number = 6, tripleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
+    static async getRecentBursts(_hours: number = 6, doubleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
         // 如果有缓存且未过期，直接返回
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
-            if (tripleResonanceOnly) {
+            if (doubleResonanceOnly) {
                 return {
                     ...HotBurstService.lastDetectResult,
                     outbreaks: HotBurstService.lastDetectResult.outbreaks.filter(
-                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                        s => countResonances(s) >= 2
                     ),
                 };
             }
@@ -555,11 +555,11 @@ export class HotBurstService {
             const result = await HotBurstService.detectHotBurst();
             HotBurstService.lastDetectResult = result;
             HotBurstService.lastDetectTime = Date.now();
-            if (tripleResonanceOnly) {
+            if (doubleResonanceOnly) {
                 return {
                     ...result,
                     outbreaks: result.outbreaks.filter(
-                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                        s => countResonances(s) >= 2
                     ),
                 };
             }
