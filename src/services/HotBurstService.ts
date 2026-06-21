@@ -21,7 +21,7 @@ import { TushareQuoteService } from './TushareQuoteService';
 
 // ==================== 类型定义 ====================
 
-interface FeishuMessageRow {
+export interface FeishuMessageRow {
     id: number;
     source: string;
     chat_id: string;
@@ -183,6 +183,20 @@ function calculateResonanceScore(
 
 // ==================== 飞书消息查询 ====================
 
+/**
+ * 补充飞书消息中的股票代码（当 stock_codes 为空时从文本提取）
+ * 依赖 loadStockNameMap 已加载（detectHotBurst 中 detectHotStocks 会预加载）
+ */
+export function enrichFeishuStockCodes(messages: FeishuMessageRow[]): FeishuMessageRow[] {
+    return messages.map(msg => {
+        if (msg.stock_codes.length > 0) return msg;
+        const codes = extractStockCodes(msg.text || '');
+        const symbols = Array.from(codes.keys());
+        if (symbols.length === 0) return msg;
+        return { ...msg, stock_codes: symbols };
+    });
+}
+
 async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]> {
     try {
         const result = await pool.query(
@@ -192,10 +206,12 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
              ORDER BY received_at DESC
              LIMIT 200`,
         );
-        return result.rows.map((row: any) => ({
+        const rows: FeishuMessageRow[] = result.rows.map((row: any) => ({
             ...row,
             keywords: typeof row.keywords === 'string' ? JSON.parse(row.keywords) : row.keywords || [],
         }));
+        // 回退：当 stock_codes 为空时从文本提取
+        return enrichFeishuStockCodes(rows);
     } catch {
         return [];
     }
