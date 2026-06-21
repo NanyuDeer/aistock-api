@@ -484,28 +484,26 @@ export class HotBurstService {
 
     /**
      * 查询历史媒体关注榜记录
-     * @param tripleResonanceOnly 仅返回三重共振（resonance_level=critical 且 ths_verified=true）的记录
+     * @param doubleResonanceOnly 仅返回二重共振及以上（resonance_count >= 2）的记录
      */
     static async getHistory(
         limit: number = 50,
         offset: number = 0,
-        tripleResonanceOnly: boolean = true
+        doubleResonanceOnly: boolean = true
     ): Promise<{ total: number; records: any[] }> {
-        if (tripleResonanceOnly) {
-            // 三重共振过滤：critical 级别（得分≥80，已含三重共振权重）且同花顺验证通过
-            // resonance_level=critical 隐含 resonance1+resonance2 验证，ths_verified=true 确保板块验证
-            // resonance3（研报验证）通过 feishu_count>0 近似判断（研报来自飞书群消息）
+        if (doubleResonanceOnly) {
+            // 二重共振过滤：至少 2/3 共振通过
             const countResult = await pool.query(
                 `SELECT COUNT(*)::int AS total FROM media_attention_history
-                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0`
+                 WHERE resonance_count >= 2`
             );
             const total = countResult.rows[0]?.total || 0;
 
             const result = await pool.query(
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
-                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
                  FROM media_attention_history
-                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0
+                 WHERE resonance_count >= 2
                  ORDER BY detected_at DESC, resonance_score DESC
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
@@ -519,7 +517,7 @@ export class HotBurstService {
 
         const result = await pool.query(
             `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
-                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
              FROM media_attention_history
              ORDER BY detected_at DESC, resonance_score DESC
              LIMIT $1 OFFSET $2`,
