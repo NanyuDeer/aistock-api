@@ -181,6 +181,16 @@ function calculateResonanceScore(
     return { score, level };
 }
 
+/** 计算信号通过的共振数量（0-3） */
+function countResonances(sig: {
+    resonance1: { verified: boolean };
+    resonance2: { verified: boolean };
+    resonance3: { verified: boolean };
+}): number {
+    return [sig.resonance1.verified, sig.resonance2.verified, sig.resonance3.verified]
+        .filter(Boolean).length;
+}
+
 // ==================== 飞书消息查询 ====================
 
 /**
@@ -455,13 +465,14 @@ export class HotBurstService {
                 s.price, s.changePct, s.sectorInfo,
                 [...new Set([...(s.newsKeywords || []), ...(s.feishuKeywords || [])])].join('、'),
                 s.newsCount, s.feishuMessageCount, s.thsVerified,
+                countResonances(s),
             ]);
             const placeholders = rows.map((_, i) =>
-                `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, $${i * 12 + 11}, $${i * 12 + 12})`
+                `($${i * 13 + 1}, $${i * 13 + 2}, $${i * 13 + 3}, $${i * 13 + 4}, $${i * 13 + 5}, $${i * 13 + 6}, $${i * 13 + 7}, $${i * 13 + 8}, $${i * 13 + 9}, $${i * 13 + 10}, $${i * 13 + 11}, $${i * 13 + 12}, $${i * 13 + 13})`
             ).join(', ');
             const values = rows.flat();
             await pool.query(
-                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified)
+                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count)
                  VALUES ${placeholders}`,
                 values
             );
@@ -473,28 +484,26 @@ export class HotBurstService {
 
     /**
      * 查询历史媒体关注榜记录
-     * @param tripleResonanceOnly 仅返回三重共振（resonance_level=critical 且 ths_verified=true）的记录
+     * @param doubleResonanceOnly 仅返回二重共振及以上（resonance_count >= 2）的记录
      */
     static async getHistory(
         limit: number = 50,
         offset: number = 0,
-        tripleResonanceOnly: boolean = true
+        doubleResonanceOnly: boolean = true
     ): Promise<{ total: number; records: any[] }> {
-        if (tripleResonanceOnly) {
-            // 三重共振过滤：critical 级别（得分≥80，已含三重共振权重）且同花顺验证通过
-            // resonance_level=critical 隐含 resonance1+resonance2 验证，ths_verified=true 确保板块验证
-            // resonance3（研报验证）通过 feishu_count>0 近似判断（研报来自飞书群消息）
+        if (doubleResonanceOnly) {
+            // 二重共振过滤：至少 2/3 共振通过
             const countResult = await pool.query(
                 `SELECT COUNT(*)::int AS total FROM media_attention_history
-                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0`
+                 WHERE resonance_count >= 2`
             );
             const total = countResult.rows[0]?.total || 0;
 
             const result = await pool.query(
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
-                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
                  FROM media_attention_history
-                 WHERE resonance_level = 'critical' AND ths_verified = true AND feishu_count > 0
+                 WHERE resonance_count >= 2
                  ORDER BY detected_at DESC, resonance_score DESC
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
@@ -508,7 +517,7 @@ export class HotBurstService {
 
         const result = await pool.query(
             `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
-                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified
+                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
              FROM media_attention_history
              ORDER BY detected_at DESC, resonance_score DESC
              LIMIT $1 OFFSET $2`,
@@ -526,16 +535,16 @@ export class HotBurstService {
     /**
      * 获取最近的媒体关注榜检测结果
      * 优先返回缓存，缓存过期则执行一次检测
-     * @param tripleResonanceOnly 是否仅返回三重共振全通过的信号
+     * @param doubleResonanceOnly 是否仅返回二重共振及以上（resonance_count >= 2）的信号
      */
-    static async getRecentBursts(_hours: number = 6, tripleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
+    static async getRecentBursts(_hours: number = 6, doubleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
         // 如果有缓存且未过期，直接返回
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
-            if (tripleResonanceOnly) {
+            if (doubleResonanceOnly) {
                 return {
                     ...HotBurstService.lastDetectResult,
                     outbreaks: HotBurstService.lastDetectResult.outbreaks.filter(
-                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                        s => countResonances(s) >= 2
                     ),
                 };
             }
@@ -546,11 +555,11 @@ export class HotBurstService {
             const result = await HotBurstService.detectHotBurst();
             HotBurstService.lastDetectResult = result;
             HotBurstService.lastDetectTime = Date.now();
-            if (tripleResonanceOnly) {
+            if (doubleResonanceOnly) {
                 return {
                     ...result,
                     outbreaks: result.outbreaks.filter(
-                        s => s.resonance1.verified && s.resonance2.verified && s.resonance3.verified
+                        s => countResonances(s) >= 2
                     ),
                 };
             }

@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import pool from '../db';
+import { extractStockCodes, loadStockNameMap } from '../services/HotKeywordDetectorService';
 
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || 'crawler-int-2026-token';
 
@@ -70,6 +71,23 @@ export class FeishuMessageController {
                 return;
             }
 
+            // 如果 bot 未提取到 stock_codes，用 extractStockCodes 从 text 中重新提取
+            // 这能识别 OCR 文本中的股票名称（如"中际旭创"→300308）
+            let stockCodes = data.stock_codes || [];
+            const textContent = data.text || '';
+            if (stockCodes.length === 0 && textContent) {
+                try {
+                    await loadStockNameMap();
+                    const extracted = extractStockCodes(textContent);
+                    stockCodes = Array.from(extracted.keys());
+                    if (stockCodes.length > 0) {
+                        console.log(`[FeishuMessage] 从text中提取到${stockCodes.length}个股票代码: ${JSON.stringify(stockCodes)}`);
+                    }
+                } catch (err) {
+                    console.warn('[FeishuMessage] extractStockCodes 失败:', (err as Error).message);
+                }
+            }
+
             await pool.query(
                 `INSERT INTO feishu_messages (source, chat_id, chat_name, message_id, message_type, text, stock_codes, keywords, received_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -79,14 +97,14 @@ export class FeishuMessageController {
                     data.chat_name || '',
                     data.message_id,
                     data.message_type || '',
-                    data.text || '',
-                    data.stock_codes || [],
+                    textContent,
+                    stockCodes,
                     JSON.stringify(data.keywords || []),
                     data.received_at || new Date().toISOString(),
                 ],
             );
 
-            console.log(`[FeishuMessage] 收到飞书群消息: chat=${data.chat_name}, codes=${JSON.stringify(data.stock_codes)}, keywords=${JSON.stringify((data.keywords || []).map((k: any) => k.keyword))}`);
+            console.log(`[FeishuMessage] 收到飞书群消息: chat=${data.chat_name}, codes=${JSON.stringify(stockCodes)}, keywords=${JSON.stringify((data.keywords || []).map((k: any) => k.keyword))}`);
             createResponse(res, 200, 'success', { message_id: data.message_id });
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
