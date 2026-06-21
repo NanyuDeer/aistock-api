@@ -13,6 +13,7 @@
  */
 
 import * as cheerio from 'cheerio';
+import { TradingCalendarService } from './TradingCalendarService';
 import { formatToChinaTime } from '../utils/datetime';
 import { cailianpressThrottler } from '../utils/throttlers';
 import { getThsIndex, tushareRequest } from './TushareService';
@@ -816,12 +817,14 @@ export class HotKeywordDetectorService {
         console.log('[HotKeywordDetector] 开始关键词爆发检测...');
 
         // 1. 爬取快讯
+        const windowHours = TradingCalendarService.getDynamicWindowHours();
+        console.log(`[HotKeywordDetector] detectHotKeywords 时间窗口: ${windowHours}h`);
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100, 2).catch(err => {
+            fetchClsTelegraph(0, 100, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50, 2).catch(err => {
+            fetchGelonghuiNews(50, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
@@ -922,12 +925,14 @@ export class HotKeywordDetectorService {
         await loadStockNameMap();
 
         // 1. 爬取快讯
+        const windowHours = TradingCalendarService.getDynamicWindowHours();
+        console.log(`[HotKeywordDetector] detectHotStocks 时间窗口: ${windowHours}h`);
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100, 2).catch(err => {
+            fetchClsTelegraph(0, 100, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50, 2).catch(err => {
+            fetchGelonghuiNews(50, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
@@ -1056,12 +1061,14 @@ export class HotKeywordDetectorService {
         await loadStockNameMap();
 
         // 1. 爬取快讯
+        const windowHours = TradingCalendarService.getDynamicWindowHours();
+        console.log(`[HotKeywordDetector] detectHotConcepts 时间窗口: ${windowHours}h`);
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100, 2).catch(err => {
+            fetchClsTelegraph(0, 100, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50, 2).catch(err => {
+            fetchGelonghuiNews(50, windowHours).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
