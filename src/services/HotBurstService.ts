@@ -181,6 +181,16 @@ function calculateResonanceScore(
     return { score, level };
 }
 
+/** 计算信号通过的共振数量（0-3） */
+function countResonances(sig: {
+    resonance1: { verified: boolean };
+    resonance2: { verified: boolean };
+    resonance3: { verified: boolean };
+}): number {
+    return [sig.resonance1.verified, sig.resonance2.verified, sig.resonance3.verified]
+        .filter(Boolean).length;
+}
+
 // ==================== 飞书消息查询 ====================
 
 /**
@@ -455,13 +465,14 @@ export class HotBurstService {
                 s.price, s.changePct, s.sectorInfo,
                 [...new Set([...(s.newsKeywords || []), ...(s.feishuKeywords || [])])].join('、'),
                 s.newsCount, s.feishuMessageCount, s.thsVerified,
+                countResonances(s),
             ]);
             const placeholders = rows.map((_, i) =>
-                `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, $${i * 12 + 11}, $${i * 12 + 12})`
+                `($${i * 13 + 1}, $${i * 13 + 2}, $${i * 13 + 3}, $${i * 13 + 4}, $${i * 13 + 5}, $${i * 13 + 6}, $${i * 13 + 7}, $${i * 13 + 8}, $${i * 13 + 9}, $${i * 13 + 10}, $${i * 13 + 11}, $${i * 13 + 12}, $${i * 13 + 13})`
             ).join(', ');
             const values = rows.flat();
             await pool.query(
-                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified)
+                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count)
                  VALUES ${placeholders}`,
                 values
             );
