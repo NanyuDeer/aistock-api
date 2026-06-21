@@ -607,6 +607,11 @@ async function start() {
             )
         `);
         await pool.query('CREATE INDEX IF NOT EXISTS idx_media_attention_history_time ON media_attention_history(detected_at DESC)');
+        // 迁移：添加 resonance_count 列（记录通过的共振数量 0-3）
+        await pool.query(`
+            ALTER TABLE media_attention_history
+            ADD COLUMN IF NOT EXISTS resonance_count INT DEFAULT 0
+        `);
         console.log('[DB] media_attention_history table ready');
     } catch (err: any) {
         console.warn('[DB] media_attention_history table check:', err.message);
