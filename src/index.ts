@@ -38,6 +38,7 @@ import { MessagePushService } from './services/MessagePushService';
 import { TenxBatchService } from './services/TenxBatchService';
 import { isValidAShareSymbol } from './utils/validator';
 import { StockInfoCrawlService } from './services/crawler/StockInfoCrawlService';
+import { syncStockConceptMapping } from './services/StockConceptMappingService';
 import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
 import { HotBurstService } from './services/HotBurstService';
 
@@ -510,6 +511,17 @@ cron.schedule('30 10 * * 1-5', () => runMediaAttentionDetect('上午'));
 cron.schedule('30 13 * * 1-5', () => runMediaAttentionDetect('午盘'));
 cron.schedule('5 15 * * 1-5', () => runMediaAttentionDetect('收盘'));
 
+// 每日 04:30 刷新个股-板块映射表（在 04:00 TenxCron 之后）
+cron.schedule('30 4 * * *', async () => {
+    console.log('[StockConceptMappingCron] 开始刷新个股-板块映射');
+    try {
+        const count = await syncStockConceptMapping();
+        console.log(`[StockConceptMappingCron] 刷新完成: ${count} 条记录`);
+    } catch (err: any) {
+        console.error('[StockConceptMappingCron] 刷新失败:', err?.message || err);
+    }
+});
+
 // 个股资讯爬虫+实时推送：交易日 8:00（早报前）和 15:00（收盘后）
 // runCycle = 抓取 + AI研判 + 入库 + 触发自选股异动实时推送（飞书卡片+微信模板）
 cron.schedule('0 8 * * 1-5', async () => {
@@ -626,6 +638,10 @@ async function start() {
         console.log(`[Server] aistock-api running on http://0.0.0.0:${PORT}`);
         // 启动飞书定时推送调度器
         MessagePushService.startScheduler();
+        // 异步同步个股-板块映射（不阻塞启动，首次启动时填充空表）
+        syncStockConceptMapping().catch(err => {
+            console.error('[Startup] stock_concept_mapping 同步失败:', err?.message || err);
+        });
     });
 }
 
