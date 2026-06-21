@@ -507,8 +507,11 @@ const runMediaAttentionDetect = async (label: string) => {
         console.error(`[MediaAttentionCron] ${label} 检测失败:`, err?.message || err);
     }
 };
+cron.schedule('30 9 * * 1-5', () => runMediaAttentionDetect('开盘'));
 cron.schedule('30 10 * * 1-5', () => runMediaAttentionDetect('上午'));
+cron.schedule('30 11 * * 1-5', () => runMediaAttentionDetect('午前'));
 cron.schedule('30 13 * * 1-5', () => runMediaAttentionDetect('午盘'));
+cron.schedule('30 14 * * 1-5', () => runMediaAttentionDetect('尾盘'));
 cron.schedule('5 15 * * 1-5', () => runMediaAttentionDetect('收盘'));
 
 // 每日 04:30 刷新个股-板块映射表（在 04:00 TenxCron 之后）

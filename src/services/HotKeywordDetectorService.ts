@@ -249,7 +249,7 @@ interface TelegraphItem {
     timestamp: number;
 }
 
-async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100): Promise<TelegraphItem[]> {
+async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100, sinceHours: number = 0): Promise<TelegraphItem[]> {
     const payload = {
         lastTime,
         keyword: '',
@@ -273,6 +273,9 @@ async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100): Pro
     try { rawData = await response.json(); } catch { return []; }
     if (typeof rawData?.errno === 'number' && rawData.errno !== 0) return [];
 
+    // 时间过滤下限（sinceHours=0 表示不过滤）
+    const minTimestamp = sinceHours > 0 ? Math.floor(Date.now() / 1000) - sinceHours * 3600 : 0;
+
     const entries = rawData?.data?.list || rawData?.list || [];
     const items: TelegraphItem[] = [];
 
@@ -280,6 +283,8 @@ async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100): Pro
         if (!entry || typeof entry !== 'object') continue;
         const ctime = Number(entry.ctime) || 0;
         if (ctime <= lastTime) continue;
+        // 时间窗口过滤：丢弃超过 sinceHours 的旧快讯
+        if (minTimestamp > 0 && ctime < minTimestamp) continue;
 
         const $ = cheerio.load(entry.content || '');
         const title = (entry.title || '').trim() || ($.text() || '').trim().slice(0, 100);
@@ -390,7 +395,7 @@ export function parseGelonghuiNuxtData(html: string): any[] {
     return entries;
 }
 
-async function fetchGelonghuiNews(limit: number = 50): Promise<TelegraphItem[]> {
+async function fetchGelonghuiNews(limit: number = 50, sinceHours: number = 0): Promise<TelegraphItem[]> {
     try {
         const response = await fetch(GELONGHUI_URL, {
             method: 'GET',
@@ -406,11 +411,17 @@ async function fetchGelonghuiNews(limit: number = 50): Promise<TelegraphItem[]> 
         const entries = parseGelonghuiNuxtData(html);
 
         const items: TelegraphItem[] = [];
+        // 时间过滤下限（sinceHours=0 表示不过滤）
+        const minTimestamp = sinceHours > 0 ? Date.now() - sinceHours * 3600 * 1000 : 0;
         for (const entry of entries) {
             const text = (entry.title || entry.content || '').trim();
             if (!text) continue;
 
             const ts = entry.createTimestamp || 0;
+            // 时间窗口过滤（ts 单位可能是秒或毫秒）
+            const tsMs = ts < 1e12 ? ts * 1000 : ts;
+            if (minTimestamp > 0 && tsMs < minTimestamp) continue;
+
             items.push({
                 id: String(entry.id || ''),
                 title: text.slice(0, 100),
@@ -469,7 +480,8 @@ export interface HotConceptResult {
     totalCount: number;        // 合计提及次数
     previousCount: number;     // 历史频次
     surgeRatio: number;        // 爆发比率
-    crossVerified: boolean;    // 共振一是否通过（两个源同时出现）
+    crossVerified: boolean;    // 共振一是否通过（合计≥2次）
+    crossSource: boolean;      // 是否双源同时出现（加分项）
     stockCodes: {              // 该概念关联的个股
         symbol: string;
         name: string;
@@ -802,11 +814,11 @@ export class HotKeywordDetectorService {
 
         // 1. 爬取快讯
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100).catch(err => {
+            fetchClsTelegraph(0, 100, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50).catch(err => {
+            fetchGelonghuiNews(50, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
@@ -908,11 +920,11 @@ export class HotKeywordDetectorService {
 
         // 1. 爬取快讯
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100).catch(err => {
+            fetchClsTelegraph(0, 100, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50).catch(err => {
+            fetchGelonghuiNews(50, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
@@ -961,21 +973,21 @@ export class HotKeywordDetectorService {
             if (data.count < 2) continue;
 
             const history = await getStockMentionHistory(symbol);
-            // 计算最近7天的日均提及频次作为历史基准
+            // 历史基准：按实际快照次数平均（非固定除以7）
             let previousCount = 0;
             if (history.length > 0) {
                 const totalMentions = history.reduce((sum, h) => sum + h.mention_count, 0);
-                previousCount = Math.round((totalMentions / 7) * 100) / 100; // 日均
+                previousCount = Math.round((totalMentions / history.length) * 100) / 100;
             }
 
             let surgeRatio = 0;
             if (previousCount > 0) {
                 surgeRatio = data.count / previousCount;
             } else {
-                surgeRatio = data.count >= 3 ? 3 : 0;
+                surgeRatio = data.count >= 2 ? 2 : 0;
             }
 
-            if (surgeRatio >= 2 || (previousCount === 0 && data.count >= 3)) {
+            if (surgeRatio >= 1.5 || (previousCount === 0 && data.count >= 2)) {
                 hotStocks.push({
                     symbol,
                     stockName: data.stockName,
@@ -1042,11 +1054,11 @@ export class HotKeywordDetectorService {
 
         // 1. 爬取快讯
         const [clsArticles, glhArticles] = await Promise.all([
-            fetchClsTelegraph(0, 100).catch(err => {
+            fetchClsTelegraph(0, 100, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 财联社电报获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
-            fetchGelonghuiNews(50).catch(err => {
+            fetchGelonghuiNews(50, 2).catch(err => {
                 console.warn('[HotKeywordDetector] 格隆汇快讯获取失败:', err.message);
                 return [] as TelegraphItem[];
             }),
@@ -1064,55 +1076,67 @@ export class HotKeywordDetectorService {
         await saveConceptMentionSnapshot(clsConcepts, '财联社');
         await saveConceptMentionSnapshot(glhConcepts, '格隆汇');
 
-        // 4. 交叉验证：同一概念在两个源同时出现 → 共振一通过
+        // 4. 交叉验证：两源合计≥2次即通过（不强制双源同时出现）
+        //    双源同时出现标记为 crossSource=true（加分项），单源≥2次也通过
         const crossVerifiedConcepts = new Map<string, {
             clsCount: number;
             glhCount: number;
             totalCount: number;
+            crossSource: boolean;
             clsArticles: { id: string; title: string; source: string }[];
             glhArticles: { id: string; title: string; source: string }[];
             stockCodes: Map<string, string>;
             conceptTsCode: string;
         }>();
 
-        // 遍历财联社概念，检查格隆汇是否也有
-        for (const [conceptName, clsMatch] of clsConcepts.entries()) {
+        // 合并两源概念，合计≥2次即通过
+        const allConceptNames = new Set([...clsConcepts.keys(), ...glhConcepts.keys()]);
+        for (const conceptName of allConceptNames) {
+            const clsMatch = clsConcepts.get(conceptName);
             const glhMatch = glhConcepts.get(conceptName);
+            const clsCount = clsMatch?.count || 0;
+            const glhCount = glhMatch?.count || 0;
+            const totalCount = clsCount + glhCount;
+
+            // 合计≥2次即通过（不强制双源同时出现）
+            if (totalCount < 2) continue;
+
+            const mergedStocks = new Map(clsMatch?.stockCodes || []);
             if (glhMatch) {
-                // 两个源都有 → 共振一通过
-                const mergedStocks = new Map(clsMatch.stockCodes);
                 for (const [sym, name] of glhMatch.stockCodes.entries()) {
                     if (!mergedStocks.has(sym)) mergedStocks.set(sym, name);
                 }
-                crossVerifiedConcepts.set(conceptName, {
-                    clsCount: clsMatch.count,
-                    glhCount: glhMatch.count,
-                    totalCount: clsMatch.count + glhMatch.count,
-                    clsArticles: clsMatch.articles,
-                    glhArticles: glhMatch.articles,
-                    stockCodes: mergedStocks,
-                    conceptTsCode: clsMatch.conceptTsCode,
-                });
             }
+            crossVerifiedConcepts.set(conceptName, {
+                clsCount,
+                glhCount,
+                totalCount,
+                crossSource: clsCount > 0 && glhCount > 0,
+                clsArticles: clsMatch?.articles || [],
+                glhArticles: glhMatch?.articles || [],
+                stockCodes: mergedStocks,
+                conceptTsCode: clsMatch?.conceptTsCode || glhMatch?.conceptTsCode || '',
+            });
         }
 
-        console.log(`[HotKeywordDetector] 共振一交叉验证: ${crossVerifiedConcepts.size} 个概念通过`);
+        const crossSourceCount = Array.from(crossVerifiedConcepts.values()).filter(c => c.crossSource).length;
+        console.log(`[HotKeywordDetector] 共振一验证: ${crossVerifiedConcepts.size} 个概念通过 (双源${crossSourceCount}/单源${crossVerifiedConcepts.size - crossSourceCount})`);
 
         // 5. 爆发检测：对交叉验证通过的概念，与最近7天日均频次对比
         const hotConcepts: HotConceptResult[] = [];
         const now = new Date().toISOString();
 
         for (const [conceptName, data] of crossVerifiedConcepts.entries()) {
-            // 至少两个源各出现1次（合计>=2）
-            if (data.totalCount < 2) continue;
+            // 合计≥2次已在交叉验证中过滤，此处不再重复判断
 
             const history = await getConceptMentionHistory(conceptName);
 
-            // 计算最近7天的日均提及频次作为历史基准
+            // 历史基准：按实际快照次数平均（非固定除以7）
+            // 交易日每天多次快照，除以7会高估基准、压低surgeRatio
             let previousCount = 0;
             if (history.length > 0) {
                 const totalMentions = history.reduce((sum, h) => sum + h.mention_count, 0);
-                previousCount = Math.round((totalMentions / 7) * 100) / 100; // 日均
+                previousCount = Math.round((totalMentions / history.length) * 100) / 100;
             }
 
             // 爆发比率
@@ -1120,11 +1144,12 @@ export class HotKeywordDetectorService {
             if (previousCount > 0) {
                 surgeRatio = data.totalCount / previousCount;
             } else {
-                surgeRatio = data.totalCount >= 3 ? 3 : 0;
+                // 无历史数据时，合计≥2即视为爆发
+                surgeRatio = data.totalCount >= 2 ? 2 : 0;
             }
 
-            // 爆发阈值
-            if (surgeRatio >= 2 || (previousCount === 0 && data.totalCount >= 3)) {
+            // 爆发阈值：交叉验证通过后，surgeRatio≥1.5 或合计≥2即爆发
+            if (surgeRatio >= 1.5 || (previousCount === 0 && data.totalCount >= 2)) {
                 const allArticles = [...data.clsArticles, ...data.glhArticles].slice(0, 8);
 
                 hotConcepts.push({
@@ -1135,7 +1160,8 @@ export class HotKeywordDetectorService {
                     totalCount: data.totalCount,
                     previousCount,
                     surgeRatio: Math.round(surgeRatio * 100) / 100,
-                    crossVerified: true,  // 交叉验证已通过
+                    crossVerified: true,
+                    crossSource: data.crossSource,
                     stockCodes: Array.from(data.stockCodes.entries()).map(([symbol, name]) => ({
                         symbol,
                         name,
