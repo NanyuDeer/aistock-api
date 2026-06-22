@@ -279,7 +279,7 @@ function calculateTimeWindow(sig: StockResonanceSignal): {
  */
 export function enrichFeishuStockCodes(messages: FeishuMessageRow[]): FeishuMessageRow[] {
     return messages.map(msg => {
-        if (msg.stock_codes.length > 0) return msg;
+        if (msg.stock_codes && msg.stock_codes.length > 0) return msg;
         const codes = extractStockCodes(msg.text || '');
         const symbols = Array.from(codes.keys());
         if (symbols.length === 0) return msg;
@@ -298,6 +298,7 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
         );
         const rows: FeishuMessageRow[] = result.rows.map((row: any) => ({
             ...row,
+            stock_codes: row.stock_codes || [],
             keywords: typeof row.keywords === 'string' ? JSON.parse(row.keywords) : row.keywords || [],
         }));
         // 回退：当 stock_codes 为空时从文本提取
