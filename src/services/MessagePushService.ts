@@ -97,22 +97,22 @@ async function getOutbreakData(): Promise<{ feishu: OutbreakStock[]; wechat: Out
     try {
         console.log('[MessagePush] 开始获取媒体关注榜数据...');
         const result = await HotBurstService.detectHotBurst();
-        // 三重共振过滤：仅推送有效三重共振（时间窗口内）的信号
+        // 二重及以上共振过滤
         const signals = result.outbreaks
-            .filter(s => s.effectiveResonanceCount >= 3)
+            .filter(s => s.resonanceCount >= 2)
             .slice(0, 3);
-        console.log(`[MessagePush] 媒体关注榜检测完成: ${signals.length} 个有效三重共振信号（共${result.outbreaks.length}个）`);
+        console.log(`[MessagePush] 媒体关注榜检测完成: ${signals.length} 个共振信号（共${result.outbreaks.length}个）`);
         return {
             feishu: signals.map(signal => ({
                 name: signal.stockName || signal.symbol,
-                concept: signal.thsSectorName || signal.newsKeywords.join('、'),
+                concept: signal.thsSectorName || signal.triggerTags.join('、'),
                 change_pct: signal.resonanceScore,
                 reason: buildOutbreakReason(signal),
             })),
             wechat: signals.map(signal => ({
                 name: signal.stockName || signal.symbol,
                 code: signal.symbol,
-                sector: signal.thsSectorName || signal.newsKeywords.join('、'),
+                sector: signal.thsSectorName || signal.triggerTags.join('、'),
                 resonance_score: signal.resonanceScore,
                 resonance_level: signal.resonanceLevel === 'critical' ? '极高' : signal.resonanceLevel === 'high' ? '高' : signal.resonanceLevel === 'medium' ? '中' : '低',
                 trigger_reason: buildOutbreakReason(signal),
@@ -188,9 +188,10 @@ function buildOutbreakReason(signal: any): string {
     if (signal.newsSurgeRatio > 1) parts.push(`爆发比${signal.newsSurgeRatio.toFixed(1)}`);
     if (signal.feishuMessageCount > 0) parts.push(`飞书${signal.feishuMessageCount}次`);
     if (signal.thsVerified) parts.push(`同花顺验证(${signal.thsSectorName}#${signal.thsSectorRank})`);
-    if (signal.resonance1?.verified) parts.push(`概念共振(${signal.resonance1.conceptName})`);
-    if (signal.resonance3?.verified) parts.push(`研报${signal.resonance3.reportCount}篇`);
-    return parts.length > 0 ? parts.join('，') : signal.newsKeywords.slice(0, 3).join('、') || '共振信号';
+    if (signal.clsVerified) parts.push(`财联社概念(${signal.conceptDetail?.conceptName || ''})`);
+    if (signal.glhVerified) parts.push(`格隆汇概念(${signal.conceptDetail?.conceptName || ''})`);
+    if (signal.reportVerified) parts.push(`研报${signal.reportDetail?.reportCount || 0}篇`);
+    return parts.length > 0 ? parts.join('，') : (signal.triggerTags || []).slice(0, 3).join('、') || '共振信号';
 }
 
 // ==================== 消息构建 ====================
