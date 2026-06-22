@@ -144,7 +144,7 @@ export class WindLeaderController {
     /**
      * GET /api/cn/media-attention
      * 查询最近媒体关注榜检测结果
-     * 默认返回二重共振及以上（effectiveResonanceCount >= 2）的信号（min_resonance=2）
+     * 默认返回二重共振及以上（resonanceCount >= 2）的信号（min_resonance=2）
      */
     static async getHotBurst(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -166,14 +166,14 @@ export class WindLeaderController {
     /**
      * GET /api/cn/media-attention/history
      * 查询历史媒体关注榜记录
-     * 默认仅返回三重共振（resonance_count >= 3）的记录（triple_resonance_only=true）
+     * 默认仅返回二重共振及以上（resonance_count >= 2）的记录（min_resonance_only=true）
      */
     static async getHotBurstHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 200);
             const offset = Math.max(parseInt(String(req.query.offset || '0'), 10), 0);
-            const tripleResonanceOnly = String(req.query.triple_resonance_only) !== 'false';
-            const result = await HotBurstService.getHistory(limit, offset, tripleResonanceOnly);
+            const minResonanceOnly = String(req.query.min_resonance_only) !== 'false';
+            const result = await HotBurstService.getHistory(limit, offset, minResonanceOnly);
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);
