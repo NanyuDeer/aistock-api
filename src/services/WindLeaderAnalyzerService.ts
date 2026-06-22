@@ -15,6 +15,7 @@ import path from 'path';
 import * as cheerio from 'cheerio';
 import { TushareQuoteService } from './TushareQuoteService';
 import { IndustryKGService } from './IndustryKGService';
+import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
 import {
     tushareRequest,
@@ -3050,14 +3051,8 @@ export class WindLeaderAnalyzerService {
             });
         }
 
-        // 保存结果
-        const dataDir = path.resolve(__dirname, '../../data');
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
-        }
-        const dataFile = path.join(dataDir, 'hot-sectors.json');
-        fs.writeFileSync(dataFile, JSON.stringify(result, null, 2), 'utf-8');
-        console.log(`[WindLeaderAnalyzer] 风口龙头分析完成，共 ${result.hot_sectors.length} 个板块，结果已保存到 ${dataFile}`);
+        await WindLeaderService.saveData(result);
+        console.log(`[WindLeaderAnalyzer] 风口龙头分析完成，共 ${result.hot_sectors.length} 个板块，结果已保存并追加历史表现`);
 
         return result;
     }
