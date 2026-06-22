@@ -1,16 +1,13 @@
 /**
  * 媒体关注榜整合服务
  *
- * 整合三步数据源（个股代码驱动）：
- * 1. 财联社/格隆汇快讯中提取个股代码，检测个股爆发（HotKeywordDetectorService）
- * 2. 飞书群消息中的股票资讯关联（FeishuMessageController / DB）
- * 3. 同花顺热点掘金验证（Tushare ths_hot）
+ * 整合四个独立信号源：
+ * 1. 财联社快讯（clsVerified）：该股票所属概念在财联社被提及
+ * 2. 格隆汇快讯（glhVerified）：该股票所属概念在格隆汇被提及
+ * 3. 同花顺热点掘金（thsVerified）：股票所属板块在同花顺热榜 Top10
+ * 4. 研报验证（reportVerified）：24h 内有研报提及该股票
  *
- * 核心逻辑：
- * - Step1: 从快讯中提取个股代码，检测个股爆发信号
- * - Step2: 从飞书群消息中关联同只股票，提取关键词作为辅助解释
- * - Step3: 验证股票所属板块是否在同花顺热门板块Top10
- * - 输出: 经过三步验证的个股共振信号（关键词退居辅助标签）
+ * 任意两个及以上信号源即构成共振（resonanceCount >= 2）
  */
 
 import pool from '../db';
@@ -45,12 +42,10 @@ interface StockResonanceSignal {
     newsCount: number;
     /** 资讯爆发比率（当前/历史） */
     newsSurgeRatio: number;
-    /** 资讯中出现的关键词（哪些关键词触发了该股票） */
-    newsKeywords: string[];
+    /** 触发标签（概念名+板块名+维度关键词，去重合并） */
+    triggerTags: string[];
     /** 飞书消息中该股票被提及次数 */
     feishuMessageCount: number;
-    /** 飞书消息中匹配到的关键词 */
-    feishuKeywords: string[];
     /** 同花顺验证 */
     thsVerified: boolean;
     thsSectorName: string;
@@ -65,45 +60,42 @@ interface StockResonanceSignal {
     changePct: number | null;
     /** 板块信息（同花顺验证板块或概念共振） */
     sectorInfo: string;
-    /** 概念共振信息（共振一：细分概念交叉验证） */
+    /** 概念共振信息 */
     conceptResonance: {
-        conceptName: string;       // 匹配到的细分概念
-        clsCount: number;          // 财联社该概念出现次数
-        glhCount: number;          // 格隆汇该概念出现次数
-        conceptVerified: boolean;  // 共振一是否通过
+        conceptName: string;
+        clsCount: number;
+        glhCount: number;
+        conceptVerified: boolean;
     } | null;
     /** 相关快讯 */
     articles: { id: string; title: string; source: string; time: string }[];
     /** 检测时间 */
     detectedAt: string;
-    /** 三重共振状态 */
-    resonance1: { verified: boolean; conceptName: string; clsCount: number; glhCount: number };
-    resonance2: { verified: boolean; rank?: number; sectorName?: string };
-    resonance3: { verified: boolean; reportCount: number; latestReportTime?: string };
-    /** 三重共振时间窗口校验 */
-    timeWindow: {
-        /** 时间窗口模式：1d=同一天内, 3d=三天内, none=超出窗口 */
-        mode: '1d' | '3d' | 'none';
-        /** 三个信号中最早的时间 */
-        earliestSignalTime: string;
-        /** 三个信号中最晚的时间 */
-        latestSignalTime: string;
-        /** 时间跨度（小时） */
-        spanHours: number;
-    };
-    /** 有效共振数量（考虑时间窗口后，超3天降级为2） */
-    effectiveResonanceCount: number;
+    /** 四信号源共振状态 */
+    clsVerified: boolean;           // 财联社信号：该股票所属概念在财联社被提及
+    glhVerified: boolean;           // 格隆汇信号：该股票所属概念在格隆汇被提及
+    reportVerified: boolean;        // 研报信号：24h内有研报提及
+    /** 共振信号数量（1-4，至少2才展示） */
+    resonanceCount: number;
+    /** 概念详情 */
+    conceptDetail: {
+        conceptName: string;
+        clsCount: number;
+        glhCount: number;
+    } | null;
+    /** 研报详情 */
+    reportDetail: {
+        reportCount: number;
+        latestReportTime?: string;
+    } | null;
 }
 
 interface HotBurstResult {
     update_time: string;
     total_stocks_checked: number;
     resonance_count: number;
-    /** 有效三重共振信号数（时间窗口内） */
-    triple_resonance_count: number;
     ths_hot_sectors: { name: string; rank: number; change_pct: number }[];
     outbreaks: StockResonanceSignal[];
-    /** 细分概念爆发信号（共振一） */
     hot_concepts: HotConceptResult[];
 }
 
@@ -165,19 +157,34 @@ async function getStockSector(symbol: string): Promise<string[]> {
     }
 }
 
-/** 共振评分：资讯频次(30%) + 飞书讨论(30%) + 同花顺验证(40%) */
+/**
+ * 共振评分算法（新）
+ *
+ * 维度权重：
+ * - 媒体爆发力（25%）：资讯频次 + 爆发比率
+ * - 信号源共振加成（40%）：共振源越多分越高
+ * - 板块热度（20%）：同花顺板块排名
+ * - 研报加成（15%）：有研报额外加分
+ */
 function calculateResonanceScore(
-    newsCount: number, newsSurgeRatio: number,
-    feishuMsgCount: number,
-    thsRank: number, thsVerified: boolean
+    newsCount: number,
+    newsSurgeRatio: number,
+    thsRank: number,
+    thsVerified: boolean,
+    reportVerified: boolean,
+    resonanceCount: number,
 ): { score: number; level: 'critical' | 'high' | 'medium' | 'low' } {
-    // 资讯得分（爆发比率越高越好，上限100）
+    // 媒体爆发力得分（0-100）
     const newsScore = Math.min(100, Math.min(newsCount, 10) * 10 + Math.min(newsSurgeRatio, 5) * 10);
 
-    // 飞书得分（讨论数越多越好）
-    const feishuScore = Math.min(100, feishuMsgCount * 25);
+    // 信号源共振加成（0-100）
+    // 二重=40, 三重=70, 四重=100, 单源=0
+    let resonanceBonus = 0;
+    if (resonanceCount >= 4) resonanceBonus = 100;
+    else if (resonanceCount >= 3) resonanceBonus = 70;
+    else if (resonanceCount >= 2) resonanceBonus = 40;
 
-    // 同花顺得分（排名越前越高，未上榜=0）
+    // 板块热度得分（0-100）
     let thsScore = 0;
     if (thsVerified) {
         if (thsRank === 1) thsScore = 100;
@@ -186,7 +193,15 @@ function calculateResonanceScore(
         else if (thsRank <= 10) thsScore = 40;
     }
 
-    const score = Math.round(newsScore * 0.30 + feishuScore * 0.30 + thsScore * 0.40);
+    // 研报加成得分（0-100）
+    const reportScore = reportVerified ? 80 : 0;
+
+    const score = Math.round(
+        newsScore * 0.25 +
+        resonanceBonus * 0.40 +
+        thsScore * 0.20 +
+        reportScore * 0.15
+    );
 
     let level: 'critical' | 'high' | 'medium' | 'low';
     if (score >= 80) level = 'critical';
@@ -195,80 +210,6 @@ function calculateResonanceScore(
     else level = 'low';
 
     return { score, level };
-}
-
-/** 计算信号通过的共振数量（0-3） */
-function countResonances(sig: {
-    resonance1: { verified: boolean };
-    resonance2: { verified: boolean };
-    resonance3: { verified: boolean };
-}): number {
-    return [sig.resonance1.verified, sig.resonance2.verified, sig.resonance3.verified]
-        .filter(Boolean).length;
-}
-
-/**
- * 计算三重共振的时间窗口
- *
- * 规则：
- * - 三个信号在24h内发生 → mode='1d'（严格三重共振）
- * - 三个信号在72h内发生 → mode='3d'（宽松三重共振）
- * - 超过72h → mode='none'（不构成三重共振，降级为二重）
- *
- * 信号时间来源：
- * - 共振一：detectedAt（概念检测时间）
- * - 共振二：当天日期（热榜数据本身就是当天的）
- * - 共振三：resonance3.latestReportTime（研报时间）
- */
-function calculateTimeWindow(sig: StockResonanceSignal): {
-    mode: '1d' | '3d' | 'none';
-    earliestSignalTime: string;
-    latestSignalTime: string;
-    spanHours: number;
-} {
-    const signalTimes: Date[] = [];
-
-    // 共振一时间
-    if (sig.resonance1.verified) {
-        signalTimes.push(sig.detectedAt ? new Date(sig.detectedAt) : new Date());
-    }
-
-    // 共振二时间（同花顺热榜 = 当天）
-    if (sig.resonance2.verified) {
-        signalTimes.push(new Date());
-    }
-
-    // 共振三时间（研报时间）
-    if (sig.resonance3.verified && sig.resonance3.latestReportTime) {
-        signalTimes.push(new Date(sig.resonance3.latestReportTime));
-    } else if (sig.resonance3.verified) {
-        signalTimes.push(new Date());
-    }
-
-    if (signalTimes.length < 3) {
-        const now = new Date().toISOString();
-        return { mode: 'none', earliestSignalTime: now, latestSignalTime: now, spanHours: 0 };
-    }
-
-    const earliest = new Date(Math.min(...signalTimes.map(t => t.getTime())));
-    const latest = new Date(Math.max(...signalTimes.map(t => t.getTime())));
-    const spanHours = (latest.getTime() - earliest.getTime()) / (1000 * 3600);
-
-    let mode: '1d' | '3d' | 'none';
-    if (spanHours <= 24) {
-        mode = '1d';
-    } else if (spanHours <= 72) {
-        mode = '3d';
-    } else {
-        mode = 'none';
-    }
-
-    return {
-        mode,
-        earliestSignalTime: earliest.toISOString(),
-        latestSignalTime: latest.toISOString(),
-        spanHours: Math.round(spanHours * 10) / 10,
-    };
 }
 
 // ==================== 飞书消息查询 ====================
@@ -312,12 +253,12 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 
 export class HotBurstService {
     /**
-     * 执行完整的三步媒体关注榜检测（个股代码驱动）：
+     * 执行完整的媒体关注榜检测（四信号源共振模型）：
      * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
-     * 2. 飞书群消息关联（同只股票是否在群内讨论）
-     * 3. 同花顺热榜验证（股票所属板块是否上榜）
+     * 2. 同花顺热榜验证（股票所属板块是否上榜）
+     * 3. 研报验证（24h 内是否有研报提及）
      *
-     * 关键词退居辅助解释层：附着在共振信号上说明原因
+     * 四个信号源任意两个及以上即构成共振
      */
     static async detectHotBurst(): Promise<HotBurstResult> {
         console.log('[HotBurst] 开始三步媒体关注榜检测（个股驱动）...');
@@ -397,11 +338,6 @@ export class HotBurstService {
         for (const stock of hotStocks) {
             const feishuData = feishuStockMap.get(stock.symbol);
             const feishuMsgCount = feishuData?.messageCount || 0;
-            const feishuKws = feishuData ? Array.from(feishuData.keywords) : [];
-
-            // 合并关键词（快讯关键词 + 飞书关键词）
-            const allKws = new Set(stockKeywordsMap.get(stock.symbol) || []);
-            for (const kw of feishuKws) allKws.add(kw);
 
             // 同花顺验证：查该股票所属板块是否在热榜
             let thsVerified = false;
@@ -433,28 +369,36 @@ export class HotBurstService {
                 }
             }
 
-            // 共振评分
+            // 初步评分（共振数量尚未确定，先用保守值做初筛）
             const { score, level } = calculateResonanceScore(
                 stock.currentCount, stock.surgeRatio,
-                feishuMsgCount,
-                thsSectorRank, thsVerified
+                thsSectorRank, thsVerified,
+                false,  // 研报暂未知
+                thsVerified ? 2 : 1,  // 有同花顺至少算二重
             );
 
-            // 过滤无共振的低分信号（仅快讯暴增但无飞书讨论且无板块验证的过滤）
+            // 过滤：仅快讯暴增但无板块验证的低分信号
             if (level === 'low' && !thsVerified) continue;
 
             resonanceCount++;
 
             const stockName = stock.stockName || await getStockName(stock.symbol);
 
+            // 构建触发标签：概念名 + 板块名 + 维度关键词
+            const triggerTagsSet = new Set<string>();
+            const conceptInfo = stockConceptMap.get(stock.symbol);
+            if (conceptInfo?.conceptName) triggerTagsSet.add(conceptInfo.conceptName);
+            if (thsVerified && thsSectorName) triggerTagsSet.add(thsSectorName);
+            const dimKws = stockKeywordsMap.get(stock.symbol) || [];
+            for (const kw of dimKws) triggerTagsSet.add(kw);
+
             outbreaks.push({
                 symbol: stock.symbol,
                 stockName,
                 newsCount: stock.currentCount,
                 newsSurgeRatio: stock.surgeRatio,
-                newsKeywords: Array.from(allKws),
+                triggerTags: Array.from(triggerTagsSet),
                 feishuMessageCount: feishuMsgCount,
-                feishuKeywords: feishuKws,
                 thsVerified,
                 thsSectorName,
                 thsSectorRank,
@@ -462,7 +406,7 @@ export class HotBurstService {
                 resonanceLevel: level,
                 price: null,
                 changePct: null,
-                sectorInfo: thsSectorName || stockConceptMap.get(stock.symbol)?.conceptName || '',
+                sectorInfo: thsVerified ? thsSectorName : (conceptInfo?.conceptName || ''),
                 conceptResonance: stockConceptMap.has(stock.symbol) ? {
                     conceptName: stockConceptMap.get(stock.symbol)!.conceptName,
                     clsCount: stockConceptMap.get(stock.symbol)!.clsCount,
@@ -471,47 +415,56 @@ export class HotBurstService {
                 } : null,
                 articles: stock.articles,
                 detectedAt: stock.detectedAt,
-                resonance1: { verified: false, conceptName: '', clsCount: 0, glhCount: 0 },
-                resonance2: { verified: false },
-                resonance3: { verified: false, reportCount: 0 },
-                timeWindow: { mode: 'none' as const, earliestSignalTime: now, latestSignalTime: now, spanHours: 0 },
-                effectiveResonanceCount: 0,
+                clsVerified: false,
+                glhVerified: false,
+                reportVerified: false,
+                resonanceCount: 0,
+                conceptDetail: null,
+                reportDetail: null,
             });
         }
 
         // 按共振评分降序
         outbreaks.sort((a, b) => b.resonanceScore - a.resonanceScore);
 
-        // 补充三重共振状态
+        // 补充共振状态
         for (const signal of outbreaks) {
-            const reports = await findResearchReportMessagesForStock(signal.symbol, 24);
-            signal.resonance1 = {
-                verified: !!signal.conceptResonance?.conceptVerified,
-                conceptName: signal.conceptResonance?.conceptName || '',
-                clsCount: signal.conceptResonance?.clsCount || 0,
-                glhCount: signal.conceptResonance?.glhCount || 0,
-            };
-            signal.resonance2 = {
-                verified: signal.thsVerified,
-                rank: signal.thsSectorRank,
-                sectorName: signal.thsSectorName,
-            };
-            signal.resonance3 = {
-                verified: reports.length > 0,
-                reportCount: reports.length,
-                latestReportTime: reports[0]?.receivedAt,
-            };
+            // 财联社信号：所属概念在财联社被提及
+            signal.clsVerified = (signal.conceptResonance?.clsCount ?? 0) > 0;
+            // 格隆汇信号：所属概念在格隆汇被提及
+            signal.glhVerified = (signal.conceptResonance?.glhCount ?? 0) > 0;
 
-            // 计算时间窗口
-            const tw = calculateTimeWindow(signal);
-            signal.timeWindow = tw;
-
-            // 有效共振数量：如果三重共振超出时间窗口，降级为二重
-            if (countResonances(signal) >= 3 && tw.mode === 'none') {
-                signal.effectiveResonanceCount = 2;
-            } else {
-                signal.effectiveResonanceCount = countResonances(signal);
+            // 概念详情
+            if (signal.conceptResonance) {
+                signal.conceptDetail = {
+                    conceptName: signal.conceptResonance.conceptName,
+                    clsCount: signal.conceptResonance.clsCount,
+                    glhCount: signal.conceptResonance.glhCount,
+                };
             }
+
+            // 研报验证
+            const reports = await findResearchReportMessagesForStock(signal.symbol, 24);
+            signal.reportVerified = reports.length > 0;
+            if (reports.length > 0) {
+                signal.reportDetail = {
+                    reportCount: reports.length,
+                    latestReportTime: reports[0]?.receivedAt,
+                };
+            }
+
+            // 计算共振数量（四个信号源）
+            signal.resonanceCount = [signal.clsVerified, signal.glhVerified, signal.thsVerified, signal.reportVerified].filter(Boolean).length;
+
+            // 重新计算评分（使用新算法）
+            const { score, level } = calculateResonanceScore(
+                signal.newsCount, signal.newsSurgeRatio,
+                signal.thsSectorRank, signal.thsVerified,
+                signal.reportVerified,
+                signal.resonanceCount,
+            );
+            signal.resonanceScore = score;
+            signal.resonanceLevel = level;
         }
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
@@ -534,8 +487,7 @@ export class HotBurstService {
         const result: HotBurstResult = {
             update_time: now,
             total_stocks_checked: hotStocks.length,
-            resonance_count: resonanceCount,
-            triple_resonance_count: outbreaks.filter(s => s.effectiveResonanceCount >= 3).length,
+            resonance_count: outbreaks.length,
             ths_hot_sectors: thsHotSectors,
             outbreaks,
             hot_concepts: hotConcepts,
@@ -553,21 +505,21 @@ export class HotBurstService {
 
     /** 将检测结果保存到历史表 */
     static async saveHistory(result: HotBurstResult): Promise<void> {
-        // 仅入库有效三重共振信号（effectiveResonanceCount >= 3）
-        const tripleResonanceSignals = result.outbreaks.filter(s => s.effectiveResonanceCount >= 3);
-        if (!tripleResonanceSignals.length) {
-            console.log('[HotBurst] 无有效三重共振信号，跳过历史入库');
+        // 入库二重及以上共振信号
+        const qualifiedSignals = result.outbreaks.filter(s => s.resonanceCount >= 2);
+        if (!qualifiedSignals.length) {
+            console.log('[HotBurst] 无二重及以上共振信号，跳过历史入库');
             return;
         }
         try {
             const detectedAt = result.update_time;
-            const rows = tripleResonanceSignals.map(s => [
+            const rows = qualifiedSignals.map(s => [
                 detectedAt, s.symbol, s.stockName || s.symbol,
                 s.resonanceScore, s.resonanceLevel,
                 s.price, s.changePct, s.sectorInfo,
-                [...new Set([...(s.newsKeywords || []), ...(s.feishuKeywords || [])])].join('、'),
+                s.triggerTags.join('、'),
                 s.newsCount, s.feishuMessageCount, s.thsVerified,
-                s.effectiveResonanceCount,
+                s.resonanceCount,
             ]);
             const placeholders = rows.map((_, i) =>
                 `($${i * 13 + 1}, $${i * 13 + 2}, $${i * 13 + 3}, $${i * 13 + 4}, $${i * 13 + 5}, $${i * 13 + 6}, $${i * 13 + 7}, $${i * 13 + 8}, $${i * 13 + 9}, $${i * 13 + 10}, $${i * 13 + 11}, $${i * 13 + 12}, $${i * 13 + 13})`
@@ -578,7 +530,7 @@ export class HotBurstService {
                  VALUES ${placeholders}`,
                 values
             );
-            console.log(`[HotBurst] 保存 ${rows.length} 条三重共振历史记录（总信号 ${result.outbreaks.length} 条）`);
+            console.log(`[HotBurst] 保存 ${rows.length} 条二重共振历史记录（总信号 ${result.outbreaks.length} 条）`);
         } catch (err) {
             console.error('[HotBurst] 保存历史记录失败:', (err as Error).message);
         }
@@ -586,18 +538,17 @@ export class HotBurstService {
 
     /**
      * 查询历史媒体关注榜记录
-     * @param tripleResonanceOnly 仅返回三重共振（resonance_count >= 3）的记录
+     * @param minResonanceOnly 仅返回二重共振及以上（resonance_count >= 2）的记录
      */
     static async getHistory(
         limit: number = 50,
         offset: number = 0,
-        tripleResonanceOnly: boolean = true
+        minResonanceOnly: boolean = true
     ): Promise<{ total: number; records: any[] }> {
-        if (tripleResonanceOnly) {
-            // 三重共振过滤：仅 resonance_count >= 3
+        if (minResonanceOnly) {
             const countResult = await pool.query(
                 `SELECT COUNT(*)::int AS total FROM media_attention_history
-                 WHERE resonance_count >= 3`
+                 WHERE resonance_count >= 2`
             );
             const total = countResult.rows[0]?.total || 0;
 
@@ -605,7 +556,7 @@ export class HotBurstService {
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
                         price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
                  FROM media_attention_history
-                 WHERE resonance_count >= 3
+                 WHERE resonance_count >= 2
                  ORDER BY detected_at DESC, resonance_score DESC
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
@@ -640,19 +591,17 @@ export class HotBurstService {
      * @param minResonanceCount 最小有效共振数量过滤（0=不过滤）
      */
     static async getRecentBursts(_hours: number = 6, minResonanceCount: number = 0): Promise<HotBurstResult | null> {
-        // 如果有缓存且未过期，直接返回
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
             if (minResonanceCount > 0) {
                 return {
                     ...HotBurstService.lastDetectResult,
                     outbreaks: HotBurstService.lastDetectResult.outbreaks.filter(
-                        s => s.effectiveResonanceCount >= minResonanceCount
+                        s => s.resonanceCount >= minResonanceCount
                     ),
                 };
             }
             return HotBurstService.lastDetectResult;
         }
-        // 缓存过期或无缓存，执行一次检测
         try {
             const result = await HotBurstService.detectHotBurst();
             HotBurstService.lastDetectResult = result;
@@ -661,7 +610,7 @@ export class HotBurstService {
                 return {
                     ...result,
                     outbreaks: result.outbreaks.filter(
-                        s => s.effectiveResonanceCount >= minResonanceCount
+                        s => s.resonanceCount >= minResonanceCount
                     ),
                 };
             }
