@@ -13,19 +13,20 @@ export interface MatchedSector {
 export interface StockResonanceDetail {
   symbol: string;
   updateTime: string;
-  resonance1: { verified: boolean; concepts: { conceptName: string; conceptTsCode: string; clsCount: number; glhCount: number; surgeRatio: number }[] };
-  resonance2: { verified: boolean; bestRank: number; matchedSectors: MatchedSector[] };
-  resonance3: { verified: boolean; reports: ResearchReportStock[] };
+  clsVerified: boolean;
+  glhVerified: boolean;
+  thsVerified: boolean;
+  reportVerified: boolean;
+  /** 共振信号数量（1-4） */
+  resonanceCount: number;
+  /** 概念详情 */
+  concepts: { conceptName: string; conceptTsCode: string; clsCount: number; glhCount: number; surgeRatio: number }[];
+  /** 同花顺匹配板块 */
+  matchedSectors: MatchedSector[];
+  bestRank: number;
+  /** 研报详情 */
+  reports: ResearchReportStock[];
   isOutbreak: boolean;
-  /** 时间窗口校验结果 */
-  timeWindow: {
-    mode: '1d' | '3d' | 'none';
-    earliestSignalTime: string;
-    latestSignalTime: string;
-    spanHours: number;
-  };
-  /** 有效共振数量 */
-  effectiveResonanceCount: number;
 }
 
 function formatDate(d: Date): string {
@@ -68,8 +69,14 @@ export async function evaluateStockResonance(
   const relatedConcepts: { conceptName: string; conceptTsCode: string; clsCount: number; glhCount: number; surgeRatio: number }[] = [];
   const matchedSectors: MatchedSector[] = [];
 
+  let clsVerified = false;
+  let glhVerified = false;
+
   for (const concept of hotConcepts) {
     if (!concept.stockCodes.some(s => s.symbol === symbol)) continue;
+
+    if (concept.clsCount > 0) clsVerified = true;
+    if (concept.glhCount > 0) glhVerified = true;
 
     relatedConcepts.push({
       conceptName: concept.conceptName,
@@ -94,19 +101,23 @@ export async function evaluateStockResonance(
   }
 
   const bestRank = matchedSectors.length > 0 ? Math.min(...matchedSectors.map(s => s.rank)) : 0;
-
-  const resonanceCount = [relatedConcepts.length > 0, matchedSectors.length > 0, reportStocks.length > 0].filter(Boolean).length;
-  const now = new Date().toISOString();
+  const thsVerified = matchedSectors.length > 0;
+  const reportVerified = reportStocks.length > 0;
+  const resonanceCount = [clsVerified, glhVerified, thsVerified, reportVerified].filter(Boolean).length;
 
   return {
     symbol,
     updateTime: new Date().toISOString(),
-    resonance1: { verified: relatedConcepts.length > 0, concepts: relatedConcepts },
-    resonance2: { verified: matchedSectors.length > 0, bestRank, matchedSectors },
-    resonance3: { verified: reportStocks.length > 0, reports: reportStocks.slice(0, 10) },
-    isOutbreak: resonanceCount >= 3,
-    timeWindow: { mode: 'none' as const, earliestSignalTime: now, latestSignalTime: now, spanHours: 0 },
-    effectiveResonanceCount: resonanceCount,
+    clsVerified,
+    glhVerified,
+    thsVerified,
+    reportVerified,
+    resonanceCount,
+    concepts: relatedConcepts,
+    matchedSectors,
+    bestRank,
+    reports: reportStocks.slice(0, 10),
+    isOutbreak: resonanceCount >= 2,
   };
 }
 
