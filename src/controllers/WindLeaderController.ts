@@ -144,13 +144,13 @@ export class WindLeaderController {
     /**
      * GET /api/cn/media-attention
      * 查询最近媒体关注榜检测结果
-     * 默认仅返回二重共振及以上（resonance_count >= 2）的信号（double_resonance_only=true）
+     * 默认返回二重共振及以上（effectiveResonanceCount >= 2）的信号（min_resonance=2）
      */
     static async getHotBurst(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
-            const doubleResonanceOnly = String(req.query.double_resonance_only) !== 'false';
-            const result = await HotBurstService.getRecentBursts(hours, doubleResonanceOnly);
+            const minResonance = parseInt(String(req.query.min_resonance || '2'), 10);
+            const result = await HotBurstService.getRecentBursts(hours, minResonance);
             if (!result) {
                 createResponse(res, 404, '暂无媒体关注榜检测数据');
                 return;
@@ -166,14 +166,14 @@ export class WindLeaderController {
     /**
      * GET /api/cn/media-attention/history
      * 查询历史媒体关注榜记录
-     * 默认仅返回二重共振及以上（resonance_count >= 2）的记录（double_resonance_only=true）
+     * 默认仅返回三重共振（resonance_count >= 3）的记录（triple_resonance_only=true）
      */
     static async getHotBurstHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 200);
             const offset = Math.max(parseInt(String(req.query.offset || '0'), 10), 0);
-            const doubleResonanceOnly = String(req.query.double_resonance_only) !== 'false';
-            const result = await HotBurstService.getHistory(limit, offset, doubleResonanceOnly);
+            const tripleResonanceOnly = String(req.query.triple_resonance_only) !== 'false';
+            const result = await HotBurstService.getHistory(limit, offset, tripleResonanceOnly);
             createResponse(res, 200, 'success', result);
         } catch (err: any) {
             const errMsg = err instanceof Error ? err.message : String(err);

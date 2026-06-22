@@ -97,11 +97,11 @@ async function getOutbreakData(): Promise<{ feishu: OutbreakStock[]; wechat: Out
     try {
         console.log('[MessagePush] 开始获取媒体关注榜数据...');
         const result = await HotBurstService.detectHotBurst();
-        // 三重共振过滤：仅推送三重共振全通过的信号
+        // 三重共振过滤：仅推送有效三重共振（时间窗口内）的信号
         const signals = result.outbreaks
-            .filter(s => s.resonance1?.verified && s.resonance2?.verified && s.resonance3?.verified)
+            .filter(s => s.effectiveResonanceCount >= 3)
             .slice(0, 3);
-        console.log(`[MessagePush] 媒体关注榜检测完成: ${signals.length} 个三重共振信号（共${result.outbreaks.length}个）`);
+        console.log(`[MessagePush] 媒体关注榜检测完成: ${signals.length} 个有效三重共振信号（共${result.outbreaks.length}个）`);
         return {
             feishu: signals.map(signal => ({
                 name: signal.stockName || signal.symbol,

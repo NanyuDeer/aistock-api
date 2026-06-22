@@ -17,6 +17,15 @@ export interface StockResonanceDetail {
   resonance2: { verified: boolean; bestRank: number; matchedSectors: MatchedSector[] };
   resonance3: { verified: boolean; reports: ResearchReportStock[] };
   isOutbreak: boolean;
+  /** 时间窗口校验结果 */
+  timeWindow: {
+    mode: '1d' | '3d' | 'none';
+    earliestSignalTime: string;
+    latestSignalTime: string;
+    spanHours: number;
+  };
+  /** 有效共振数量 */
+  effectiveResonanceCount: number;
 }
 
 function formatDate(d: Date): string {
@@ -86,13 +95,18 @@ export async function evaluateStockResonance(
 
   const bestRank = matchedSectors.length > 0 ? Math.min(...matchedSectors.map(s => s.rank)) : 0;
 
+  const resonanceCount = [relatedConcepts.length > 0, matchedSectors.length > 0, reportStocks.length > 0].filter(Boolean).length;
+  const now = new Date().toISOString();
+
   return {
     symbol,
     updateTime: new Date().toISOString(),
     resonance1: { verified: relatedConcepts.length > 0, concepts: relatedConcepts },
     resonance2: { verified: matchedSectors.length > 0, bestRank, matchedSectors },
     resonance3: { verified: reportStocks.length > 0, reports: reportStocks.slice(0, 10) },
-    isOutbreak: relatedConcepts.length > 0 && matchedSectors.length > 0 && reportStocks.length > 0,
+    isOutbreak: resonanceCount >= 3,
+    timeWindow: { mode: 'none' as const, earliestSignalTime: now, latestSignalTime: now, spanHours: 0 },
+    effectiveResonanceCount: resonanceCount,
   };
 }
 

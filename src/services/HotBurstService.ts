@@ -80,12 +80,27 @@ interface StockResonanceSignal {
     resonance1: { verified: boolean; conceptName: string; clsCount: number; glhCount: number };
     resonance2: { verified: boolean; rank?: number; sectorName?: string };
     resonance3: { verified: boolean; reportCount: number; latestReportTime?: string };
+    /** 三重共振时间窗口校验 */
+    timeWindow: {
+        /** 时间窗口模式：1d=同一天内, 3d=三天内, none=超出窗口 */
+        mode: '1d' | '3d' | 'none';
+        /** 三个信号中最早的时间 */
+        earliestSignalTime: string;
+        /** 三个信号中最晚的时间 */
+        latestSignalTime: string;
+        /** 时间跨度（小时） */
+        spanHours: number;
+    };
+    /** 有效共振数量（考虑时间窗口后，超3天降级为2） */
+    effectiveResonanceCount: number;
 }
 
 interface HotBurstResult {
     update_time: string;
     total_stocks_checked: number;
     resonance_count: number;
+    /** 有效三重共振信号数（时间窗口内） */
+    triple_resonance_count: number;
     ths_hot_sectors: { name: string; rank: number; change_pct: number }[];
     outbreaks: StockResonanceSignal[];
     /** 细分概念爆发信号（共振一） */
@@ -190,6 +205,70 @@ function countResonances(sig: {
 }): number {
     return [sig.resonance1.verified, sig.resonance2.verified, sig.resonance3.verified]
         .filter(Boolean).length;
+}
+
+/**
+ * 计算三重共振的时间窗口
+ *
+ * 规则：
+ * - 三个信号在24h内发生 → mode='1d'（严格三重共振）
+ * - 三个信号在72h内发生 → mode='3d'（宽松三重共振）
+ * - 超过72h → mode='none'（不构成三重共振，降级为二重）
+ *
+ * 信号时间来源：
+ * - 共振一：detectedAt（概念检测时间）
+ * - 共振二：当天日期（热榜数据本身就是当天的）
+ * - 共振三：resonance3.latestReportTime（研报时间）
+ */
+function calculateTimeWindow(sig: StockResonanceSignal): {
+    mode: '1d' | '3d' | 'none';
+    earliestSignalTime: string;
+    latestSignalTime: string;
+    spanHours: number;
+} {
+    const signalTimes: Date[] = [];
+
+    // 共振一时间
+    if (sig.resonance1.verified) {
+        signalTimes.push(sig.detectedAt ? new Date(sig.detectedAt) : new Date());
+    }
+
+    // 共振二时间（同花顺热榜 = 当天）
+    if (sig.resonance2.verified) {
+        signalTimes.push(new Date());
+    }
+
+    // 共振三时间（研报时间）
+    if (sig.resonance3.verified && sig.resonance3.latestReportTime) {
+        signalTimes.push(new Date(sig.resonance3.latestReportTime));
+    } else if (sig.resonance3.verified) {
+        signalTimes.push(new Date());
+    }
+
+    if (signalTimes.length < 3) {
+        const now = new Date().toISOString();
+        return { mode: 'none', earliestSignalTime: now, latestSignalTime: now, spanHours: 0 };
+    }
+
+    const earliest = new Date(Math.min(...signalTimes.map(t => t.getTime())));
+    const latest = new Date(Math.max(...signalTimes.map(t => t.getTime())));
+    const spanHours = (latest.getTime() - earliest.getTime()) / (1000 * 3600);
+
+    let mode: '1d' | '3d' | 'none';
+    if (spanHours <= 24) {
+        mode = '1d';
+    } else if (spanHours <= 72) {
+        mode = '3d';
+    } else {
+        mode = 'none';
+    }
+
+    return {
+        mode,
+        earliestSignalTime: earliest.toISOString(),
+        latestSignalTime: latest.toISOString(),
+        spanHours: Math.round(spanHours * 10) / 10,
+    };
 }
 
 // ==================== 飞书消息查询 ====================
@@ -394,6 +473,8 @@ export class HotBurstService {
                 resonance1: { verified: false, conceptName: '', clsCount: 0, glhCount: 0 },
                 resonance2: { verified: false },
                 resonance3: { verified: false, reportCount: 0 },
+                timeWindow: { mode: 'none' as const, earliestSignalTime: now, latestSignalTime: now, spanHours: 0 },
+                effectiveResonanceCount: 0,
             });
         }
 
@@ -419,6 +500,17 @@ export class HotBurstService {
                 reportCount: reports.length,
                 latestReportTime: reports[0]?.receivedAt,
             };
+
+            // 计算时间窗口
+            const tw = calculateTimeWindow(signal);
+            signal.timeWindow = tw;
+
+            // 有效共振数量：如果三重共振超出时间窗口，降级为二重
+            if (countResonances(signal) >= 3 && tw.mode === 'none') {
+                signal.effectiveResonanceCount = 2;
+            } else {
+                signal.effectiveResonanceCount = countResonances(signal);
+            }
         }
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
@@ -442,6 +534,7 @@ export class HotBurstService {
             update_time: now,
             total_stocks_checked: hotStocks.length,
             resonance_count: resonanceCount,
+            triple_resonance_count: outbreaks.filter(s => s.effectiveResonanceCount >= 3).length,
             ths_hot_sectors: thsHotSectors,
             outbreaks,
             hot_concepts: hotConcepts,
@@ -459,16 +552,21 @@ export class HotBurstService {
 
     /** 将检测结果保存到历史表 */
     static async saveHistory(result: HotBurstResult): Promise<void> {
-        if (!result.outbreaks.length) return;
+        // 仅入库有效三重共振信号（effectiveResonanceCount >= 3）
+        const tripleResonanceSignals = result.outbreaks.filter(s => s.effectiveResonanceCount >= 3);
+        if (!tripleResonanceSignals.length) {
+            console.log('[HotBurst] 无有效三重共振信号，跳过历史入库');
+            return;
+        }
         try {
             const detectedAt = result.update_time;
-            const rows = result.outbreaks.map(s => [
+            const rows = tripleResonanceSignals.map(s => [
                 detectedAt, s.symbol, s.stockName || s.symbol,
                 s.resonanceScore, s.resonanceLevel,
                 s.price, s.changePct, s.sectorInfo,
                 [...new Set([...(s.newsKeywords || []), ...(s.feishuKeywords || [])])].join('、'),
                 s.newsCount, s.feishuMessageCount, s.thsVerified,
-                countResonances(s),
+                s.effectiveResonanceCount,
             ]);
             const placeholders = rows.map((_, i) =>
                 `($${i * 13 + 1}, $${i * 13 + 2}, $${i * 13 + 3}, $${i * 13 + 4}, $${i * 13 + 5}, $${i * 13 + 6}, $${i * 13 + 7}, $${i * 13 + 8}, $${i * 13 + 9}, $${i * 13 + 10}, $${i * 13 + 11}, $${i * 13 + 12}, $${i * 13 + 13})`
@@ -479,7 +577,7 @@ export class HotBurstService {
                  VALUES ${placeholders}`,
                 values
             );
-            console.log(`[HotBurst] 保存 ${rows.length} 条历史记录`);
+            console.log(`[HotBurst] 保存 ${rows.length} 条三重共振历史记录（总信号 ${result.outbreaks.length} 条）`);
         } catch (err) {
             console.error('[HotBurst] 保存历史记录失败:', (err as Error).message);
         }
@@ -487,18 +585,18 @@ export class HotBurstService {
 
     /**
      * 查询历史媒体关注榜记录
-     * @param doubleResonanceOnly 仅返回二重共振及以上（resonance_count >= 2）的记录
+     * @param tripleResonanceOnly 仅返回三重共振（resonance_count >= 3）的记录
      */
     static async getHistory(
         limit: number = 50,
         offset: number = 0,
-        doubleResonanceOnly: boolean = true
+        tripleResonanceOnly: boolean = true
     ): Promise<{ total: number; records: any[] }> {
-        if (doubleResonanceOnly) {
-            // 二重共振过滤：至少 2/3 共振通过
+        if (tripleResonanceOnly) {
+            // 三重共振过滤：仅 resonance_count >= 3
             const countResult = await pool.query(
                 `SELECT COUNT(*)::int AS total FROM media_attention_history
-                 WHERE resonance_count >= 2`
+                 WHERE resonance_count >= 3`
             );
             const total = countResult.rows[0]?.total || 0;
 
@@ -506,7 +604,7 @@ export class HotBurstService {
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
                         price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
                  FROM media_attention_history
-                 WHERE resonance_count >= 2
+                 WHERE resonance_count >= 3
                  ORDER BY detected_at DESC, resonance_score DESC
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
@@ -538,16 +636,16 @@ export class HotBurstService {
     /**
      * 获取最近的媒体关注榜检测结果
      * 优先返回缓存，缓存过期则执行一次检测
-     * @param doubleResonanceOnly 是否仅返回二重共振及以上（resonance_count >= 2）的信号
+     * @param minResonanceCount 最小有效共振数量过滤（0=不过滤）
      */
-    static async getRecentBursts(_hours: number = 6, doubleResonanceOnly: boolean = false): Promise<HotBurstResult | null> {
+    static async getRecentBursts(_hours: number = 6, minResonanceCount: number = 0): Promise<HotBurstResult | null> {
         // 如果有缓存且未过期，直接返回
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
-            if (doubleResonanceOnly) {
+            if (minResonanceCount > 0) {
                 return {
                     ...HotBurstService.lastDetectResult,
                     outbreaks: HotBurstService.lastDetectResult.outbreaks.filter(
-                        s => countResonances(s) >= 2
+                        s => s.effectiveResonanceCount >= minResonanceCount
                     ),
                 };
             }
@@ -558,11 +656,11 @@ export class HotBurstService {
             const result = await HotBurstService.detectHotBurst();
             HotBurstService.lastDetectResult = result;
             HotBurstService.lastDetectTime = Date.now();
-            if (doubleResonanceOnly) {
+            if (minResonanceCount > 0) {
                 return {
                     ...result,
                     outbreaks: result.outbreaks.filter(
-                        s => countResonances(s) >= 2
+                        s => s.effectiveResonanceCount >= minResonanceCount
                     ),
                 };
             }
