@@ -142,7 +142,7 @@ export class ProfitForecastController {
             return;
         }
 
-        const source = `同花顺 https://basic.10jqka.com.cn/new/${symbol}/worth.html`;
+        const source = `同花顺 http://basic.10jqka.com.cn/${symbol}/worth.html`;
 
         try {
             if (req.method === 'GET') {
@@ -303,5 +303,199 @@ export class ProfitForecastController {
         } catch (error: any) {
             createResponse(res, 500, error instanceof Error ? error.message : 'Internal Server Error');
         }
+    }
+
+    // ============ 批量爬取 ============
+    private static batchStatus = {
+        running: false,
+        total: 0,
+        success: 0,
+        failed: 0,
+        current: 0,
+        currentSymbol: '',
+        startedAt: 0,
+        finishedAt: 0,
+        errors: [] as { symbol: string; error: string }[],
+    };
+
+    static async batchRefresh(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        if (ProfitForecastController.batchStatus.running) {
+            createResponse(res, 409, '批量爬取正在进行中，请等待完成或查看进度');
+            return;
+        }
+
+        let symbols: string[] = [];
+        let concurrency = 3;
+        let intervalMs = 500;
+        let timeoutMs = 15000;
+        let maxRetries = 1;
+
+        try {
+            const body = req.body || {};
+            if (Array.isArray(body.symbols)) {
+                symbols = body.symbols.filter((s: any) => typeof s === 'string' && /^\d{6}$/.test(s));
+            }
+            if (typeof body.concurrency === 'number') concurrency = Math.max(1, Math.min(10, body.concurrency));
+            if (typeof body.intervalMs === 'number') intervalMs = Math.max(0, Math.min(5000, body.intervalMs));
+            if (typeof body.timeoutMs === 'number') timeoutMs = Math.max(5000, Math.min(60000, body.timeoutMs));
+            if (typeof body.maxRetries === 'number') maxRetries = Math.max(0, Math.min(3, body.maxRetries));
+        } catch {}
+
+        // 未指定 symbols 则全量
+        if (symbols.length === 0) {
+            try {
+                const result = await pool.query('SELECT symbol FROM stocks ORDER BY symbol');
+                symbols = result.rows.map((r: any) => r.symbol).filter((s: string) => /^\d{6}$/.test(s));
+            } catch (err: any) {
+                createResponse(res, 500, `读取股票列表失败: ${err.message}`);
+                return;
+            }
+        }
+
+        if (symbols.length === 0) {
+            createResponse(res, 400, '未找到可爬取的股票代码');
+            return;
+        }
+
+        // 重置状态并启动后台任务
+        ProfitForecastController.batchStatus = {
+            running: true,
+            total: symbols.length,
+            success: 0,
+            failed: 0,
+            current: 0,
+            currentSymbol: '',
+            startedAt: Date.now(),
+            finishedAt: 0,
+            errors: [],
+        };
+
+        createResponse(res, 200, `批量爬取已启动，共 ${symbols.length} 只股票，并发 ${concurrency}`, {
+            total: symbols.length,
+            concurrency,
+            intervalMs,
+            timeoutMs,
+            maxRetries,
+        });
+
+        // 后台执行，不阻塞响应
+        ProfitForecastController.runBatch(symbols, { concurrency, intervalMs, timeoutMs, maxRetries })
+            .catch(err => console.error('[ProfitForecast] batchRefresh 异常:', err?.message || err));
+    }
+
+    private static async runBatch(
+        symbols: string[],
+        opts: { concurrency: number; intervalMs: number; timeoutMs: number; maxRetries: number }
+    ): Promise<void> {
+        const { concurrency, intervalMs, timeoutMs, maxRetries } = opts;
+        const queue = [...symbols];
+        let cursor = 0;
+
+        async function worker(workerId: number) {
+            while (queue.length > 0) {
+                const sym = queue.shift();
+                if (!sym) break;
+                cursor++;
+                ProfitForecastController.batchStatus.current = cursor;
+                ProfitForecastController.batchStatus.currentSymbol = sym;
+
+                let ok = false;
+                let lastErr = '';
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    try {
+                        const data = await ProfitForecastController.fetchWithTimeout(sym, timeoutMs);
+                        const summary = typeof data['摘要'] === 'string' ? data['摘要'] : '';
+                        const forecastNetProfitYoy = ProfitForecastController.extractForecastNetProfitYoy(summary);
+                        const updateTime = ProfitForecastController.formatToChinaTimeWithMs(Date.now());
+                        await pool.query(
+                            `INSERT INTO earnings_forecast (symbol, update_time, summary, forecast_detail, forecast_netprofit_yoy)
+                             VALUES ($1, $2, $3, $4, $5)`,
+                            [sym, updateTime, summary, JSON.stringify(data['业绩预测详表_详细指标预测'] ?? []), forecastNetProfitYoy],
+                        );
+                        ok = true;
+                        break;
+                    } catch (err: any) {
+                        lastErr = err?.message || String(err);
+                        if (attempt < maxRetries) {
+                            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+                        }
+                    }
+                }
+
+                if (ok) {
+                    ProfitForecastController.batchStatus.success++;
+                } else {
+                    ProfitForecastController.batchStatus.failed++;
+                    ProfitForecastController.batchStatus.errors.push({ symbol: sym, error: lastErr });
+                    if (ProfitForecastController.batchStatus.errors.length > 200) {
+                        ProfitForecastController.batchStatus.errors.shift();
+                    }
+                }
+
+                if (intervalMs > 0) {
+                    await new Promise(r => setTimeout(r, intervalMs));
+                }
+            }
+        }
+
+        const workers = Array.from({ length: concurrency }, (_, i) => worker(i));
+        await Promise.all(workers);
+
+        ProfitForecastController.batchStatus.running = false;
+        ProfitForecastController.batchStatus.finishedAt = Date.now();
+        ProfitForecastController.batchStatus.currentSymbol = '';
+        const cost = ((ProfitForecastController.batchStatus.finishedAt - ProfitForecastController.batchStatus.startedAt) / 1000).toFixed(1);
+        console.log(`[ProfitForecast] 批量爬取完成: 成功 ${ProfitForecastController.batchStatus.success}/${ProfitForecastController.batchStatus.total}, 耗时 ${cost}秒`);
+    }
+
+    private static async fetchWithTimeout(symbol: string, timeoutMs: number): Promise<Record<string, any>> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            // ThsService 不支持 abort，这里直接内联实现以便控制超时
+            const url = `http://basic.10jqka.com.cn/${symbol}/worth.html`;
+            const response = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' },
+                signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(`同花顺接口请求失败: ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            const html = new TextDecoder('gbk').decode(arrayBuffer);
+            const cleanHtml = html
+                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<!--[\s\S]*?-->/g, '');
+            const cheerio = await import('cheerio');
+            const $ = cheerio.load(cleanHtml, { scriptingEnabled: false });
+            const result: Record<string, any> = { '摘要': '', '业绩预测详表_详细指标预测': [] };
+            result['摘要'] = $('#forecast > div.bd > p.tip.clearfix').text().trim().replace(/\s+/g, ' ');
+            const detailTable = $('#forecastdetail > div.bd > table.m_table.m_hl.ggintro.ggintro_1.organData');
+            if (detailTable.length > 0) {
+                const { parseTable } = await import('../utils/parser');
+                result['业绩预测详表_详细指标预测'] = parseTable($, detailTable[0], '业绩预测详表-详细指标预测');
+            }
+            return result;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    static async getBatchStatus(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+        const s = ProfitForecastController.batchStatus;
+        const elapsedMs = s.running ? Date.now() - s.startedAt : (s.finishedAt - s.startedAt);
+        const progress = s.total > 0 ? Math.round((s.current / s.total) * 100) : 0;
+        createResponse(res, 200, 'success', {
+            running: s.running,
+            total: s.total,
+            success: s.success,
+            failed: s.failed,
+            current: s.current,
+            currentSymbol: s.currentSymbol,
+            progress,
+            elapsedMs,
+            startedAt: s.startedAt,
+            finishedAt: s.finishedAt,
+            recentErrors: s.errors.slice(-20),
+        });
     }
 }

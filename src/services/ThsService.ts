@@ -3,7 +3,7 @@ import { parseTable } from '../utils/parser';
 import { thsThrottler } from '../utils/throttlers';
 
 export class ThsService {
-    private static readonly BASE_URL = 'https://basic.10jqka.com.cn/new';
+    private static readonly BASE_URL = 'http://basic.10jqka.com.cn';
     private static readonly HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     };
