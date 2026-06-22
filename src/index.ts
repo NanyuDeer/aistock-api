@@ -632,6 +632,16 @@ async function start() {
             )
         `);
         await pool.query('CREATE INDEX IF NOT EXISTS idx_earnings_forecast_symbol ON earnings_forecast(symbol)');
+        // 迁移：为 symbol 添加 UNIQUE 约束，支持 upsert（每次爬取替换旧数据，避免数据堆积）
+        try {
+            await pool.query('ALTER TABLE earnings_forecast ADD CONSTRAINT earnings_forecast_symbol_unique UNIQUE (symbol)');
+            console.log('[DB] earnings_forecast: added UNIQUE constraint on symbol');
+        } catch (e: any) {
+            // 约束已存在则忽略
+            if (!/already exists|duplicate/i.test(e.message)) {
+                console.warn('[DB] earnings_forecast UNIQUE constraint migration:', e.message);
+            }
+        }
         console.log('[DB] earnings_forecast table ready');
     } catch (err: any) {
         console.warn('[DB] earnings_forecast table check:', err.message);

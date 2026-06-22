@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ThsService } from '../services/ThsService';
 import { createResponse } from '../utils/response';
 import pool from '../db';
+import { CacheService } from '../services/CacheService';
 
 interface EarningsForecastRow {
     update_time: string;
@@ -181,7 +182,12 @@ export class ProfitForecastController {
 
                 await pool.query(
                     `INSERT INTO earnings_forecast (symbol, update_time, summary, forecast_detail, forecast_netprofit_yoy)
-                     VALUES ($1, $2, $3, $4, $5)`,
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (symbol) DO UPDATE SET
+                        update_time = EXCLUDED.update_time,
+                        summary = EXCLUDED.summary,
+                        forecast_detail = EXCLUDED.forecast_detail,
+                        forecast_netprofit_yoy = EXCLUDED.forecast_netprofit_yoy`,
                     [symbol, updateTime, summary, JSON.stringify(data['业绩预测详表_详细指标预测'] ?? []), forecastNetProfitYoy],
                 );
 
@@ -316,11 +322,24 @@ export class ProfitForecastController {
         startedAt: 0,
         finishedAt: 0,
         errors: [] as { symbol: string; error: string }[],
+        lastBatchDate: '', // 上次批量爬取日期 YYYY-MM-DD，用于每天一次限制
     };
 
     static async batchRefresh(req: Request, res: Response, _next: NextFunction): Promise<void> {
         if (ProfitForecastController.batchStatus.running) {
             createResponse(res, 409, '批量爬取正在进行中，请等待完成或查看进度');
+            return;
+        }
+
+        // 每天最多一次限制：检查今天是否已经爬取过（Redis 持久化 + 内存备份）
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const redisLastDate = await CacheService.get<string>('profit_forecast:batch:date');
+        const lastDate = redisLastDate || ProfitForecastController.batchStatus.lastBatchDate;
+        if (lastDate === today) {
+            ProfitForecastController.batchStatus.lastBatchDate = today; // 同步内存
+            createResponse(res, 429, '今天已经执行过批量爬取，每天最多一次，请明天再试', {
+                lastBatchDate: lastDate,
+            });
             return;
         }
 
@@ -368,7 +387,10 @@ export class ProfitForecastController {
             startedAt: Date.now(),
             finishedAt: 0,
             errors: [],
+            lastBatchDate: today, // 立即标记今天已爬取，防止并发重复触发
         };
+        // 同步写入 Redis（TTL 25 小时，确保跨天后自动失效）
+        await CacheService.put('profit_forecast:batch:date', today, 25 * 3600);
 
         createResponse(res, 200, `批量爬取已启动，共 ${symbols.length} 只股票，并发 ${concurrency}`, {
             total: symbols.length,
@@ -409,7 +431,12 @@ export class ProfitForecastController {
                         const updateTime = ProfitForecastController.formatToChinaTimeWithMs(Date.now());
                         await pool.query(
                             `INSERT INTO earnings_forecast (symbol, update_time, summary, forecast_detail, forecast_netprofit_yoy)
-                             VALUES ($1, $2, $3, $4, $5)`,
+                             VALUES ($1, $2, $3, $4, $5)
+                             ON CONFLICT (symbol) DO UPDATE SET
+                                update_time = EXCLUDED.update_time,
+                                summary = EXCLUDED.summary,
+                                forecast_detail = EXCLUDED.forecast_detail,
+                                forecast_netprofit_yoy = EXCLUDED.forecast_netprofit_yoy`,
                             [sym, updateTime, summary, JSON.stringify(data['业绩预测详表_详细指标预测'] ?? []), forecastNetProfitYoy],
                         );
                         ok = true;
@@ -484,6 +511,10 @@ export class ProfitForecastController {
         const s = ProfitForecastController.batchStatus;
         const elapsedMs = s.running ? Date.now() - s.startedAt : (s.finishedAt - s.startedAt);
         const progress = s.total > 0 ? Math.round((s.current / s.total) * 100) : 0;
+        const today = new Date().toISOString().slice(0, 10);
+        // 优先从 Redis 读取（持久化），内存作为备份
+        const redisLastDate = await CacheService.get<string>('profit_forecast:batch:date');
+        const lastBatchDate = redisLastDate || s.lastBatchDate;
         createResponse(res, 200, 'success', {
             running: s.running,
             total: s.total,
@@ -496,6 +527,8 @@ export class ProfitForecastController {
             startedAt: s.startedAt,
             finishedAt: s.finishedAt,
             recentErrors: s.errors.slice(-20),
+            lastBatchDate,
+            canBatchToday: lastBatchDate !== today, // 今天是否还可以批量爬取
         });
     }
 }
