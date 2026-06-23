@@ -1,5 +1,5 @@
 /**
- * 媒体关注榜整合服务
+ * 机构调研推荐热门股整合服务
  *
  * 整合四个独立信号源：
  * 1. 财联社快讯（clsVerified）：该股票所属概念在财联社被提及
@@ -266,7 +266,7 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 
 export class HotBurstService {
     /**
-     * 执行完整的媒体关注榜检测（四信号源共振模型）：
+     * 执行完整的机构调研推荐热门股检测（四信号源共振模型）：
      * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
      * 2. 同花顺热榜验证（股票所属板块是否上榜）
      * 3. 研报验证（24h 内是否有研报提及）
@@ -274,7 +274,7 @@ export class HotBurstService {
      * 四个信号源任意两个及以上即构成共振
      */
     static async detectHotBurst(): Promise<HotBurstResult> {
-        console.log('[HotBurst] 开始三步媒体关注榜检测（个股驱动）...');
+        console.log('[HotBurst] 开始三步机构调研推荐热门股检测（个股驱动）...');
 
         const now = new Date().toISOString();
 
@@ -512,7 +512,7 @@ export class HotBurstService {
             signal.resonanceLevel = level;
         }
 
-        console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
+        console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个机构调研热门信号`);
 
         // 批量获取股价（并发，限制并发数避免压垮接口）
         // 非交易时间跳过实时查询，避免写入 0 价格
@@ -573,10 +573,10 @@ export class HotBurstService {
 
     /** 将检测结果保存到历史表 */
     static async saveHistory(result: HotBurstResult): Promise<void> {
-        // 入库二重及以上共振信号
-        const qualifiedSignals = result.outbreaks.filter(s => s.resonanceCount >= 2);
+        // 入库三源共振信号
+        const qualifiedSignals = result.outbreaks.filter(s => s.resonanceCount >= 3);
         if (!qualifiedSignals.length) {
-            console.log('[HotBurst] 无二重及以上共振信号，跳过历史入库');
+            console.log('[HotBurst] 无三源共振信号，跳过历史入库');
             return;
         }
         try {
@@ -594,19 +594,19 @@ export class HotBurstService {
             ).join(', ');
             const values = rows.flat();
             await pool.query(
-                `INSERT INTO media_attention_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count)
+                `INSERT INTO institution_research_history (detected_at, symbol, stock_name, resonance_score, resonance_level, price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count)
                  VALUES ${placeholders}`,
                 values
             );
-            console.log(`[HotBurst] 保存 ${rows.length} 条二重共振历史记录（总信号 ${result.outbreaks.length} 条）`);
+            console.log(`[HotBurst] 保存 ${rows.length} 条三源共振历史记录（总信号 ${result.outbreaks.length} 条）`);
         } catch (err) {
             console.error('[HotBurst] 保存历史记录失败:', (err as Error).message);
         }
     }
 
     /**
-     * 查询历史媒体关注榜记录
-     * @param minResonanceOnly 仅返回二重共振及以上（resonance_count >= 2）的记录
+     * 查询历史机构调研推荐热门股记录
+     * @param minResonanceOnly 仅返回三源共振及以上（resonance_count >= 3）的记录
      */
     static async getHistory(
         limit: number = 50,
@@ -615,16 +615,16 @@ export class HotBurstService {
     ): Promise<{ total: number; records: any[] }> {
         if (minResonanceOnly) {
             const countResult = await pool.query(
-                `SELECT COUNT(*)::int AS total FROM media_attention_history
-                 WHERE resonance_count >= 2`
+                `SELECT COUNT(*)::int AS total FROM institution_research_history
+                 WHERE resonance_count >= 3`
             );
             const total = countResult.rows[0]?.total || 0;
 
             const result = await pool.query(
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
                         price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
-                 FROM media_attention_history
-                 WHERE resonance_count >= 2
+                 FROM institution_research_history
+                 WHERE resonance_count >= 3
                  ORDER BY detected_at DESC, resonance_score DESC
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
@@ -633,13 +633,13 @@ export class HotBurstService {
             return { total, records: result.rows };
         }
 
-        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM media_attention_history');
+        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM institution_research_history');
         const total = countResult.rows[0]?.total || 0;
 
         const result = await pool.query(
             `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
                     price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
-             FROM media_attention_history
+             FROM institution_research_history
              ORDER BY detected_at DESC, resonance_score DESC
              LIMIT $1 OFFSET $2`,
             [limit, offset]
@@ -654,7 +654,7 @@ export class HotBurstService {
     private static readonly DETECT_CACHE_TTL = 6 * 3600 * 1000; // 6小时缓存
 
     /**
-     * 获取最近的媒体关注榜检测结果
+     * 获取最近的机构调研推荐热门股检测结果
      * 优先返回缓存，缓存过期则执行一次检测
      * @param minResonanceCount 最小有效共振数量过滤（0=不过滤）
      */
@@ -672,6 +672,16 @@ export class HotBurstService {
         }
         try {
             const result = await HotBurstService.detectHotBurst();
+
+            // 如果检测结果为空（无 outbreaks），尝试从 DB 历史表恢复
+            if (!result.outbreaks || result.outbreaks.length === 0) {
+                console.log('[HotBurst] detectHotBurst 返回空结果，尝试从 DB 历史表恢复...');
+                const dbFallback = await HotBurstService.fallbackFromDB(minResonanceCount);
+                if (dbFallback) {
+                    return dbFallback;
+                }
+            }
+
             HotBurstService.lastDetectResult = result;
             HotBurstService.lastDetectTime = Date.now();
             if (minResonanceCount > 0) {
@@ -690,69 +700,73 @@ export class HotBurstService {
             }
             // 内存缓存为空（如服务器刚重启），从 DB 历史表兜底
             console.log('[HotBurst] 内存缓存为空，从 DB 历史表恢复...');
-            try {
-                const dbResult = await pool.query(
-                    `SELECT detected_at, symbol, stock_name, resonance_score, resonance_level,
-                            price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
-                     FROM media_attention_history
-                     WHERE resonance_count >= 2
-                     ORDER BY detected_at DESC, resonance_score DESC
-                     LIMIT 50`
-                );
-                if (dbResult.rows.length > 0) {
-                    const records = dbResult.rows;
-                    const latestTime = records[0].detected_at;
-                    const outbreaks: StockResonanceSignal[] = records.map((r: any) => ({
-                        symbol: r.symbol,
-                        stockName: r.stock_name,
-                        newsCount: r.news_count,
-                        newsSurgeRatio: 0,
-                        triggerTags: r.keywords ? r.keywords.split('、') : [],
-                        feishuMessageCount: r.feishu_count,
-                        thsVerified: r.ths_verified,
-                        thsSectorName: r.sector_info || '',
-                        thsSectorRank: 0,
-                        resonanceScore: r.resonance_score,
-                        resonanceLevel: r.resonance_level,
-                        price: r.price && Number(r.price) > 0 ? Number(r.price) : null,
-                        changePct: r.change_pct && Number(r.change_pct) !== 0 ? Number(r.change_pct) : null,
-                        sectorInfo: r.sector_info || '',
-                        conceptResonance: null,
-                        articles: [],
-                        detectedAt: r.detected_at,
-                        clsVerified: false,
-                        glhVerified: false,
-                        reportVerified: false,
-                        resonanceCount: r.resonance_count,
-                        conceptDetail: null,
-                        reportDetail: null,
-                    }));
-                    const fallbackResult: HotBurstResult = {
-                        update_time: latestTime,
-                        total_stocks_checked: outbreaks.length,
-                        resonance_count: outbreaks.length,
-                        ths_hot_sectors: [],
-                        outbreaks,
-                        hot_concepts: [],
-                    };
-                    // 写入内存缓存
-                    HotBurstService.lastDetectResult = fallbackResult;
-                    HotBurstService.lastDetectTime = Date.now();
-                    console.log(`[HotBurst] 从 DB 恢复 ${outbreaks.length} 条共振记录`);
-                    if (minResonanceCount > 0) {
-                        return {
-                            ...fallbackResult,
-                            outbreaks: fallbackResult.outbreaks.filter(
-                                s => s.resonanceCount >= minResonanceCount
-                            ),
-                        };
-                    }
-                    return fallbackResult;
-                }
-            } catch (dbErr) {
-                console.error('[HotBurst] DB 兜底也失败:', (dbErr as Error).message);
-            }
-            return null;
+            return await HotBurstService.fallbackFromDB(minResonanceCount);
         }
+    }
+
+    /** 从 DB 历史表恢复数据（兜底） */
+    private static async fallbackFromDB(minResonanceCount: number): Promise<HotBurstResult | null> {
+        try {
+            const dbResult = await pool.query(
+                `SELECT detected_at, symbol, stock_name, resonance_score, resonance_level,
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
+                 FROM institution_research_history
+                 WHERE resonance_count >= 3
+                 ORDER BY detected_at DESC, resonance_score DESC
+                 LIMIT 50`
+            );
+            if (dbResult.rows.length > 0) {
+                const records = dbResult.rows;
+                const latestTime = records[0].detected_at;
+                const outbreaks: StockResonanceSignal[] = records.map((r: any) => ({
+                    symbol: r.symbol,
+                    stockName: r.stock_name,
+                    newsCount: r.news_count,
+                    newsSurgeRatio: 0,
+                    triggerTags: r.keywords ? r.keywords.split('、') : [],
+                    feishuMessageCount: r.feishu_count,
+                    thsVerified: r.ths_verified,
+                    thsSectorName: r.sector_info || '',
+                    thsSectorRank: 0,
+                    resonanceScore: r.resonance_score,
+                    resonanceLevel: r.resonance_level,
+                    price: r.price && Number(r.price) > 0 ? Number(r.price) : null,
+                    changePct: r.change_pct && Number(r.change_pct) !== 0 ? Number(r.change_pct) : null,
+                    sectorInfo: r.sector_info || '',
+                    conceptResonance: null,
+                    articles: [],
+                    detectedAt: r.detected_at,
+                    clsVerified: false,
+                    glhVerified: false,
+                    reportVerified: false,
+                    resonanceCount: r.resonance_count,
+                    conceptDetail: null,
+                    reportDetail: null,
+                }));
+                const fallbackResult: HotBurstResult = {
+                    update_time: latestTime,
+                    total_stocks_checked: outbreaks.length,
+                    resonance_count: outbreaks.length,
+                    ths_hot_sectors: [],
+                    outbreaks,
+                    hot_concepts: [],
+                };
+                HotBurstService.lastDetectResult = fallbackResult;
+                HotBurstService.lastDetectTime = Date.now();
+                console.log(`[HotBurst] 从 DB 恢复 ${outbreaks.length} 条三源共振记录`);
+                if (minResonanceCount > 0) {
+                    return {
+                        ...fallbackResult,
+                        outbreaks: fallbackResult.outbreaks.filter(
+                            s => s.resonanceCount >= minResonanceCount
+                        ),
+                    };
+                }
+                return fallbackResult;
+            }
+        } catch (dbErr) {
+            console.error('[HotBurst] DB 兜底也失败:', (dbErr as Error).message);
+        }
+        return null;
     }
 }

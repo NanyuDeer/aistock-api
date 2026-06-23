@@ -2,7 +2,7 @@
  * 个股-板块映射同步服务
  *
  * 从 Tushare 同花顺概念板块（ths_index + ths_member）获取成分股，
- * 填充 stock_concept_mapping 表，供媒体关注榜 resonance2（板块验证）使用。
+ * 填充 stock_concept_mapping 表，供机构调研推荐热门股 resonance2（板块验证）使用。
  */
 
 import pool from '../db';

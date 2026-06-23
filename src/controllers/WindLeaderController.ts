@@ -127,8 +127,8 @@ export class WindLeaderController {
     }
 
     /**
-     * POST /api/cn/media-attention/detect
-     * 执行三步媒体关注榜检测（关键词爆发+飞书消息+同花顺验证）
+     * POST /api/cn/institution-research/detect
+     * 执行三步机构调研推荐热门股检测（关键词爆发+飞书消息+同花顺验证）
      */
     static async detectHotBurst(_req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
@@ -142,17 +142,17 @@ export class WindLeaderController {
     }
 
     /**
-     * GET /api/cn/media-attention
-     * 查询最近媒体关注榜检测结果
-     * 默认返回二重共振及以上（resonanceCount >= 2）的信号（min_resonance=2）
+     * GET /api/cn/institution-research
+     * 查询最近机构调研推荐热门股检测结果
+     * 默认返回三源共振及以上（resonanceCount >= 3）的信号（min_resonance=3）
      */
     static async getHotBurst(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const hours = Math.min(Math.max(parseInt(String(req.query.hours || '6'), 10), 1), 72);
-            const minResonance = parseInt(String(req.query.min_resonance || '2'), 10);
+            const minResonance = parseInt(String(req.query.min_resonance || '3'), 10);
             const result = await HotBurstService.getRecentBursts(hours, minResonance);
             if (!result) {
-                createResponse(res, 404, '暂无媒体关注榜检测数据');
+                createResponse(res, 404, '暂无机构调研推荐热门股检测数据');
                 return;
             }
             createResponse(res, 200, 'success', result);
@@ -164,9 +164,9 @@ export class WindLeaderController {
     }
 
     /**
-     * GET /api/cn/media-attention/history
-     * 查询历史媒体关注榜记录
-     * 默认仅返回二重共振及以上（resonance_count >= 2）的记录（min_resonance_only=true）
+     * GET /api/cn/institution-research/history
+     * 查询历史机构调研推荐热门股记录
+     * 默认仅返回三源共振及以上（resonance_count >= 3）的记录（min_resonance_only=true）
      */
     static async getHotBurstHistory(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {

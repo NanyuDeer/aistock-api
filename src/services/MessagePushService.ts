@@ -3,7 +3,7 @@
  *
  * 推送架构：
  * 1. 龙头股日报推送（8:30）：定时读取 hot-sectors.json → 微信+飞书
- * 2. 媒体关注榜推送（9:00/17:00）：定时检测三重共振信号 → 微信+飞书
+ * 2. 机构调研推荐热门股推送（9:00/17:00）：定时检测三重共振信号 → 微信+飞书
  * 3. 自选股异动推送（事件驱动）：爬虫周期中检测到重大利好/利空 → 微信+飞书
  *    - 由 StockInfoCrawlService.runCycle() 在8:00/15:00触发
  *    - 不在此处定时推送，而是通过 StockInfoPushService.push() 事件驱动
@@ -115,13 +115,13 @@ interface OutbreakStock {
 
 async function getOutbreakData(): Promise<{ feishu: OutbreakStock[]; wechat: OutbreakPushData[] }> {
     try {
-        console.log('[MessagePush] 开始获取媒体关注榜数据...');
+        console.log('[MessagePush] 开始获取机构调研推荐热门股数据...');
         const result = await HotBurstService.detectHotBurst();
         // 二重及以上共振过滤
         const signals = result.outbreaks
             .filter(s => s.resonanceCount >= 2)
             .slice(0, 3);
-        console.log(`[MessagePush] 媒体关注榜检测完成: ${signals.length} 个共振信号（共${result.outbreaks.length}个）`);
+        console.log(`[MessagePush] 机构调研推荐热门股检测完成: ${signals.length} 个共振信号（共${result.outbreaks.length}个）`);
         return {
             feishu: signals.map(signal => ({
                 name: signal.stockName || signal.symbol,
@@ -139,7 +139,7 @@ async function getOutbreakData(): Promise<{ feishu: OutbreakStock[]; wechat: Out
             })),
         };
     } catch (err: any) {
-        console.error('[MessagePush] 获取媒体关注榜数据失败:', err?.message || err, err?.stack || '');
+        console.error('[MessagePush] 获取机构调研推荐热门股数据失败:', err?.message || err, err?.stack || '');
         return { feishu: [], wechat: [] };
     }
 }
@@ -191,7 +191,7 @@ async function getLeaderStocksForPush(): Promise<LeaderStockData[]> {
     }
 }
 
-// ==================== 媒体关注榜数据提取（扩展字段，供微信模板使用） ====================
+// ==================== 机构调研推荐热门股数据提取（扩展字段，供微信模板使用） ====================
 
 interface OutbreakPushData {
     name: string;
@@ -268,7 +268,7 @@ function buildOutbreakFeishuCard(stocks: OutbreakPushData[]): any {
 
     elements.push({
         tag: 'div',
-        text: { tag: 'lark_md', content: '**媒体关注榜检测到共振信号**' },
+        text: { tag: 'lark_md', content: '**机构调研推荐热门股检测到共振信号**' },
     });
     elements.push({ tag: 'hr' });
 
@@ -386,7 +386,7 @@ export class MessagePushService {
             return this.executeLeaderPush();
         }
 
-        // 原有的媒体关注榜+个股资讯推送逻辑
+        // 原有的机构调研推荐热门股+个股资讯推送逻辑
         return this.executeOutbreakAndStockPush(schedule.label);
     }
 
@@ -434,9 +434,9 @@ export class MessagePushService {
         return { success, fail, detail: { wxMatched: wxResult.matched_users, wxSkipped: wxResult.skipped, feishuCount: feishuSubs.length, logs: wxResult.logs } };
     }
 
-    // ==================== 媒体关注榜+个股资讯推送 ====================
+    // ==================== 机构调研推荐热门股+个股资讯推送 ====================
 
-    /** 手动触发媒体关注榜推送（测试用） */
+    /** 手动触发机构调研推荐热门股推送（测试用） */
     static async executeOutbreakPush(testData?: any[], force: boolean = false): Promise<{ success: number; fail: number; detail?: any }> {
         const { WechatPushService } = await import('./WechatPushService');
         let outbreakData: OutbreakPushData[];
@@ -447,15 +447,15 @@ export class MessagePushService {
             outbreakData = wechat;
         }
         if (outbreakData.length === 0) {
-            console.log('[MessagePush] 无媒体关注榜数据，跳过推送');
-            return { success: 0, fail: 0, detail: { message: '无媒体关注榜数据' } };
+            console.log('[MessagePush] 无机构调研推荐热门股数据，跳过推送');
+            return { success: 0, fail: 0, detail: { message: '无机构调研推荐热门股数据' } };
         }
-        console.log(`[MessagePush] 检测到 ${outbreakData.length} 只媒体关注股，开始推送`);
+        console.log(`[MessagePush] 检测到 ${outbreakData.length} 只机构调研热门股，开始推送`);
 
         // 微信推送
         const wxResult = await WechatPushService.dispatchOutbreakStocks(outbreakData, force);
 
-        // 飞书推送 - 只推送给订阅了媒体关注榜推送的用户
+        // 飞书推送 - 只推送给订阅了机构调研推荐热门股推送的用户
         const feishuSubs = await getFeishuSubscribersBySetting('outbreak_push');
         let feishuSent = 0;
         let feishuFail = 0;
@@ -480,20 +480,20 @@ export class MessagePushService {
     }
 
     static async executeOutbreakAndStockPush(scheduleLabel: string): Promise<{ success: number; fail: number }> {
-        // 媒体关注榜定时推送（9:00/17:00）
+        // 机构调研推荐热门股定时推送（9:00/17:00）
         // 注意：自选股异动推送由 StockInfoCrawlService.runCycle() 事件驱动，
         // 在8:00/15:00爬虫周期中自动触发，不在此处处理
         let success = 0;
         let fail = 0;
 
-        // 获取媒体关注榜数据（一次检测，同时生成飞书和微信格式）
+        // 获取机构调研推荐热门股数据（一次检测，同时生成飞书和微信格式）
         const { feishu: outbreakFeishu, wechat: outbreakWechat } = await getOutbreakData();
         if (outbreakWechat.length === 0 && outbreakFeishu.length === 0) {
-            console.log(`[MessagePush] ${scheduleLabel}: 无媒体关注榜数据，跳过推送`);
+            console.log(`[MessagePush] ${scheduleLabel}: 无机构调研推荐热门股数据，跳过推送`);
             return { success: 0, fail: 0 };
         }
 
-        console.log(`[MessagePush] ${scheduleLabel}: 检测到${outbreakWechat.length}个媒体关注信号`);
+        console.log(`[MessagePush] ${scheduleLabel}: 检测到${outbreakWechat.length}个机构调研热门信号`);
 
         // 微信推送
         if (outbreakWechat.length > 0) {
@@ -504,7 +504,7 @@ export class MessagePushService {
             console.log(`[MessagePush] ${scheduleLabel}微信推送: 发送${wxResult.sent}, 跳过${wxResult.skipped}, 失败${wxResult.failed}`);
         }
 
-        // 飞书推送 - 只推送给订阅了媒体关注榜推送的用户
+        // 飞书推送 - 只推送给订阅了机构调研推荐热门股推送的用户
         const feishuSubs = await getFeishuSubscribersBySetting('outbreak_push');
         if (feishuSubs.length > 0 && outbreakFeishu.length > 0) {
             const card = buildOutbreakFeishuCard(outbreakWechat);

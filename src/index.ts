@@ -42,7 +42,9 @@ import { syncStockConceptMapping } from './services/StockConceptMappingService';
 import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
 import { HotBurstService } from './services/HotBurstService';
 
-const app = express();
+import { Application } from 'express';
+
+const app: Application = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 const corsAllowOrigin = process.env.CORS_ALLOW_ORIGIN || '';
@@ -148,10 +150,10 @@ app.get('/api/cn/hot-keywords', (req, res, next) => WindLeaderController.getHotK
 app.post('/api/internal/feishu-message', (req, res, next) => FeishuMessageController.receiveMessage(req, res, next));
 app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageController.getMessages(req, res, next));
 
-// 媒体关注榜三步检测
-app.post('/api/cn/media-attention/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
-app.get('/api/cn/media-attention', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
-app.get('/api/cn/media-attention/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
+// 机构调研推荐热门股三步检测
+app.post('/api/cn/institution-research/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
+app.get('/api/cn/institution-research', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
+app.get('/api/cn/institution-research/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
 
 // 飞书OAuth授权
 app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
@@ -178,8 +180,8 @@ app.post('/api/internal/push-leader', async (req, res) => {
     }
 });
 
-// 手动触发媒体关注榜推送（测试用，支持传入测试数据）
-app.post('/api/internal/push-media-attention', async (req, res) => {
+// 手动触发机构调研推荐热门股推送（测试用，支持传入测试数据）
+app.post('/api/internal/push-institution-research', async (req, res) => {
     const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
     if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
         return res.status(401).json({ error: 'unauthorized' });
@@ -504,23 +506,22 @@ cron.schedule('0 3 * * *', async () => {
     }
 });
 
-// 媒体关注榜定时检测：交易日 10:30、13:30、15:05
-// 10:30 开盘后一小时新闻积累充足；13:30 午盘开盘捕捉午间新闻；15:05 收盘后生成最终结果
-const runMediaAttentionDetect = async (label: string) => {
-    console.log(`[MediaAttentionCron] ${label} 开始媒体关注榜检测`);
+// 机构调研推荐热门股定时检测：交易日 9:30、10:30、11:30、13:30、14:30、15:05
+const runInstitutionResearchDetect = async (label: string) => {
+    console.log(`[InstResearchCron] ${label} 开始机构调研推荐热门股检测`);
     try {
         const result = await HotBurstService.detectHotBurst();
-        console.log(`[MediaAttentionCron] ${label} 检测完成: ${result.outbreaks.length} 个信号, 共振 ${result.resonance_count} 个`);
+        console.log(`[InstResearchCron] ${label} 检测完成: ${result.outbreaks.length} 个信号`);
     } catch (err: any) {
-        console.error(`[MediaAttentionCron] ${label} 检测失败:`, err?.message || err);
+        console.error(`[InstResearchCron] ${label} 检测失败:`, err?.message || err);
     }
 };
-cron.schedule('30 9 * * 1-5', () => runMediaAttentionDetect('开盘'));
-cron.schedule('30 10 * * 1-5', () => runMediaAttentionDetect('上午'));
-cron.schedule('30 11 * * 1-5', () => runMediaAttentionDetect('午前'));
-cron.schedule('30 13 * * 1-5', () => runMediaAttentionDetect('午盘'));
-cron.schedule('30 14 * * 1-5', () => runMediaAttentionDetect('尾盘'));
-cron.schedule('5 15 * * 1-5', () => runMediaAttentionDetect('收盘'));
+cron.schedule('30 9 * * 1-5', () => runInstitutionResearchDetect('开盘'));
+cron.schedule('30 10 * * 1-5', () => runInstitutionResearchDetect('上午'));
+cron.schedule('30 11 * * 1-5', () => runInstitutionResearchDetect('午前'));
+cron.schedule('30 13 * * 1-5', () => runInstitutionResearchDetect('午盘'));
+cron.schedule('30 14 * * 1-5', () => runInstitutionResearchDetect('尾盘'));
+cron.schedule('5 15 * * 1-5', () => runInstitutionResearchDetect('收盘'));
 
 // 每日 04:30 刷新个股-板块映射表（在 04:00 TenxCron 之后）
 cron.schedule('30 4 * * *', async () => {
@@ -586,19 +587,24 @@ async function start() {
     }
 
     try {
-        // 兼容旧表名：若 hot_burst_history 存在则重命名为 media_attention_history
+        // 兼容旧表名：逐级重命名 hot_burst_history → media_attention_history → institution_research_history
         await pool.query(`
             DO $$
             BEGIN
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'hot_burst_history') THEN
-                    ALTER TABLE hot_burst_history RENAME TO media_attention_history;
-                    ALTER INDEX IF EXISTS idx_hot_burst_history_time RENAME TO idx_media_attention_history_time;
-                    RAISE NOTICE 'Renamed hot_burst_history to media_attention_history';
+                    ALTER TABLE hot_burst_history RENAME TO institution_research_history;
+                    ALTER INDEX IF EXISTS idx_hot_burst_history_time RENAME TO idx_institution_research_history_time;
+                    RAISE NOTICE 'Renamed hot_burst_history to institution_research_history';
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'media_attention_history') THEN
+                    ALTER TABLE media_attention_history RENAME TO institution_research_history;
+                    ALTER INDEX IF EXISTS idx_media_attention_history_time RENAME TO idx_institution_research_history_time;
+                    RAISE NOTICE 'Renamed media_attention_history to institution_research_history';
                 END IF;
             END $$;
         `);
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS media_attention_history (
+            CREATE TABLE IF NOT EXISTS institution_research_history (
                 id SERIAL PRIMARY KEY,
                 detected_at TIMESTAMP NOT NULL,
                 symbol VARCHAR(20) NOT NULL,
@@ -614,15 +620,15 @@ async function start() {
                 ths_verified BOOLEAN DEFAULT false
             )
         `);
-        await pool.query('CREATE INDEX IF NOT EXISTS idx_media_attention_history_time ON media_attention_history(detected_at DESC)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_institution_research_history_time ON institution_research_history(detected_at DESC)');
         // 迁移：添加 resonance_count 列（记录通过的共振数量 0-3）
         await pool.query(`
-            ALTER TABLE media_attention_history
+            ALTER TABLE institution_research_history
             ADD COLUMN IF NOT EXISTS resonance_count INT DEFAULT 0
         `);
-        console.log('[DB] media_attention_history table ready');
+        console.log('[DB] institution_research_history table ready');
     } catch (err: any) {
-        console.warn('[DB] media_attention_history table check:', err.message);
+        console.warn('[DB] institution_research_history table check:', err.message);
     }
 
     // 业绩预测表
