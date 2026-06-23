@@ -562,13 +562,29 @@ export class WechatPushService {
         return result.rows.map((r: any) => String(r.openid));
     }
 
+    /** 获取订阅了指定推送类型的微信用户 */
+    private static async getSubscribedWechatOpenids(settingType: string): Promise<string[]> {
+        const result = await pool.query(
+            `SELECT DISTINCT u.openid
+             FROM users u
+             INNER JOIN user_settings us ON u.openid = us.openid
+             WHERE u.openid IS NOT NULL
+               AND u.openid <> ''
+               AND us.setting_type = $1
+               AND COALESCE(us.enabled, 1) != 0`,
+            [settingType],
+        );
+        return result.rows.map((r: any) => String(r.openid));
+    }
+
     private static formatChangePct(pct: number): string {
         if (pct > 0) return `+${pct.toFixed(2)}%`;
         return `${pct.toFixed(2)}%`;
     }
 
     static async dispatchLeaderStocks(stocks: LeaderStockPushItem[], force: boolean = false): Promise<PushResult> {
-        const openids = await WechatPushService.getAllWechatOpenids();
+        // 只推送给订阅了龙头股推送的用户
+        const openids = await WechatPushService.getSubscribedWechatOpenids('leader_push');
         const today = new Date().toISOString().slice(0, 10);
         const eventId = `leader:${today}`;
 
@@ -682,7 +698,8 @@ export class WechatPushService {
     // ==================== 媒体关注榜推送 ====================
 
     static async dispatchOutbreakStocks(stocks: OutbreakPushItem[], force: boolean = false): Promise<PushResult> {
-        const openids = await WechatPushService.getAllWechatOpenids();
+        // 只推送给订阅了媒体关注榜推送的用户
+        const openids = await WechatPushService.getSubscribedWechatOpenids('outbreak_push');
         const today = new Date().toISOString().slice(0, 10);
 
         const pushResult: PushResult = {

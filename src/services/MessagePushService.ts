@@ -86,6 +86,26 @@ async function getSubscribers(): Promise<Subscriber[]> {
     }
 }
 
+/** 获取订阅了指定推送类型的飞书用户 */
+async function getFeishuSubscribersBySetting(settingType: string): Promise<Subscriber[]> {
+    try {
+        const result = await pool.query(
+            `SELECT us.id AS user_id, us.feishu_open_id, us.feishu_name, us.user_openid AS wechat_openid
+             FROM user_subscriptions us
+             INNER JOIN user_settings ust ON us.user_openid = ust.openid
+             WHERE us.status = 'subscribed'
+               AND us.feishu_open_id IS NOT NULL
+               AND us.feishu_open_id != ''
+               AND ust.setting_type = $1
+               AND COALESCE(ust.enabled, 1) != 0`,
+            [settingType],
+        );
+        return result.rows;
+    } catch {
+        return [];
+    }
+}
+
 interface OutbreakStock {
     name: string;
     concept: string;
@@ -398,9 +418,8 @@ export class MessagePushService {
         fail += wxResult.failed;
         console.log(`[MessagePush] 龙头股日报微信推送: 发送${wxResult.sent}, 跳过${wxResult.skipped}, 失败${wxResult.failed}`);
 
-        // 飞书推送
-        const subscribers = await getSubscribers();
-        const feishuSubs = subscribers.filter(s => s.feishu_open_id);
+        // 飞书推送 - 只推送给订阅了龙头股推送的用户
+        const feishuSubs = await getFeishuSubscribersBySetting('leader_push');
         if (feishuSubs.length > 0) {
             const card = buildLeaderFeishuCard(stocks);
             for (const sub of feishuSubs) {
@@ -408,7 +427,7 @@ export class MessagePushService {
                 if (sent) success++;
                 else fail++;
             }
-            console.log(`[MessagePush] 龙头股日报飞书推送: ${feishuSubs.length} 个用户`);
+            console.log(`[MessagePush] 龙头股日报飞书推送: ${feishuSubs.length} 个订阅用户`);
         }
 
         console.log(`[MessagePush] 龙头股日报推送完成: 成功${success}, 失败${fail}`);
@@ -436,14 +455,13 @@ export class MessagePushService {
         // 微信推送
         const wxResult = await WechatPushService.dispatchOutbreakStocks(outbreakData, force);
 
-        // 飞书推送
-        const feishuSubs = await getSubscribers();
-        const feishuUsers = feishuSubs.filter(s => s.feishu_open_id);
+        // 飞书推送 - 只推送给订阅了媒体关注榜推送的用户
+        const feishuSubs = await getFeishuSubscribersBySetting('outbreak_push');
         let feishuSent = 0;
         let feishuFail = 0;
-        if (feishuUsers.length > 0) {
+        if (feishuSubs.length > 0) {
             const card = buildOutbreakFeishuCard(outbreakData);
-            for (const sub of feishuUsers) {
+            for (const sub of feishuSubs) {
                 const ok = await sendFeishuCard(sub.feishu_open_id, card);
                 if (ok) feishuSent++;
                 else feishuFail++;
@@ -486,9 +504,8 @@ export class MessagePushService {
             console.log(`[MessagePush] ${scheduleLabel}微信推送: 发送${wxResult.sent}, 跳过${wxResult.skipped}, 失败${wxResult.failed}`);
         }
 
-        // 飞书推送
-        const subscribers = await getSubscribers();
-        const feishuSubs = subscribers.filter(s => s.feishu_open_id);
+        // 飞书推送 - 只推送给订阅了媒体关注榜推送的用户
+        const feishuSubs = await getFeishuSubscribersBySetting('outbreak_push');
         if (feishuSubs.length > 0 && outbreakFeishu.length > 0) {
             const card = buildOutbreakFeishuCard(outbreakWechat);
             for (const sub of feishuSubs) {
@@ -496,7 +513,7 @@ export class MessagePushService {
                 if (sent) success++;
                 else fail++;
             }
-            console.log(`[MessagePush] ${scheduleLabel}飞书推送: ${feishuSubs.length} 个用户`);
+            console.log(`[MessagePush] ${scheduleLabel}飞书推送: ${feishuSubs.length} 个订阅用户`);
         }
 
         console.log(`[MessagePush] ${scheduleLabel}推送完成: 成功${success}, 失败${fail}`);
@@ -513,24 +530,31 @@ export class MessagePushService {
         try {
             let rows: any[];
             if (pushToAll) {
-                // 测试模式：推送给所有有飞书ID的订阅用户
+                // 测试模式：推送给所有订阅了自选股推送且有飞书ID的用户
                 const result = await pool.query(
-                    `SELECT DISTINCT feishu_open_id
-                     FROM user_subscriptions
-                     WHERE status = 'subscribed'
-                       AND feishu_open_id IS NOT NULL
-                       AND feishu_open_id != ''`,
+                    `SELECT DISTINCT us.feishu_open_id
+                     FROM user_subscriptions us
+                     INNER JOIN user_settings ust ON us.user_openid = ust.openid
+                     WHERE us.status = 'subscribed'
+                       AND us.feishu_open_id IS NOT NULL
+                       AND us.feishu_open_id != ''
+                       AND ust.setting_type = 'stock_push'
+                       AND COALESCE(ust.enabled, 1) != 0`,
                 );
                 rows = result.rows;
             } else {
+                // 正常模式：推送给持有该股票且订阅了自选股推送的用户
                 const result = await pool.query(
                     `SELECT DISTINCT us.feishu_open_id
                      FROM user_subscriptions us
                      INNER JOIN user_stocks ust ON us.user_openid = ust.openid
+                     INNER JOIN user_settings ust2 ON us.user_openid = ust2.openid
                      WHERE ust.symbol = $1
                        AND us.status = 'subscribed'
                        AND us.feishu_open_id IS NOT NULL
-                       AND us.feishu_open_id != ''`,
+                       AND us.feishu_open_id != ''
+                       AND ust2.setting_type = 'stock_push'
+                       AND COALESCE(ust2.enabled, 1) != 0`,
                     [event.symbol],
                 );
                 rows = result.rows;
