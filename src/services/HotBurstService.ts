@@ -131,6 +131,19 @@ function formatDate(d: Date): string {
     return `${y}${m}${day}`;
 }
 
+/** 带超时的 Promise 包装，超时后返回 fallback 值 */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) =>
+            setTimeout(() => {
+                console.warn(`[HotBurst] ${label} 超时 (${ms}ms)，使用 fallback`);
+                resolve(fallback);
+            }, ms)
+        ),
+    ]);
+}
+
 // ==================== 辅助函数 ====================
 
 /** 从 stocks 表查询股票名称 */
@@ -266,11 +279,15 @@ export class HotBurstService {
         const now = new Date().toISOString();
 
         // ===== Step 1: 个股爆发检测（代码提取替代关键词匹配） =====
-        const hotStocks = await HotKeywordDetectorService.detectHotStocks();
+        const hotStocks = await withTimeout(
+            HotKeywordDetectorService.detectHotStocks(), 30000, [], 'Step1:个股爆发检测'
+        );
         console.log(`[HotBurst] Step1: 检测到 ${hotStocks.length} 只爆发个股`);
 
         // ===== Step 1.5: 细分概念爆发检测（共振一：交叉验证） =====
-        const hotConcepts = await HotKeywordDetectorService.detectHotConcepts();
+        const hotConcepts = await withTimeout(
+            HotKeywordDetectorService.detectHotConcepts(), 20000, [], 'Step1.5:概念爆发检测'
+        );
         console.log(`[HotBurst] Step1.5: 检测到 ${hotConcepts.length} 个爆发细分概念`);
 
         // 构建：股票代码 → 匹配到的概念列表
@@ -305,7 +322,9 @@ export class HotBurstService {
         // ===== Step 2: 飞书群消息关联 =====
         const feishuWindowHours = TradingCalendarService.getFeishuWindowHours();
         console.log(`[HotBurst] 飞书消息查询窗口: ${feishuWindowHours}h`);
-        const feishuMessages = await getFeishuMessages(feishuWindowHours);
+        const feishuMessages = await withTimeout(
+            getFeishuMessages(feishuWindowHours), 15000, [], 'Step2:飞书消息查询'
+        );
         console.log(`[HotBurst] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
 
         // 构建：股票代码 → 飞书消息数 + 关键词
@@ -324,8 +343,34 @@ export class HotBurstService {
             }
         }
 
+        // ===== Step 2.5: 预加载研报数据（批量，避免逐个查询） =====
+        const reportStockSet = new Map<string, { count: number; latestTime: string }>();
+        try {
+            const reportMessages = await pool.query(
+                `SELECT stock_codes, received_at FROM feishu_messages
+                 WHERE received_at > NOW() - INTERVAL '24 hours'
+                   AND chat_name LIKE '%研报%'
+                   AND array_length(stock_codes, 1) IS NOT NULL`
+            );
+            for (const row of reportMessages.rows) {
+                for (const code of row.stock_codes || []) {
+                    const existing = reportStockSet.get(code);
+                    if (existing) {
+                        existing.count++;
+                    } else {
+                        reportStockSet.set(code, { count: 1, latestTime: row.received_at });
+                    }
+                }
+            }
+            console.log(`[HotBurst] Step2.5: 预加载研报数据，覆盖 ${reportStockSet.size} 只股票`);
+        } catch (err) {
+            console.warn('[HotBurst] Step2.5: 研报预加载失败:', (err as Error).message);
+        }
+
         // ===== Step 3: 同花顺热榜验证 =====
-        const thsHotSectors = await fetchThsHotSectors();
+        const thsHotSectors = await withTimeout(
+            fetchThsHotSectors(), 15000, [], 'Step3:同花顺热榜'
+        );
         console.log(`[HotBurst] Step3: 同花顺热榜 ${thsHotSectors.length} 个板块`);
 
         const thsSectorNameSet = new Set(thsHotSectors.map(s => s.name));
@@ -443,13 +488,13 @@ export class HotBurstService {
                 };
             }
 
-            // 研报验证
-            const reports = await findResearchReportMessagesForStock(signal.symbol, 24);
-            signal.reportVerified = reports.length > 0;
-            if (reports.length > 0) {
+            // 研报验证（从预加载的 reportStockSet 批量查询）
+            const reportData = reportStockSet.get(signal.symbol);
+            signal.reportVerified = !!reportData && reportData.count > 0;
+            if (reportData && reportData.count > 0) {
                 signal.reportDetail = {
-                    reportCount: reports.length,
-                    latestReportTime: reports[0]?.receivedAt,
+                    reportCount: reportData.count,
+                    latestReportTime: reportData.latestTime,
                 };
             }
 
@@ -470,18 +515,41 @@ export class HotBurstService {
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
 
         // 批量获取股价（并发，限制并发数避免压垮接口）
-        const QUOTE_CONCURRENCY = 5;
-        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
-            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
-            await Promise.all(batch.map(async (signal) => {
-                try {
-                    const quote = await TushareQuoteService.getQuote(signal.symbol, 'core');
-                    signal.price = quote['最新价'] ?? null;
-                    signal.changePct = quote['涨跌幅'] ?? null;
-                } catch (err) {
-                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
-                }
-            }));
+        // 非交易时间跳过实时查询，避免写入 0 价格
+        const isTradingHours = (() => {
+            const now = new Date();
+            const utc8 = new Date(now.getTime() + 8 * 3600000);
+            const h = utc8.getUTCHours();
+            const m = utc8.getUTCMinutes();
+            const day = utc8.getUTCDay();
+            // 周一至周五 9:15-15:05（北京时间）
+            return day >= 1 && day <= 5 && ((h === 9 && m >= 15) || (h >= 10 && h < 15) || (h === 15 && m <= 5));
+        })();
+
+        if (isTradingHours) {
+            const QUOTE_CONCURRENCY = 5;
+            const QUOTE_TIMEOUT = 5000; // 单只股票5秒超时
+            for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
+                const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
+                await Promise.all(batch.map(async (signal) => {
+                    try {
+                        const quote = await withTimeout(
+                            TushareQuoteService.getQuote(signal.symbol, 'core'),
+                            QUOTE_TIMEOUT,
+                            null as any,
+                            `获取${signal.symbol}股价`
+                        );
+                        if (quote) {
+                            signal.price = quote['最新价'] ?? null;
+                            signal.changePct = quote['涨跌幅'] ?? null;
+                        }
+                    } catch (err) {
+                        console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+                    }
+                }));
+            }
+        } else {
+            console.log('[HotBurst] 非交易时间，跳过实时股价查询');
         }
 
         const result: HotBurstResult = {
@@ -616,8 +684,75 @@ export class HotBurstService {
             }
             return result;
         } catch (err) {
-            console.error('[HotBurst] getRecentBursts 检测失败，返回旧缓存:', (err as Error).message);
-            return HotBurstService.lastDetectResult;
+            console.error('[HotBurst] getRecentBursts 检测失败，尝试旧缓存:', (err as Error).message);
+            if (HotBurstService.lastDetectResult) {
+                return HotBurstService.lastDetectResult;
+            }
+            // 内存缓存为空（如服务器刚重启），从 DB 历史表兜底
+            console.log('[HotBurst] 内存缓存为空，从 DB 历史表恢复...');
+            try {
+                const dbResult = await pool.query(
+                    `SELECT detected_at, symbol, stock_name, resonance_score, resonance_level,
+                            price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
+                     FROM media_attention_history
+                     WHERE resonance_count >= 2
+                     ORDER BY detected_at DESC, resonance_score DESC
+                     LIMIT 50`
+                );
+                if (dbResult.rows.length > 0) {
+                    const records = dbResult.rows;
+                    const latestTime = records[0].detected_at;
+                    const outbreaks: StockResonanceSignal[] = records.map((r: any) => ({
+                        symbol: r.symbol,
+                        stockName: r.stock_name,
+                        newsCount: r.news_count,
+                        newsSurgeRatio: 0,
+                        triggerTags: r.keywords ? r.keywords.split('、') : [],
+                        feishuMessageCount: r.feishu_count,
+                        thsVerified: r.ths_verified,
+                        thsSectorName: r.sector_info || '',
+                        thsSectorRank: 0,
+                        resonanceScore: r.resonance_score,
+                        resonanceLevel: r.resonance_level,
+                        price: r.price && Number(r.price) > 0 ? Number(r.price) : null,
+                        changePct: r.change_pct && Number(r.change_pct) !== 0 ? Number(r.change_pct) : null,
+                        sectorInfo: r.sector_info || '',
+                        conceptResonance: null,
+                        articles: [],
+                        detectedAt: r.detected_at,
+                        clsVerified: false,
+                        glhVerified: false,
+                        reportVerified: false,
+                        resonanceCount: r.resonance_count,
+                        conceptDetail: null,
+                        reportDetail: null,
+                    }));
+                    const fallbackResult: HotBurstResult = {
+                        update_time: latestTime,
+                        total_stocks_checked: outbreaks.length,
+                        resonance_count: outbreaks.length,
+                        ths_hot_sectors: [],
+                        outbreaks,
+                        hot_concepts: [],
+                    };
+                    // 写入内存缓存
+                    HotBurstService.lastDetectResult = fallbackResult;
+                    HotBurstService.lastDetectTime = Date.now();
+                    console.log(`[HotBurst] 从 DB 恢复 ${outbreaks.length} 条共振记录`);
+                    if (minResonanceCount > 0) {
+                        return {
+                            ...fallbackResult,
+                            outbreaks: fallbackResult.outbreaks.filter(
+                                s => s.resonanceCount >= minResonanceCount
+                            ),
+                        };
+                    }
+                    return fallbackResult;
+                }
+            } catch (dbErr) {
+                console.error('[HotBurst] DB 兜底也失败:', (dbErr as Error).message);
+            }
+            return null;
         }
     }
 }
