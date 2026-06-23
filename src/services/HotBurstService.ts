@@ -684,8 +684,75 @@ export class HotBurstService {
             }
             return result;
         } catch (err) {
-            console.error('[HotBurst] getRecentBursts 检测失败，返回旧缓存:', (err as Error).message);
-            return HotBurstService.lastDetectResult;
+            console.error('[HotBurst] getRecentBursts 检测失败，尝试旧缓存:', (err as Error).message);
+            if (HotBurstService.lastDetectResult) {
+                return HotBurstService.lastDetectResult;
+            }
+            // 内存缓存为空（如服务器刚重启），从 DB 历史表兜底
+            console.log('[HotBurst] 内存缓存为空，从 DB 历史表恢复...');
+            try {
+                const dbResult = await pool.query(
+                    `SELECT detected_at, symbol, stock_name, resonance_score, resonance_level,
+                            price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
+                     FROM media_attention_history
+                     WHERE resonance_count >= 2
+                     ORDER BY detected_at DESC, resonance_score DESC
+                     LIMIT 50`
+                );
+                if (dbResult.rows.length > 0) {
+                    const records = dbResult.rows;
+                    const latestTime = records[0].detected_at;
+                    const outbreaks: StockResonanceSignal[] = records.map((r: any) => ({
+                        symbol: r.symbol,
+                        stockName: r.stock_name,
+                        newsCount: r.news_count,
+                        newsSurgeRatio: 0,
+                        triggerTags: r.keywords ? r.keywords.split('、') : [],
+                        feishuMessageCount: r.feishu_count,
+                        thsVerified: r.ths_verified,
+                        thsSectorName: r.sector_info || '',
+                        thsSectorRank: 0,
+                        resonanceScore: r.resonance_score,
+                        resonanceLevel: r.resonance_level,
+                        price: r.price && Number(r.price) > 0 ? Number(r.price) : null,
+                        changePct: r.change_pct && Number(r.change_pct) !== 0 ? Number(r.change_pct) : null,
+                        sectorInfo: r.sector_info || '',
+                        conceptResonance: null,
+                        articles: [],
+                        detectedAt: r.detected_at,
+                        clsVerified: false,
+                        glhVerified: false,
+                        reportVerified: false,
+                        resonanceCount: r.resonance_count,
+                        conceptDetail: null,
+                        reportDetail: null,
+                    }));
+                    const fallbackResult: HotBurstResult = {
+                        update_time: latestTime,
+                        total_stocks_checked: outbreaks.length,
+                        resonance_count: outbreaks.length,
+                        ths_hot_sectors: [],
+                        outbreaks,
+                        hot_concepts: [],
+                    };
+                    // 写入内存缓存
+                    HotBurstService.lastDetectResult = fallbackResult;
+                    HotBurstService.lastDetectTime = Date.now();
+                    console.log(`[HotBurst] 从 DB 恢复 ${outbreaks.length} 条共振记录`);
+                    if (minResonanceCount > 0) {
+                        return {
+                            ...fallbackResult,
+                            outbreaks: fallbackResult.outbreaks.filter(
+                                s => s.resonanceCount >= minResonanceCount
+                            ),
+                        };
+                    }
+                    return fallbackResult;
+                }
+            } catch (dbErr) {
+                console.error('[HotBurst] DB 兜底也失败:', (dbErr as Error).message);
+            }
+            return null;
         }
     }
 }
