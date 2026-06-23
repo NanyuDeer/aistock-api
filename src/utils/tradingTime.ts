@@ -116,6 +116,24 @@ export async function isAShareTradingTime(options: AShareTradingTimeOptions = {}
     return !holiday;
 }
 
+/**
+ * 判断指定日期是否为A股交易日（不考虑具体时间，只判断日期）
+ * @param options.now - 可选，指定日期（Date 或 timestamp），默认当前时间
+ * @param options.fetcher - 可选，自定义 fetch 函数
+ * @returns true 表示是交易日（非周末、非节假日），false 表示非交易日
+ */
+export async function isAShareTradingDay(options: AShareTradingTimeOptions = {}): Promise<boolean> {
+    const nowInput = options.now ?? Date.now();
+    const nowDate = nowInput instanceof Date ? nowInput : new Date(nowInput);
+    const fetcher = options.fetcher ?? fetch;
+    if (Number.isNaN(nowDate.getTime())) throw new Error('Invalid date input');
+    const chinaParts = parseChinaDateTimeParts(nowDate);
+    if (isWeekendInChina(chinaParts)) return false;
+    const dateKey = formatDateKey(chinaParts);
+    const holiday = await isChinaHoliday(dateKey, fetcher);
+    return !holiday;
+}
+
 export async function getAShareAdaptiveCacheTtlSeconds(tradingTtlSeconds: number, options: AShareTradingTimeOptions = {}): Promise<number> {
     const resolvedTradingTtlSeconds = normalizePositiveTtlSeconds(tradingTtlSeconds);
     const nowInput = options.now ?? Date.now();

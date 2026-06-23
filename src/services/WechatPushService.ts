@@ -555,14 +555,9 @@ export class WechatPushService {
     // ==================== 龙头股推送 ====================
 
     private static async getAllWechatOpenids(): Promise<string[]> {
-        // 仅推送给指定用户（Aria和changer）
-        const allowedOpenids = [
-            'o5hS42N-m2duWwWnxCsPJbx1enBE', // Aria
-            'o5hS42APHs76HkzkOwEqsNqC30zU', // changer
-        ];
+        // 推送给所有已注册的微信用户
         const result = await pool.query(
-            `SELECT DISTINCT openid FROM users WHERE openid = ANY($1)`,
-            [allowedOpenids],
+            `SELECT DISTINCT openid FROM users WHERE openid IS NOT NULL AND openid <> ''`,
         );
         return result.rows.map((r: any) => String(r.openid));
     }

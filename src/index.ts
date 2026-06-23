@@ -487,10 +487,16 @@ cron.schedule('5 19 * * 1-5', async () => {
     }
 });
 
-// 风口龙头定时分析：每天凌晨3点执行
+// 风口龙头定时分析：每天凌晨3点执行（跳过节假日）
 cron.schedule('0 3 * * *', async () => {
     console.log('[WindLeaderCron] 开始风口龙头分析');
     try {
+        const { isAShareTradingDay } = await import('./utils/tradingTime');
+        const isTradingDay = await isAShareTradingDay();
+        if (!isTradingDay) {
+            console.log('[WindLeaderCron] 今天是非交易日（周末/节假日），跳过风口龙头分析');
+            return;
+        }
         const result = await WindLeaderAnalyzerService.runFullAnalysis();
         console.log(`[WindLeaderCron] 分析完成: ${result.hot_sectors?.length || 0} 个板块`);
     } catch (err: any) {
@@ -527,9 +533,9 @@ cron.schedule('30 4 * * *', async () => {
     }
 });
 
-// 个股资讯爬虫+实时推送：交易日 8:00（早报前）和 15:00（收盘后）
+// 个股资讯爬虫+实时推送：每天 8:00 和 15:00（包括节假日）
 // runCycle = 抓取 + AI研判 + 入库 + 触发自选股异动实时推送（飞书卡片+微信模板）
-cron.schedule('0 8 * * 1-5', async () => {
+cron.schedule('0 8 * * *', async () => {
     console.log('[CrawlCron] 开始早盘爬虫周期');
     try {
         const result = await StockInfoCrawlService.runCycle('morning', { source: 'favorites', limit: 200 });
@@ -539,7 +545,7 @@ cron.schedule('0 8 * * 1-5', async () => {
     }
 });
 
-cron.schedule('0 15 * * 1-5', async () => {
+cron.schedule('0 15 * * *', async () => {
     console.log('[CrawlCron] 开始尾盘爬虫周期');
     try {
         const result = await StockInfoCrawlService.runCycle('closing', { source: 'favorites', limit: 200 });

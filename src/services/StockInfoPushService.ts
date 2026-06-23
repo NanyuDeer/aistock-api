@@ -1,6 +1,7 @@
 import { StockInfoService, StockInfoType, type StockInfoPushWindow } from './StockInfoService';
 import { WechatPushService } from './WechatPushService';
 import { MessagePushService } from './MessagePushService';
+import { CacheService } from './CacheService';
 
 export interface StockInfoPushRequest {
     window?: string;
@@ -18,6 +19,8 @@ export interface StockInfoPushResult {
     results: any[];
 }
 
+const LAST_PUSH_TIME_KEY = 'stock_info:last_push_time';
+
 function parseDate(value: unknown, field: string): Date {
     const raw = String(value || '').trim();
     const date = new Date(raw);
@@ -25,33 +28,66 @@ function parseDate(value: unknown, field: string): Date {
     return date;
 }
 
-function getDefaultWindowRange(windowName: string): { from: Date; to: Date } {
+async function getLastPushTime(): Promise<Date | null> {
+    const cached = await CacheService.get<string>(LAST_PUSH_TIME_KEY);
+    if (!cached) return null;
+    const ts = parseInt(cached, 10);
+    if (!Number.isFinite(ts)) return null;
+    return new Date(ts);
+}
+
+async function setLastPushTime(time: Date): Promise<void> {
+    // TTL 48小时，确保跨周末后仍可读取
+    await CacheService.put(LAST_PUSH_TIME_KEY, String(time.getTime()), 48 * 3600);
+}
+
+function getDefaultWindowRange(windowName: string, lastPushTime: Date | null): { from: Date; to: Date } {
     const now = new Date();
+
     if (windowName === 'morning') {
-        const to = now;
-        const from = new Date(to.getTime() - 18 * 60 * 60 * 1000);
-        return { from, to };
+        // 早盘推送：from = 上次推送时间（或默认前一天15:00），to = now
+        let from: Date;
+        if (lastPushTime) {
+            from = lastPushTime;
+        } else {
+            // 默认：前一天15:00
+            from = new Date(now);
+            from.setDate(from.getDate() - 1);
+            from.setHours(15, 0, 0, 0);
+        }
+        return { from, to: now };
     }
+
     if (windowName === 'closing') {
-        const to = now;
-        const from = new Date(to);
-        from.setHours(9, 30, 0, 0);
-        return { from, to };
+        // 收盘推送：from = 上次推送时间（或默认今天8:00），to = now
+        let from: Date;
+        if (lastPushTime) {
+            from = lastPushTime;
+        } else {
+            // 默认：今天8:00
+            from = new Date(now);
+            from.setHours(8, 0, 0, 0);
+        }
+        return { from, to: now };
     }
+
     throw new Error('window must be morning or closing');
 }
 
 export class StockInfoPushService {
-    static resolveWindows(body: StockInfoPushRequest): StockInfoPushWindow[] {
-        const defaults = getDefaultWindowRange(String(body.window || 'morning').trim());
+    static async resolveWindows(body: StockInfoPushRequest): Promise<StockInfoPushWindow[]> {
+        const windowName = String(body.window || 'morning').trim();
+        const lastPushTime = await getLastPushTime();
+        const defaults = getDefaultWindowRange(windowName, lastPushTime);
         const from = body.from ? parseDate(body.from, 'from') : defaults.from;
         const to = body.to ? parseDate(body.to, 'to') : defaults.to;
         const types: StockInfoType[] = ['announcement', 'news'];
+        console.log(`[StockInfoPush] 窗口=${windowName}, 上次推送=${lastPushTime?.toISOString() || '无'}, 资讯时间范围=${from.toISOString()} ~ ${to.toISOString()}`);
         return types.map(info_type => ({ info_type, from, to }));
     }
 
     static async push(body: StockInfoPushRequest): Promise<StockInfoPushResult> {
-        const windows = StockInfoPushService.resolveWindows(body);
+        const windows = await StockInfoPushService.resolveWindows(body);
         const summary: StockInfoPushResult = {
             candidates: 0,
             matched_users: 0,
@@ -101,6 +137,12 @@ export class StockInfoPushService {
 
                 summary.results.push({ id: judgement.id, symbol: judgement.symbol, ...result });
             }
+        }
+
+        // 推送成功后，记录本次推送时间（下次推送的起点）
+        if (summary.sent > 0 || summary.candidates > 0) {
+            await setLastPushTime(new Date());
+            console.log(`[StockInfoPush] 已记录推送时间，下次推送起点=${new Date().toISOString()}`);
         }
 
         return summary;
