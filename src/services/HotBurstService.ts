@@ -343,6 +343,30 @@ export class HotBurstService {
             }
         }
 
+        // ===== Step 2.5: 预加载研报数据（批量，避免逐个查询） =====
+        const reportStockSet = new Map<string, { count: number; latestTime: string }>();
+        try {
+            const reportMessages = await pool.query(
+                `SELECT stock_codes, received_at FROM feishu_messages
+                 WHERE received_at > NOW() - INTERVAL '24 hours'
+                   AND chat_name LIKE '%研报%'
+                   AND array_length(stock_codes, 1) IS NOT NULL`
+            );
+            for (const row of reportMessages.rows) {
+                for (const code of row.stock_codes || []) {
+                    const existing = reportStockSet.get(code);
+                    if (existing) {
+                        existing.count++;
+                    } else {
+                        reportStockSet.set(code, { count: 1, latestTime: row.received_at });
+                    }
+                }
+            }
+            console.log(`[HotBurst] Step2.5: 预加载研报数据，覆盖 ${reportStockSet.size} 只股票`);
+        } catch (err) {
+            console.warn('[HotBurst] Step2.5: 研报预加载失败:', (err as Error).message);
+        }
+
         // ===== Step 3: 同花顺热榜验证 =====
         const thsHotSectors = await withTimeout(
             fetchThsHotSectors(), 15000, [], 'Step3:同花顺热榜'
@@ -464,13 +488,13 @@ export class HotBurstService {
                 };
             }
 
-            // 研报验证
-            const reports = await findResearchReportMessagesForStock(signal.symbol, 24);
-            signal.reportVerified = reports.length > 0;
-            if (reports.length > 0) {
+            // 研报验证（从预加载的 reportStockSet 批量查询）
+            const reportData = reportStockSet.get(signal.symbol);
+            signal.reportVerified = !!reportData && reportData.count > 0;
+            if (reportData && reportData.count > 0) {
                 signal.reportDetail = {
-                    reportCount: reports.length,
-                    latestReportTime: reports[0]?.receivedAt,
+                    reportCount: reportData.count,
+                    latestReportTime: reportData.latestTime,
                 };
             }
 
