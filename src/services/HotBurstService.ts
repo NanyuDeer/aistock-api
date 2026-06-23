@@ -131,6 +131,19 @@ function formatDate(d: Date): string {
     return `${y}${m}${day}`;
 }
 
+/** 带超时的 Promise 包装，超时后返回 fallback 值 */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) =>
+            setTimeout(() => {
+                console.warn(`[HotBurst] ${label} 超时 (${ms}ms)，使用 fallback`);
+                resolve(fallback);
+            }, ms)
+        ),
+    ]);
+}
+
 // ==================== 辅助函数 ====================
 
 /** 从 stocks 表查询股票名称 */
@@ -266,11 +279,15 @@ export class HotBurstService {
         const now = new Date().toISOString();
 
         // ===== Step 1: 个股爆发检测（代码提取替代关键词匹配） =====
-        const hotStocks = await HotKeywordDetectorService.detectHotStocks();
+        const hotStocks = await withTimeout(
+            HotKeywordDetectorService.detectHotStocks(), 30000, [], 'Step1:个股爆发检测'
+        );
         console.log(`[HotBurst] Step1: 检测到 ${hotStocks.length} 只爆发个股`);
 
         // ===== Step 1.5: 细分概念爆发检测（共振一：交叉验证） =====
-        const hotConcepts = await HotKeywordDetectorService.detectHotConcepts();
+        const hotConcepts = await withTimeout(
+            HotKeywordDetectorService.detectHotConcepts(), 20000, [], 'Step1.5:概念爆发检测'
+        );
         console.log(`[HotBurst] Step1.5: 检测到 ${hotConcepts.length} 个爆发细分概念`);
 
         // 构建：股票代码 → 匹配到的概念列表
@@ -305,7 +322,9 @@ export class HotBurstService {
         // ===== Step 2: 飞书群消息关联 =====
         const feishuWindowHours = TradingCalendarService.getFeishuWindowHours();
         console.log(`[HotBurst] 飞书消息查询窗口: ${feishuWindowHours}h`);
-        const feishuMessages = await getFeishuMessages(feishuWindowHours);
+        const feishuMessages = await withTimeout(
+            getFeishuMessages(feishuWindowHours), 15000, [], 'Step2:飞书消息查询'
+        );
         console.log(`[HotBurst] Step2: 获取到 ${feishuMessages.length} 条飞书群消息`);
 
         // 构建：股票代码 → 飞书消息数 + 关键词
@@ -325,7 +344,9 @@ export class HotBurstService {
         }
 
         // ===== Step 3: 同花顺热榜验证 =====
-        const thsHotSectors = await fetchThsHotSectors();
+        const thsHotSectors = await withTimeout(
+            fetchThsHotSectors(), 15000, [], 'Step3:同花顺热榜'
+        );
         console.log(`[HotBurst] Step3: 同花顺热榜 ${thsHotSectors.length} 个板块`);
 
         const thsSectorNameSet = new Set(thsHotSectors.map(s => s.name));
