@@ -695,10 +695,10 @@ export class WechatPushService {
         );
     }
 
-    // ==================== 媒体关注榜推送 ====================
+    // ==================== 机构调研推荐热门股推送 ====================
 
     static async dispatchOutbreakStocks(stocks: OutbreakPushItem[], force: boolean = false): Promise<PushResult> {
-        // 只推送给订阅了媒体关注榜推送的用户
+        // 只推送给订阅了机构调研推荐热门股推送的用户
         const openids = await WechatPushService.getSubscribedWechatOpenids('outbreak_push');
         const today = new Date().toISOString().slice(0, 10);
 
@@ -764,7 +764,7 @@ export class WechatPushService {
                     touser: openid,
                     template_id: templateId,
                     data: {
-                        first: { value: `媒体关注榜检测到${stocks.length}只共振信号`, color: '#FF5722' },
+                        first: { value: `机构调研推荐热门股检测到${stocks.length}只共振信号`, color: '#FF5722' },
                         stocks: { value: stockLines },
                         trigger: { value: triggerLines },
                         remark: { value: '三步验证通过，点击查看详情', color: '#009688' },
@@ -801,7 +801,7 @@ export class WechatPushService {
                 openid,
                 stock.code,
                 stockSummary || stock.name,
-                '媒体关注榜',
+                '机构调研推荐热门股',
                 stock.resonance_level,
                 stock.trigger_reason,
                 process.env.WECHAT_TEMPLATE_OUTBREAK || '',
