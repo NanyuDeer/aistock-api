@@ -515,18 +515,41 @@ export class HotBurstService {
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个媒体关注信号`);
 
         // 批量获取股价（并发，限制并发数避免压垮接口）
-        const QUOTE_CONCURRENCY = 5;
-        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
-            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
-            await Promise.all(batch.map(async (signal) => {
-                try {
-                    const quote = await TushareQuoteService.getQuote(signal.symbol, 'core');
-                    signal.price = quote['最新价'] ?? null;
-                    signal.changePct = quote['涨跌幅'] ?? null;
-                } catch (err) {
-                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
-                }
-            }));
+        // 非交易时间跳过实时查询，避免写入 0 价格
+        const isTradingHours = (() => {
+            const now = new Date();
+            const utc8 = new Date(now.getTime() + 8 * 3600000);
+            const h = utc8.getUTCHours();
+            const m = utc8.getUTCMinutes();
+            const day = utc8.getUTCDay();
+            // 周一至周五 9:15-15:05（北京时间）
+            return day >= 1 && day <= 5 && ((h === 9 && m >= 15) || (h >= 10 && h < 15) || (h === 15 && m <= 5));
+        })();
+
+        if (isTradingHours) {
+            const QUOTE_CONCURRENCY = 5;
+            const QUOTE_TIMEOUT = 5000; // 单只股票5秒超时
+            for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
+                const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
+                await Promise.all(batch.map(async (signal) => {
+                    try {
+                        const quote = await withTimeout(
+                            TushareQuoteService.getQuote(signal.symbol, 'core'),
+                            QUOTE_TIMEOUT,
+                            null as any,
+                            `获取${signal.symbol}股价`
+                        );
+                        if (quote) {
+                            signal.price = quote['最新价'] ?? null;
+                            signal.changePct = quote['涨跌幅'] ?? null;
+                        }
+                    } catch (err) {
+                        console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+                    }
+                }));
+            }
+        } else {
+            console.log('[HotBurst] 非交易时间，跳过实时股价查询');
         }
 
         const result: HotBurstResult = {
