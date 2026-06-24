@@ -1,4 +1,5 @@
 import { StockInfoService, type StockInfoImpact, type StockInfoJudgementRow } from './StockInfoService';
+import { EmService } from './EmInfoService';
 import pool from '../db';
 
 const INFO_TYPE_LABELS: Record<string, string> = {
@@ -69,23 +70,29 @@ async function enrichIndustry(events: MonitorEventItem[]): Promise<MonitorEventI
     if (symbols.length === 0) return events;
 
     try {
-        const result = await pool.query(
-            `SELECT symbol, sector_name
-             FROM stock_concept_mapping
-             WHERE symbol = ANY($1)
-             ORDER BY symbol, sector_name`,
-            [symbols],
-        );
+        // 使用东方财富接口获取所属行业（与股票详情页一致，只取一个行业名）
+        const batchSize = 5;
+        const symbolIndustryMap = new Map<string, string>();
 
-        const sectorMap = new Map<string, string[]>();
-        for (const row of result.rows) {
-            if (!sectorMap.has(row.symbol)) sectorMap.set(row.symbol, []);
-            sectorMap.get(row.symbol)!.push(row.sector_name);
+        for (let i = 0; i < symbols.length; i += batchSize) {
+            const batch = symbols.slice(i, i + batchSize);
+            const results = await Promise.allSettled(
+                batch.map(symbol => EmService.getStockInfo(symbol))
+            );
+
+            for (let j = 0; j < results.length; j++) {
+                const res = results[j];
+                if (res.status === 'fulfilled' && res.value) {
+                    const industry = res.value['所属行业'] || '';
+                    if (industry) {
+                        symbolIndustryMap.set(batch[j], industry);
+                    }
+                }
+            }
         }
 
         for (const event of events) {
-            const sectors = sectorMap.get(event.symbol);
-            event.industry = sectors ? sectors.slice(0, 2).join(' · ') : '';
+            event.industry = symbolIndustryMap.get(event.symbol) || '';
         }
     } catch (err) {
         console.error('enrichIndustry failed:', err);
