@@ -514,7 +514,7 @@ export class HotBurstService {
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个机构调研热门信号`);
 
-        // 批量获取股价（并发，限制并发数避免压垮接口）
+        // 批量获取股价（走缓存，避免重复请求接口）
         // 交易时间用实时行情，非交易时间也查询一次获取最新收盘价
         const isTradingHours = (() => {
             const now = new Date();
@@ -525,31 +525,20 @@ export class HotBurstService {
             return day >= 1 && day <= 5 && ((h === 9 && m >= 15) || (h >= 10 && h < 15) || (h === 15 && m <= 5));
         })();
 
-        const QUOTE_CONCURRENCY = 5;
-        const QUOTE_TIMEOUT = 5000;
-        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
-            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
-            await Promise.all(batch.map(async (signal) => {
-                try {
-                    const quote = await withTimeout(
-                        EmQuoteService.getQuote(signal.symbol, 'core'),
-                        QUOTE_TIMEOUT,
-                        null as any,
-                        `获取${signal.symbol}股价`
-                    );
-                    if (quote) {
-                        const price = quote['最新价'];
-                        const changePct = quote['涨跌幅'];
-                        // 只在交易时间或首次获取时写入，避免非交易时间写入 0
-                        if (isTradingHours || !signal.price) {
-                            signal.price = (price && price > 0) ? price : null;
-                            signal.changePct = (changePct !== undefined && changePct !== null) ? changePct : null;
-                        }
-                    }
-                } catch (err) {
-                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+        const symbols = outbreaks.map(s => s.symbol);
+        const quoteResults = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+        for (let i = 0; i < outbreaks.length; i++) {
+            const signal = outbreaks[i];
+            const quote = quoteResults[i];
+            if (quote && !('错误' in quote)) {
+                const price = quote['最新价'];
+                const changePct = quote['涨跌幅'];
+                // 只在交易时间或首次获取时写入，避免非交易时间写入 0
+                if (isTradingHours || !signal.price) {
+                    signal.price = (price && price > 0) ? price : null;
+                    signal.changePct = (changePct !== undefined && changePct !== null) ? changePct : null;
                 }
-            }));
+            }
         }
         if (!isTradingHours) {
             console.log('[HotBurst] 非交易时间，已获取最新收盘价');

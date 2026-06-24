@@ -1804,18 +1804,14 @@ function toTsCodeFromEm(emCode: string): string {
 }
 
 /** 带重试的东方财富实时行情获取，最多重试3次，每次间隔1秒 */
-async function fetchQuoteWithRetry(code: string, maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const quote = await EmQuoteService.getQuote(code, 'core');
-            const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
-            const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
-            if (price !== null) return { price, changePct };
-        } catch {
-            if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
-            }
-        }
+async function fetchQuoteWithRetry(code: string, _maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
+    try {
+        const quote = await EmQuoteService.getCachedQuote(code, 'core');
+        const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
+        const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
+        if (price !== null) return { price, changePct };
+    } catch {
+        // 缓存和接口都失败时返回null
     }
     return { price: null, changePct: null };
 }

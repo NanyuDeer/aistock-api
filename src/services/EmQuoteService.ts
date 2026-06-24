@@ -1,5 +1,14 @@
 import { getStockIdentity } from '../utils/stock';
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { CacheService } from './CacheService';
+import {
+    STOCK_QUOTE_CORE_CACHE_KEY_PREFIX,
+    STOCK_QUOTE_CORE_TRADING_TTL_SECONDS,
+    buildTimestampedCachePayload,
+    isValidStockInfoCachePayload,
+    type StockInfoCachePayload,
+} from '../constants/cache';
+import { getAShareAdaptiveCacheTtlSeconds } from '../utils/tradingTime';
 
 export type QuoteLevel = 'core' | 'activity' | 'fundamental';
 
@@ -195,5 +204,64 @@ export class EmQuoteService {
         }
 
         return allResults;
+    }
+
+    /** 带缓存的行情获取（先查缓存，未命中再从接口获取并写入缓存） */
+    static async getCachedQuote(symbol: string, level: QuoteLevel = 'core'): Promise<Record<string, any>> {
+        const cacheKey = `${STOCK_QUOTE_CORE_CACHE_KEY_PREFIX}${symbol}`;
+        try {
+            const cached = await CacheService.get<StockInfoCachePayload>(cacheKey);
+            if (isValidStockInfoCachePayload(cached) && cached.data['涨跌幅'] !== undefined) {
+                return cached.data;
+            }
+        } catch { /* cache miss */ }
+
+        const quote = await this.getQuote(symbol, level);
+
+        try {
+            const ttl = await getAShareAdaptiveCacheTtlSeconds(STOCK_QUOTE_CORE_TRADING_TTL_SECONDS);
+            await CacheService.set(cacheKey, buildTimestampedCachePayload(quote), ttl);
+        } catch { /* cache write fail */ }
+
+        return quote;
+    }
+
+    /** 带缓存的批量行情获取 */
+    static async getCachedBatchQuotes(symbols: string[], level: QuoteLevel = 'core'): Promise<Record<string, any>[]> {
+        const results: Record<string, any>[] = [];
+        const missedSymbols: string[] = [];
+        const missedIndices: number[] = [];
+
+        // 先批量查缓存
+        for (let i = 0; i < symbols.length; i++) {
+            const cacheKey = `${STOCK_QUOTE_CORE_CACHE_KEY_PREFIX}${symbols[i]}`;
+            try {
+                const cached = await CacheService.get<StockInfoCachePayload>(cacheKey);
+                if (isValidStockInfoCachePayload(cached) && cached.data['涨跌幅'] !== undefined) {
+                    results[i] = cached.data;
+                    continue;
+                }
+            } catch { /* cache miss */ }
+            missedSymbols.push(symbols[i]);
+            missedIndices.push(i);
+        }
+
+        if (missedSymbols.length > 0) {
+            const fetched = await this.getBatchQuotes(missedSymbols, level);
+            const ttl = await getAShareAdaptiveCacheTtlSeconds(STOCK_QUOTE_CORE_TRADING_TTL_SECONDS);
+
+            for (let j = 0; j < fetched.length; j++) {
+                const quote = fetched[j];
+                const idx = missedIndices[j];
+                results[idx] = quote;
+
+                if (!('错误' in quote)) {
+                    const cacheKey = `${STOCK_QUOTE_CORE_CACHE_KEY_PREFIX}${missedSymbols[j]}`;
+                    CacheService.set(cacheKey, buildTimestampedCachePayload(quote), ttl).catch(() => {});
+                }
+            }
+        }
+
+        return results;
     }
 }
