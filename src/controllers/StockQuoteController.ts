@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { TushareQuoteService, QuoteLevel } from '../services/TushareQuoteService';
 import { TushareKlineService, KLineFqt, KLinePeriod } from '../services/TushareKlineService';
-import { EmQuoteService } from '../services/EmQuoteService';
 import { CacheService } from '../services/CacheService';
 import { createResponse } from '../utils/response';
 import { isValidAShareSymbol } from '../utils/validator';
@@ -194,9 +193,9 @@ export class StockQuoteController {
         }
 
         try {
-            const results = await EmQuoteService.getBatchQuotes(symbols, 'core');
+            const results = await TushareQuoteService.getBatchQuotes(symbols, 'core');
             createResponse(res, 200, 'success', {
-                '来源': '东方财富',
+                '来源': 'Tushare',
                 '股票数量': results.length,
                 '行情': results,
             });
