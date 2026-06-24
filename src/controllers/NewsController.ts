@@ -189,6 +189,15 @@ export class NewsController {
             if (!title) {
                 $('.detail-header').each((_, elem) => { title = $(elem).text().trim(); return false; });
             }
+            // 策略3：从meta标签提取标题
+            if (!title) {
+                title = $('meta[property="og:title"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+            }
+            // 策略4：从<title>标签提取标题（去掉" - 财联社"后缀）
+            if (!title) {
+                const rawTitle = $('title').first().text().trim();
+                title = rawTitle.replace(/\s*[-–—]\s*财联社\s*$/, '').trim();
+            }
 
             let publishTime = '';
             const normalizePublishTime = (raw: string): string => {
@@ -233,6 +242,44 @@ export class NewsController {
                 brief = this.cleanSummaryPrefix($(elem).text().trim());
                 return false;
             });
+
+            // 策略2：从detail-content前的<pre>标签提取摘要（财联社深度文章格式：①②③）
+            if (!brief) {
+                const preEl = $('.detail-content').first().prev('pre');
+                if (preEl.length > 0) {
+                    const text = preEl.text().trim();
+                    if (text && text.length > 10) {
+                        brief = this.cleanSummaryPrefix(text);
+                    }
+                }
+            }
+
+            // 策略3：从页面中任意<pre>标签提取含①②③的摘要
+            if (!brief) {
+                $('pre').each((_, elem) => {
+                    const text = $(elem).text().trim();
+                    if (text && /[①②③④⑤⑥⑦⑧⑨⑩]/.test(text) && text.length > 10) {
+                        brief = this.cleanSummaryPrefix(text);
+                        return false;
+                    }
+                });
+            }
+
+            // 策略4：从正文开头提取以①开头的段落作为摘要
+            if (!brief) {
+                const contentText = $('.detail-content').first().text() || '';
+                const circledMatch = contentText.match(/①[\s\S]*?(?=②|[\n\r]{2}|$)/);
+                if (circledMatch) {
+                    let summaryParts = circledMatch[0].trim();
+                    const fullCircled = contentText.match(/①[\s\S]*?(?=财联社|正文|$)/);
+                    if (fullCircled && fullCircled[0].length > summaryParts.length) {
+                        summaryParts = fullCircled[0].trim();
+                    }
+                    if (summaryParts.length > 10) {
+                        brief = this.cleanSummaryPrefix(summaryParts);
+                    }
+                }
+            }
 
             let content = '';
             $('.detail-content').each((_, elem) => {
