@@ -561,6 +561,18 @@ cron.schedule('0 15 * * *', async () => {
     }
 });
 
+// 业绩预测自动更新：每天凌晨 02:00 执行，仅更新前一天有新报告的股票
+cron.schedule('0 2 * * *', async () => {
+    console.log('[ProfitForecastCron] 开始业绩预测自动更新');
+    try {
+        const { ProfitForecastAutoUpdateService } = await import('./services/ProfitForecastAutoUpdateService');
+        const result = await ProfitForecastAutoUpdateService.run();
+        console.log(`[ProfitForecastCron] 业绩预测自动更新完成: 更新${result.updated}只, 跳过${result.skipped}只, 失败${result.errors}只, 方法: ${result.method}`);
+    } catch (err: any) {
+        console.error('[ProfitForecastCron] 业绩预测自动更新失败:', err?.message || err);
+    }
+});
+
 async function start() {
     try {
         await pool.query('SELECT 1');

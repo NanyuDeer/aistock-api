@@ -969,3 +969,37 @@ export async function getKplConceptCons(params: { con_code?: string; ts_code?: s
     );
     return rows as KplConceptConsRow[];
 }
+
+/** 卖方盈利预测数据 - report_rc */
+export interface ReportRcRow {
+    ts_code: string;
+    name: string;
+    report_date: string;
+    report_title: string;
+    report_type: string;
+    classify: string;
+    org_name: string;
+    author_name: string;
+    quarter: string;
+    op_rt: number | null;
+    op_pr: number | null;
+    tp: number | null;
+    np: number | null;
+    eps: number | null;
+    pe: number | null;
+    rating: string;
+}
+
+/**
+ * 获取卖方盈利预测数据
+ * 可按 report_date 查询某天所有股票的盈利预测
+ * 需要Tushare 8000积分权限
+ */
+export async function getReportRc(params: { ts_code?: string; report_date?: string; start_date?: string; end_date?: string }): Promise<ReportRcRow[]> {
+    const rows = await tushareRequest(
+        'report_rc',
+        params,
+        'ts_code,name,report_date,report_title,report_type,classify,org_name,author_name,quarter,op_rt,op_pr,tp,np,eps,pe,rating',
+    );
+    return rows as ReportRcRow[];
+}
