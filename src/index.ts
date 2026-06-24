@@ -248,6 +248,35 @@ app.post('/api/internal/push-stock-info', async (req, res) => {
     }
 });
 
+// 手动刷新行情缓存（仅清除价格/涨跌幅相关缓存，下次请求时自动从东方财富获取最新数据）
+app.post('/api/internal/refresh-quotes', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const { CacheService } = await import('./services/CacheService');
+        const {
+            STOCK_QUOTE_CORE_CACHE_KEY_PREFIX,
+            INDEX_QUOTE_CACHE_KEY_PREFIX,
+        } = await import('./constants/cache');
+
+        const [coreDeleted, indexDeleted] = await Promise.all([
+            CacheService.delByPrefix(STOCK_QUOTE_CORE_CACHE_KEY_PREFIX),
+            CacheService.delByPrefix(INDEX_QUOTE_CACHE_KEY_PREFIX),
+        ]);
+
+        const totalDeleted = coreDeleted + indexDeleted;
+        res.json({
+            success: true,
+            message: `已清除 ${totalDeleted} 条价格/涨跌幅缓存，下次请求将获取最新数据`,
+            detail: { coreDeleted, indexDeleted, totalDeleted },
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 公共配置接口
 app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
 
