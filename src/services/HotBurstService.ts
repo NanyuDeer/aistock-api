@@ -515,41 +515,44 @@ export class HotBurstService {
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个机构调研热门信号`);
 
         // 批量获取股价（并发，限制并发数避免压垮接口）
-        // 非交易时间跳过实时查询，避免写入 0 价格
+        // 交易时间用实时行情，非交易时间也查询一次获取最新收盘价
         const isTradingHours = (() => {
             const now = new Date();
-            const utc8 = new Date(now.getTime() + 8 * 3600000);
-            const h = utc8.getUTCHours();
-            const m = utc8.getUTCMinutes();
-            const day = utc8.getUTCDay();
-            // 周一至周五 9:15-15:05（北京时间）
+            const h = now.getHours();
+            const m = now.getMinutes();
+            const day = now.getDay();
+            // 周一至周五 9:15-15:05（北京时间，TZ=Asia/Shanghai）
             return day >= 1 && day <= 5 && ((h === 9 && m >= 15) || (h >= 10 && h < 15) || (h === 15 && m <= 5));
         })();
 
-        if (isTradingHours) {
-            const QUOTE_CONCURRENCY = 5;
-            const QUOTE_TIMEOUT = 5000; // 单只股票5秒超时
-            for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
-                const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
-                await Promise.all(batch.map(async (signal) => {
-                    try {
-                        const quote = await withTimeout(
-                            TushareQuoteService.getQuote(signal.symbol, 'core'),
-                            QUOTE_TIMEOUT,
-                            null as any,
-                            `获取${signal.symbol}股价`
-                        );
-                        if (quote) {
-                            signal.price = quote['最新价'] ?? null;
-                            signal.changePct = quote['涨跌幅'] ?? null;
+        const QUOTE_CONCURRENCY = 5;
+        const QUOTE_TIMEOUT = 5000;
+        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
+            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
+            await Promise.all(batch.map(async (signal) => {
+                try {
+                    const quote = await withTimeout(
+                        TushareQuoteService.getQuote(signal.symbol, 'core'),
+                        QUOTE_TIMEOUT,
+                        null as any,
+                        `获取${signal.symbol}股价`
+                    );
+                    if (quote) {
+                        const price = quote['最新价'];
+                        const changePct = quote['涨跌幅'];
+                        // 只在交易时间或首次获取时写入，避免非交易时间写入 0
+                        if (isTradingHours || !signal.price) {
+                            signal.price = (price && price > 0) ? price : null;
+                            signal.changePct = (changePct !== undefined && changePct !== null) ? changePct : null;
                         }
-                    } catch (err) {
-                        console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
                     }
-                }));
-            }
-        } else {
-            console.log('[HotBurst] 非交易时间，跳过实时股价查询');
+                } catch (err) {
+                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+                }
+            }));
+        }
+        if (!isTradingHours) {
+            console.log('[HotBurst] 非交易时间，已获取最新收盘价');
         }
 
         const result: HotBurstResult = {
@@ -651,7 +654,7 @@ export class HotBurstService {
     /** 最近一次检测结果缓存 */
     private static lastDetectResult: HotBurstResult | null = null;
     private static lastDetectTime: number = 0;
-    private static readonly DETECT_CACHE_TTL = 6 * 3600 * 1000; // 6小时缓存
+    private static readonly DETECT_CACHE_TTL = 90 * 60 * 1000; // 1.5小时缓存（缩短避免长时间显示旧数据）
 
     /**
      * 获取最近的机构调研推荐热门股检测结果
@@ -768,5 +771,64 @@ export class HotBurstService {
             console.error('[HotBurst] DB 兜底也失败:', (dbErr as Error).message);
         }
         return null;
+    }
+
+    /**
+     * 从 DB 获取最新的机构调研推荐热门股记录（轻量查询，不触发检测）
+     * 首页面板专用：直接返回 DB 中最新的 N 条三源共振记录
+     */
+    static async getLatestFromDB(limit: number = 5): Promise<HotBurstResult | null> {
+        try {
+            const result = await pool.query(
+                `SELECT detected_at, symbol, stock_name, resonance_score, resonance_level,
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
+                 FROM institution_research_history
+                 WHERE resonance_count >= 3
+                 ORDER BY detected_at DESC, resonance_score DESC
+                 LIMIT $1`,
+                [limit]
+            );
+            if (result.rows.length === 0) {
+                return null;
+            }
+            const records = result.rows;
+            const latestTime = records[0].detected_at;
+            const outbreaks: StockResonanceSignal[] = records.map((r: any) => ({
+                symbol: r.symbol,
+                stockName: r.stock_name,
+                newsCount: r.news_count,
+                newsSurgeRatio: 0,
+                triggerTags: r.keywords ? r.keywords.split(/[、,]/) : [],
+                feishuMessageCount: r.feishu_count,
+                thsVerified: r.ths_verified,
+                thsSectorName: r.sector_info || '',
+                thsSectorRank: 0,
+                resonanceScore: r.resonance_score,
+                resonanceLevel: r.resonance_level,
+                price: r.price && Number(r.price) > 0 ? Number(r.price) : null,
+                changePct: r.change_pct && Number(r.change_pct) !== 0 ? Number(r.change_pct) : null,
+                sectorInfo: r.sector_info || '',
+                conceptResonance: null,
+                articles: [],
+                detectedAt: r.detected_at,
+                clsVerified: false,
+                glhVerified: false,
+                reportVerified: false,
+                resonanceCount: r.resonance_count,
+                conceptDetail: null,
+                reportDetail: null,
+            }));
+            return {
+                update_time: latestTime,
+                total_stocks_checked: outbreaks.length,
+                resonance_count: outbreaks.length,
+                ths_hot_sectors: [],
+                outbreaks,
+                hot_concepts: [],
+            };
+        } catch (err) {
+            console.error('[HotBurst] getLatestFromDB 失败:', (err as Error).message);
+            return null;
+        }
     }
 }
