@@ -807,6 +807,24 @@ export class HotBurstService {
                 conceptDetail: null,
                 reportDetail: null,
             }));
+
+            // 用缓存行情实时刷新价格和涨跌幅
+            try {
+                const symbols = outbreaks.map(s => s.symbol);
+                const quotes = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+                for (let i = 0; i < outbreaks.length; i++) {
+                    const q = quotes[i];
+                    if (q && !('错误' in q)) {
+                        const price = q['最新价'];
+                        const changePct = q['涨跌幅'];
+                        if (price && price > 0) outbreaks[i].price = price;
+                        if (changePct !== undefined && changePct !== null) outbreaks[i].changePct = changePct;
+                    }
+                }
+            } catch (e) {
+                console.warn('[HotBurst] getLatestFromDB 刷新行情失败:', (e as Error).message);
+            }
+
             return {
                 update_time: latestTime,
                 total_stocks_checked: outbreaks.length,
