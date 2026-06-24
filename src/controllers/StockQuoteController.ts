@@ -192,17 +192,7 @@ export class StockQuoteController {
             return;
         }
 
-        try {
-            const results = await TushareQuoteService.getBatchQuotes(symbols, 'core');
-            createResponse(res, 200, 'success', {
-                '来源': 'Tushare',
-                '股票数量': results.length,
-                '行情': results,
-            });
-        } catch (err: any) {
-            console.error('Error fetching realtime batch quotes:', err);
-            createResponse(res, 500, err instanceof Error ? err.message : 'Internal Server Error');
-        }
+        await this.handleBatchQuotes(req, 'core', res);
     }
 
     static async getActivityQuotes(req: Request, res: Response, _next: NextFunction): Promise<void> {
