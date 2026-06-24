@@ -292,7 +292,7 @@ function buildOutbreakFeishuCard(stocks: OutbreakPushData[]): any {
     return {
         config: { wide_screen_mode: true },
         header: {
-            title: { tag: 'plain_text', content: '【媒体重点关注】' },
+            title: { tag: 'plain_text', content: '【机构调研热门股】' },
             template: 'red',
         },
         elements,
