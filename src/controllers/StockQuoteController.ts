@@ -133,11 +133,33 @@ export class StockQuoteController {
             }
 
             if (missedSymbols.length > 0) {
-                // core/activity 使用东方财富实时行情，fundamental 使用 Tushare
+                // core/activity 使用腾讯财经实时行情，fundamental 使用 Tushare
+                // activity 额外从 Tushare 补充均价、量比、涨停价、跌停价等字段
                 const useEm = level === 'core' || level === 'activity';
                 const fetchedQuotes = useEm
                     ? await EmQuoteService.getBatchQuotes(missedSymbols, level as EmQuoteLevel)
                     : await TushareQuoteService.getBatchQuotes(missedSymbols, level as TushareQuoteLevel);
+
+                // activity 级别：从 Tushare 补充腾讯接口缺失的字段
+                if (level === 'activity') {
+                    try {
+                        const tushareQuotes = await TushareQuoteService.getBatchQuotes(missedSymbols, 'activity');
+                        const SUPPLEMENT_FIELDS = ['均价', '量比', '涨停价', '跌停价'];
+                        fetchedQuotes.forEach((quote, index) => {
+                            const tushareQuote = tushareQuotes[index];
+                            if (tushareQuote && !('错误' in tushareQuote)) {
+                                for (const field of SUPPLEMENT_FIELDS) {
+                                    if (!(field in quote) && field in tushareQuote) {
+                                        quote[field] = tushareQuote[field];
+                                    }
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        console.error('Tushare补充字段失败:', e);
+                    }
+                }
+
                 const cacheableFetchedCount = fetchedQuotes.filter(quote => this.isCacheableQuote(quote)).length;
                 const cacheTtlSeconds = cacheableFetchedCount > 0 && cacheConfig
                     ? await getAShareAdaptiveCacheTtlSeconds(cacheConfig.tradingTtlSeconds)
