@@ -282,6 +282,7 @@ app.get('/api/potential-stocks/push-ranking', (req, res, next) => PotentialStock
 app.get('/api/cn/stocks', (req, res, next) => StockListController.getStockList(req, res, next));
 app.get('/api/cn/stock/infos', (req, res, next) => StockInfoController.getBatchStockInfo(req, res, next));
 app.get('/api/cn/stock/quotes/core', (req, res, next) => StockQuoteController.getCoreQuotes(req, res, next));
+app.get('/api/cn/stock/quotes/realtime', (req, res, next) => StockQuoteController.getRealtimeQuotes(req, res, next));
 app.get('/api/cn/stock/quotes/activity', (req, res, next) => StockQuoteController.getActivityQuotes(req, res, next));
 app.get('/api/cn/stock/quotes/kline', (req, res, next) => StockQuoteController.getKLine(req, res, next));
 app.get('/api/cn/stock/fundamentals', (req, res, next) => StockQuoteController.getFundamentalQuotes(req, res, next));
