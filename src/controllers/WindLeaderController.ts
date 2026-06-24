@@ -164,6 +164,27 @@ export class WindLeaderController {
     }
 
     /**
+     * GET /api/cn/institution-research/latest
+     * 从 DB 直接获取最新的机构调研推荐热门股（轻量查询，不触发检测）
+     * 供首页 HotBurstPanel 使用
+     */
+    static async getLatestRecords(req: Request, res: Response, _next: NextFunction): Promise<void> {
+        try {
+            const limit = Math.min(Math.max(parseInt(String(req.query.limit || '5'), 10), 1), 20);
+            const result = await HotBurstService.getLatestFromDB(limit);
+            if (!result) {
+                createResponse(res, 404, '暂无机构调研推荐热门股数据');
+                return;
+            }
+            createResponse(res, 200, 'success', result);
+        } catch (err: any) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error('[WindLeaderController] getLatestRecords error:', errMsg);
+            createResponse(res, 500, errMsg);
+        }
+    }
+
+    /**
      * GET /api/cn/institution-research/history
      * 查询历史机构调研推荐热门股记录
      * 默认仅返回三源共振及以上（resonance_count >= 3）的记录（min_resonance_only=true）

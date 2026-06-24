@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// 设置时区为北京时间（确保 node-cron 按 CST 调度）
+process.env.TZ = 'Asia/Shanghai';
+
 import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
@@ -154,6 +157,7 @@ app.get('/api/internal/feishu-messages', (req, res, next) => FeishuMessageContro
 app.post('/api/cn/institution-research/detect', (req, res, next) => WindLeaderController.detectHotBurst(req, res, next));
 app.get('/api/cn/institution-research', (req, res, next) => WindLeaderController.getHotBurst(req, res, next));
 app.get('/api/cn/institution-research/history', (req, res, next) => WindLeaderController.getHotBurstHistory(req, res, next));
+app.get('/api/cn/institution-research/latest', (req, res, next) => WindLeaderController.getLatestRecords(req, res, next));
 
 // 飞书OAuth授权
 app.get('/api/auth/feishu/callback', (req, res, next) => FeishuAuthController.oauthCallback(req, res, next));
