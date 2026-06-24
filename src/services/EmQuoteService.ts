@@ -1,76 +1,199 @@
 import { getStockIdentity } from '../utils/stock';
-import { formatToChinaTime } from '../utils/datetime';
 import { eastmoneyThrottler } from '../utils/throttlers';
 
 export type QuoteLevel = 'core' | 'activity' | 'fundamental';
 
-const VOLUME_FIELDS = new Set(['f47', 'f49', 'f161']);
+/**
+ * 腾讯行情接口字段索引映射
+ * 返回格式: v_xxx="市场~名称~代码~当前价~昨收~今开~成交量(手)~外盘~内盘~买一价~买一量~...~涨跌额~涨跌幅~最高~最低~成交量(手)~成交额(万)~换手率~市盈率~...~振幅~流通市值~总市值~...~市净率~..."
+ * 参考: https://qt.gtimg.cn/q=sh600519
+ */
+const FIELD_INDEX: Record<string, number> = {
+    '股票代码': 2,
+    '股票简称': 1,
+    '最新价': 3,
+    '昨收价': 4,
+    '今开价': 5,
+    '涨跌额': 31,
+    '涨跌幅': 32,
+    '最高价': 33,
+    '最低价': 34,
+    '成交量': 36,
+    '成交额': 37,
+    '换手率': 38,
+    '市盈率': 39,
+    '振幅': 43,
+    '流通市值': 44,
+    '总市值': 45,
+    '市净率': 46,
+};
+
+const CORE_FIELDS = new Set(['股票代码', '股票简称', '最新价', '涨跌幅']);
+const ACTIVITY_FIELDS = new Set([
+    '股票代码', '股票简称', '最新价', '涨跌额', '涨跌幅', '成交量', '成交额',
+    '换手率', '今开价', '最高价', '最低价', '昨收价', '振幅', '市盈率', '市净率',
+]);
+const FUNDAMENTAL_FIELDS = new Set([
+    '股票代码', '股票简称', '最新价', '涨跌幅', '市盈率', '市净率',
+    '总市值', '流通市值', '换手率', '振幅',
+]);
+
+const LEVEL_FIELDS: Record<QuoteLevel, Set<string>> = {
+    'core': CORE_FIELDS,
+    'activity': ACTIVITY_FIELDS,
+    'fundamental': FUNDAMENTAL_FIELDS,
+};
 
 export class EmQuoteService {
-    private static readonly BASE_URL = 'https://push2.eastmoney.com/api/qt/stock/get';
-    private static readonly CORE_FIELDS = 'f57,f58,f43,f170,f86';
-    private static readonly ACTIVITY_FIELDS = 'f57,f58,f43,f71,f170,f169,f47,f48,f168,f50,f44,f45,f46,f60,f51,f52,f49,f161,f86';
-    private static readonly FUNDAMENTAL_FIELDS = 'f57,f58,f55,f162,f92,f167,f183,f184,f105,f185,f186,f187,f173,f188,f84,f85,f116,f117,f190,f86';
+    private static readonly BASE_URL = 'https://qt.gtimg.cn/q=';
 
-    private static readonly LEVEL_FIELDS: Record<QuoteLevel, string> = {
-        'core': EmQuoteService.CORE_FIELDS,
-        'activity': EmQuoteService.ACTIVITY_FIELDS,
-        'fundamental': EmQuoteService.FUNDAMENTAL_FIELDS,
+    private static readonly HEADERS: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Referer': 'https://gu.qq.com/',
     };
 
-    private static readonly CODE_NAME_MAP: Record<string, string> = {
-        'f57': '股票代码', 'f58': '股票简称', 'f43': '最新价', 'f86': '更新时间',
-        'f44': '最高价', 'f45': '最低价', 'f60': '昨收价', 'f46': '今开价',
-        'f51': '涨停价', 'f52': '跌停价', 'f169': '涨跌额', 'f170': '涨跌幅',
-        'f71': '均价', 'f50': '量比', 'f47': '成交量', 'f48': '成交额',
-        'f168': '换手率', 'f161': '内盘', 'f49': '外盘', 'f167': '市净率',
-        'f173': 'ROE', 'f183': '总营收', 'f184': '总营收-同比', 'f185': '净利润-同比',
-        'f186': '毛利率', 'f187': '净利率', 'f188': '负债率', 'f190': '每股未分配利润',
-        'f162': '动态市盈率', 'f92': '每股净资产', 'f55': '季度收益', 'f105': '净利润',
-        'f84': '总股本', 'f85': '流通股', 'f116': '总市值', 'f117': '流通市值',
-    };
+    /** 解析腾讯行情接口返回的单只股票数据 */
+    private static parseQuote(rawText: string, level: QuoteLevel): Record<string, any> {
+        // 格式: v_sh600519="1~贵州茅台~600519~685.00~...";
+        const eqIndex = rawText.indexOf('="');
+        if (eqIndex === -1) return {};
+
+        const content = rawText.substring(eqIndex + 2).replace(/";?\s*$/, '');
+        if (!content) return {};
+
+        const fields = content.split('~');
+        if (fields.length < 47) return {};
+
+        const allowedFields = LEVEL_FIELDS[level];
+        const result: Record<string, any> = {};
+
+        for (const [name, index] of Object.entries(FIELD_INDEX)) {
+            if (!allowedFields.has(name)) continue;
+            if (index >= fields.length) continue;
+
+            let value: string | number = fields[index];
+            if (!value || value === '-') continue;
+
+            // 数值字段转换
+            if (['最新价', '昨收价', '今开价', '涨跌额', '涨跌幅', '最高价', '最低价',
+                '换手率', '市盈率', '振幅', '市净率'].includes(name)) {
+                value = parseFloat(value as string);
+                if (isNaN(value)) continue;
+            } else if (['成交量', '成交额', '流通市值', '总市值'].includes(name)) {
+                value = parseFloat(value as string);
+                if (isNaN(value)) continue;
+                // 成交量单位是手，转为股（×100）
+                if (name === '成交量') value = value * 100;
+                // 成交额单位是万，转为元（×10000）
+                if (name === '成交额') value = value * 10000;
+                // 流通市值、总市值单位是亿，转为元（×100000000）
+                if (name === '流通市值' || name === '总市值') value = value * 100000000;
+            }
+
+            result[name] = value;
+        }
+
+        return result;
+    }
 
     static async getQuote(symbol: string, level: QuoteLevel = 'core'): Promise<Record<string, any>> {
         const identity = getStockIdentity(symbol);
-        const { eastmoneyId } = identity;
-        const fields = this.LEVEL_FIELDS[level];
-        const url = `${this.BASE_URL}?invt=2&fltt=2&fields=${fields}&secid=${eastmoneyId}.${symbol}`;
+        const { tencentPrefix } = identity;
+        const code = `${tencentPrefix}${symbol}`;
+        const url = `${this.BASE_URL}${code}`;
 
         await eastmoneyThrottler.throttle();
 
         const response = await fetch(url, {
             method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'zh-CN,zh;q=0.9',
-                'Referer': 'https://quote.eastmoney.com/',
-            },
+            headers: this.HEADERS,
         });
 
-        if (!response.ok) throw new Error(`东方财富行情接口请求失败: ${response.status}`);
+        if (!response.ok) throw new Error(`腾讯行情接口请求失败: ${response.status}`);
 
-        const json: any = await response.json();
-        const innerData = json.data;
-        if (!innerData) throw new Error('东方财富行情接口返回数据格式异常');
+        // 腾讯接口返回GBK编码
+        const buffer = await response.arrayBuffer();
+        const text = new TextDecoder('gbk').decode(buffer);
 
-        const result: Record<string, any> = {};
-        for (const [key, name] of Object.entries(this.CODE_NAME_MAP)) {
-            if (key in innerData) {
-                let value = innerData[key];
-                if (VOLUME_FIELDS.has(key) && typeof value === 'number') value = value * 100;
-                else if (key === 'f86' && typeof value === 'number') value = formatToChinaTime(value * 1000);
-                result[name] = value;
-            }
+        const result = this.parseQuote(text, level);
+        if (Object.keys(result).length === 0) {
+            throw new Error('腾讯行情接口返回数据格式异常');
         }
+
         return result;
     }
 
     static async getBatchQuotes(symbols: string[], level: QuoteLevel = 'core'): Promise<Record<string, any>[]> {
-        const results = await Promise.allSettled(symbols.map(symbol => this.getQuote(symbol, level)));
-        return results.map((result, index) => {
-            if (result.status === 'fulfilled') return result.value;
-            return { '股票代码': symbols[index], '错误': result.reason?.message || '查询失败' };
+        // 腾讯接口支持批量查询，用逗号分隔
+        const codes = symbols.map(symbol => {
+            const identity = getStockIdentity(symbol);
+            return `${identity.tencentPrefix}${symbol}`;
         });
+
+        // 每次最多查询约50只，超出则分批
+        const BATCH_SIZE = 50;
+        const allResults: Record<string, any>[] = [];
+
+        for (let i = 0; i < codes.length; i += BATCH_SIZE) {
+            const batchCodes = codes.slice(i, i + BATCH_SIZE);
+            const batchSymbols = symbols.slice(i, i + BATCH_SIZE);
+            const url = `${this.BASE_URL}${batchCodes.join(',')}`;
+
+            await eastmoneyThrottler.throttle();
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: this.HEADERS,
+                });
+
+                if (!response.ok) {
+                    for (const sym of batchSymbols) {
+                        allResults.push({ '股票代码': sym, '错误': `腾讯行情接口请求失败: ${response.status}` });
+                    }
+                    continue;
+                }
+
+                const buffer = await response.arrayBuffer();
+                const text = new TextDecoder('gbk').decode(buffer);
+
+                // 按分号分割多只股票的数据
+                const lines = text.split(';').filter(line => line.trim().includes('="'));
+                const lineMap = new Map<string, string>();
+
+                for (const line of lines) {
+                    // 提取股票代码: v_sh600519="..." → sh600519
+                    const match = line.match(/v_([a-z]+\d+)=/);
+                    if (match) {
+                        lineMap.set(match[1], line);
+                    }
+                }
+
+                for (let j = 0; j < batchSymbols.length; j++) {
+                    const sym = batchSymbols[j];
+                    const code = batchCodes[j];
+                    const lineText = lineMap.get(code);
+
+                    if (lineText) {
+                        const parsed = this.parseQuote(lineText, level);
+                        if (Object.keys(parsed).length > 0) {
+                            allResults.push(parsed);
+                        } else {
+                            allResults.push({ '股票代码': sym, '错误': '数据解析失败' });
+                        }
+                    } else {
+                        allResults.push({ '股票代码': sym, '错误': '未获取到行情数据' });
+                    }
+                }
+            } catch (err) {
+                for (const sym of batchSymbols) {
+                    allResults.push({ '股票代码': sym, '错误': (err instanceof Error ? err.message : '查询失败') });
+                }
+            }
+        }
+
+        return allResults;
     }
 }

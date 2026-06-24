@@ -228,7 +228,7 @@ async function getPreviousClosePrice(symbol: string, pushDate: string): Promise<
         .sort((a, b) => String(b['时间']).localeCompare(String(a['时间'])));
     const close = Number(previousRows[0]?.['收盘价']);
     if (Number.isFinite(close) && close > 0) {
-        return { price: Number(close.toFixed(2)), basis: 'eastmoney_previous_trade_close' };
+        return { price: Number(close.toFixed(2)), basis: 'tencent_previous_trade_close' };
     }
 
     const fallbackRows = await tushareRequest(

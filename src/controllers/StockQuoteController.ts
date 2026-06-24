@@ -156,7 +156,7 @@ export class StockQuoteController {
             }
 
             const results = symbols.map(symbol => quotesBySymbol.get(symbol) ?? { '股票代码': symbol, '错误': '查询失败' });
-            const source = level === 'fundamental' ? 'Tushare' : '东方财富';
+            const source = level === 'fundamental' ? 'Tushare' : '腾讯财经';
             const message = missedSymbols.length === 0 ? 'success (cached)' : 'success';
 
             createResponse(res, 200, message, {
@@ -199,10 +199,10 @@ export class StockQuoteController {
         }
 
         try {
-            // 实时行情使用东方财富接口（盘中实时更新）
+            // 实时行情使用腾讯财经接口（盘中实时更新）
             const results = await EmQuoteService.getBatchQuotes(symbols, 'core');
             createResponse(res, 200, 'success', {
-                '来源': '东方财富',
+                '来源': '腾讯财经',
                 '股票数量': results.length,
                 '行情': results,
             });
