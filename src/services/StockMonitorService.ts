@@ -77,7 +77,7 @@ async function enrichIndustry(events: MonitorEventItem[]): Promise<MonitorEventI
         for (let i = 0; i < symbols.length; i += batchSize) {
             const batch = symbols.slice(i, i + batchSize);
             const results = await Promise.allSettled(
-                batch.map(symbol => EmService.getStockInfo(symbol))
+                batch.map(symbol => EmService.getStockInfo(symbol.replace(/^(SH|SZ|BJ)/i, '')))
             );
 
             for (let j = 0; j < results.length; j++) {
