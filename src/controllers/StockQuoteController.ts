@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { TushareQuoteService, QuoteLevel } from '../services/TushareQuoteService';
+import { TushareQuoteService, QuoteLevel as TushareQuoteLevel } from '../services/TushareQuoteService';
+import { EmQuoteService, QuoteLevel as EmQuoteLevel } from '../services/EmQuoteService';
 import { TushareKlineService, KLineFqt, KLinePeriod } from '../services/TushareKlineService';
 import { CacheService } from '../services/CacheService';
 import { createResponse } from '../utils/response';
@@ -46,20 +47,20 @@ export class StockQuoteController {
         return fqtMap[fqt];
     }
 
-    private static getQuoteCacheConfig(level: QuoteLevel): QuoteCacheConfig | null {
+    private static getQuoteCacheConfig(level: string): QuoteCacheConfig | null {
         if (level === 'core') return { keyPrefix: STOCK_QUOTE_CORE_CACHE_KEY_PREFIX, tradingTtlSeconds: STOCK_QUOTE_CORE_TRADING_TTL_SECONDS };
         if (level === 'activity') return { keyPrefix: STOCK_QUOTE_ACTIVITY_CACHE_KEY_PREFIX, tradingTtlSeconds: STOCK_QUOTE_ACTIVITY_TRADING_TTL_SECONDS };
         if (level === 'fundamental') return { keyPrefix: STOCK_QUOTE_FUNDAMENTAL_CACHE_KEY_PREFIX, tradingTtlSeconds: STOCK_QUOTE_FUNDAMENTAL_TRADING_TTL_SECONDS };
         return null;
     }
 
-    private static buildQuoteCacheKey(level: QuoteLevel, symbol: string): string | null {
+    private static buildQuoteCacheKey(level: string, symbol: string): string | null {
         const config = this.getQuoteCacheConfig(level);
         if (!config) return null;
         return `${config.keyPrefix}${symbol}`;
     }
 
-    private static async readCachedQuote(level: QuoteLevel, symbol: string): Promise<Record<string, any> | null> {
+    private static async readCachedQuote(level: string, symbol: string): Promise<Record<string, any> | null> {
         const cacheKey = this.buildQuoteCacheKey(level, symbol);
         if (!cacheKey) return null;
         try {
@@ -72,7 +73,7 @@ export class StockQuoteController {
         }
     }
 
-    private static async writeCachedQuote(level: QuoteLevel, symbol: string, quote: Record<string, any>, ttlSeconds: number): Promise<void> {
+    private static async writeCachedQuote(level: string, symbol: string, quote: Record<string, any>, ttlSeconds: number): Promise<void> {
         if (Object.keys(quote).length === 0) return;
         const cacheKey = this.buildQuoteCacheKey(level, symbol);
         if (!cacheKey) return;
@@ -89,7 +90,7 @@ export class StockQuoteController {
         return !('错误' in quote);
     }
 
-    private static async handleBatchQuotes(req: Request, level: QuoteLevel, res: Response): Promise<void> {
+    private static async handleBatchQuotes(req: Request, level: 'core' | 'activity' | 'fundamental', res: Response): Promise<void> {
         const symbolsParam = req.query.symbols as string;
 
         if (!symbolsParam) {
@@ -132,7 +133,11 @@ export class StockQuoteController {
             }
 
             if (missedSymbols.length > 0) {
-                const fetchedQuotes = await TushareQuoteService.getBatchQuotes(missedSymbols, level);
+                // core/activity 使用东方财富实时行情，fundamental 使用 Tushare
+                const useEm = level === 'core' || level === 'activity';
+                const fetchedQuotes = useEm
+                    ? await EmQuoteService.getBatchQuotes(missedSymbols, level as EmQuoteLevel)
+                    : await TushareQuoteService.getBatchQuotes(missedSymbols, level as TushareQuoteLevel);
                 const cacheableFetchedCount = fetchedQuotes.filter(quote => this.isCacheableQuote(quote)).length;
                 const cacheTtlSeconds = cacheableFetchedCount > 0 && cacheConfig
                     ? await getAShareAdaptiveCacheTtlSeconds(cacheConfig.tradingTtlSeconds)
@@ -151,10 +156,11 @@ export class StockQuoteController {
             }
 
             const results = symbols.map(symbol => quotesBySymbol.get(symbol) ?? { '股票代码': symbol, '错误': '查询失败' });
+            const source = level === 'fundamental' ? 'Tushare' : '东方财富';
             const message = missedSymbols.length === 0 ? 'success (cached)' : 'success';
 
             createResponse(res, 200, message, {
-                '来源': 'Tushare',
+                '来源': source,
                 '股票数量': results.length,
                 '行情': results,
             });
@@ -193,9 +199,10 @@ export class StockQuoteController {
         }
 
         try {
-            const results = await TushareQuoteService.getBatchQuotes(symbols, 'core');
+            // 实时行情使用东方财富接口（盘中实时更新）
+            const results = await EmQuoteService.getBatchQuotes(symbols, 'core');
             createResponse(res, 200, 'success', {
-                '来源': 'Tushare',
+                '来源': '东方财富',
                 '股票数量': results.length,
                 '行情': results,
             });

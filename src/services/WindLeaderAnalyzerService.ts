@@ -13,7 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as cheerio from 'cheerio';
-import { TushareQuoteService } from './TushareQuoteService';
+import { EmQuoteService } from './EmQuoteService';
 import { IndustryKGService } from './IndustryKGService';
 import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
@@ -1803,13 +1803,11 @@ function toTsCodeFromEm(emCode: string): string {
     return emCode + suffix;
 }
 
-/** 带重试的Tushare行情获取，最多重试3次，每次间隔1秒 */
+/** 带重试的东方财富实时行情获取，最多重试3次，每次间隔1秒 */
 async function fetchQuoteWithRetry(code: string, maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
-    const tsCode = toTsCodeFromEm(code);
-    if (!tsCode) return { price: null, changePct: null };
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const quote = await TushareQuoteService.getQuote(code, 'core');
+            const quote = await EmQuoteService.getQuote(code, 'core');
             const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
             const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
             if (price !== null) return { price, changePct };

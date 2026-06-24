@@ -14,7 +14,7 @@ import pool from '../db';
 import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
 import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
-import { TushareQuoteService } from './TushareQuoteService';
+import { EmQuoteService } from './EmQuoteService';
 import { TradingCalendarService } from './TradingCalendarService';
 
 // ==================== 类型定义 ====================
@@ -532,7 +532,7 @@ export class HotBurstService {
             await Promise.all(batch.map(async (signal) => {
                 try {
                     const quote = await withTimeout(
-                        TushareQuoteService.getQuote(signal.symbol, 'core'),
+                        EmQuoteService.getQuote(signal.symbol, 'core'),
                         QUOTE_TIMEOUT,
                         null as any,
                         `获取${signal.symbol}股价`
