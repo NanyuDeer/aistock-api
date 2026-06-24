@@ -258,19 +258,21 @@ app.post('/api/internal/refresh-quotes', async (req, res) => {
         const { CacheService } = await import('./services/CacheService');
         const {
             STOCK_QUOTE_CORE_CACHE_KEY_PREFIX,
+            STOCK_QUOTE_ACTIVITY_CACHE_KEY_PREFIX,
             INDEX_QUOTE_CACHE_KEY_PREFIX,
         } = await import('./constants/cache');
 
-        const [coreDeleted, indexDeleted] = await Promise.all([
+        const [coreDeleted, activityDeleted, indexDeleted] = await Promise.all([
             CacheService.delByPrefix(STOCK_QUOTE_CORE_CACHE_KEY_PREFIX),
+            CacheService.delByPrefix(STOCK_QUOTE_ACTIVITY_CACHE_KEY_PREFIX),
             CacheService.delByPrefix(INDEX_QUOTE_CACHE_KEY_PREFIX),
         ]);
 
-        const totalDeleted = coreDeleted + indexDeleted;
+        const totalDeleted = coreDeleted + activityDeleted + indexDeleted;
         res.json({
             success: true,
             message: `已清除 ${totalDeleted} 条价格/涨跌幅缓存，下次请求将获取最新数据`,
-            detail: { coreDeleted, indexDeleted, totalDeleted },
+            detail: { coreDeleted, activityDeleted, indexDeleted, totalDeleted },
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
