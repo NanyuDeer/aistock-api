@@ -13,7 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as cheerio from 'cheerio';
-import { TushareQuoteService } from './TushareQuoteService';
+import { TencentQuoteService } from './TencentQuoteService';
 import { IndustryKGService } from './IndustryKGService';
 import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
@@ -829,28 +829,59 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
 
-    const url = `https://basic.10jqka.com.cn/${boardCode}/`;
+    const url = `https://basic.10jqka.com.cn/48/${boardCode}/`;
     try {
         const html = await thsCrawler.fetchHtml(url);
+        console.log(`[HotSectorAnalyzer] 概念${boardCode}页面HTML长度: ${html.length}`);
+        
         const $ = cheerio.load(html);
 
-        // 1. 优先从 topStock 隐藏字段提取龙头股代码
-        const topStockAttr = $('input.topStock').attr('topStock') || '';
-        const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
-
-        // 2. 从龙头股区域提取
         const leadingStocks: { code: string; name: string }[] = [];
 
+        // 策略1：从 topStock 隐藏字段提取龙头股代码
+        const topStockAttr = $('input.topStock').attr('topstock') || $('input.topStock').attr('topStock') || '';
+        console.log(`[HotSectorAnalyzer] 概念${boardCode} topstock字段: "${topStockAttr}"`);
+        
+        const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
+        console.log(`[HotSectorAnalyzer] 概念${boardCode} 解析后的龙头股代码: ${topStockCodes.join(', ') || '无'}`);
+        
         if (topStockCodes.length > 0) {
             for (const code of topStockCodes) {
-                const nameEl = $(`a[code="${code}"]`).first();
-                const name = nameEl.text().trim();
-                if (name) {
-                    leadingStocks.push({ code, name });
+                // 尝试多种方法获取股票名称
+                let name = '';
+                
+                // 方法1: 从 a[code="${code}"] 获取
+                const nameEl1 = $(`a[code="${code}"]`).first();
+                name = nameEl1.text().trim();
+                console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法1(${code}): ${name || '未找到'}`);
+                
+                // 方法2: 如果方法1失败，从 a[href*="${code}"] 获取
+                if (!name) {
+                    const nameEl2 = $(`a[href*="${code}"]`).first();
+                    name = nameEl2.text().trim();
+                    console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法2(${code}): ${name || '未找到'}`);
                 }
+                
+                // 方法3: 从表格中查找（排除新闻链接）
+                if (!name) {
+                    $('table').find('a').each((i, a) => {
+                        const href = $(a).attr('href') || '';
+                        const text = $(a).text().trim();
+                        if (href.includes(code) && text.length > 0 && text.length < 20 && !href.includes('news')) {
+                            name = text;
+                            console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法3(${code}): ${name}`);
+                            return false; // 找到第一个就停止
+                        }
+                    });
+                }
+                
+                // 即使名称为空，也添加代码（后续可以通过数据库查询补充名称）
+                leadingStocks.push({ code, name: name || code });
+                console.log(`[HotSectorAnalyzer] 概念${boardCode} 添加龙头股: ${code} - ${name || code}`);
             }
         }
 
+        // 策略2：从 span.hltip + a.jumpto 区域提取
         if (leadingStocks.length === 0) {
             $('span.hltip').each((i, el) => {
                 const text = $(el).text().trim();
@@ -859,12 +890,52 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
                     parent.find('a.jumpto').each((j, a) => {
                         const code = $(a).attr('code') || '';
                         const name = $(a).text().trim();
+                        if (code && name && /^\d{6}$/.test(code)) leadingStocks.push({ code, name });
+                    });
+                    return false;
+                }
+            });
+        }
+
+        // 策略3：从基本资料表格中"龙头股"行提取（同花顺概念板块页面标准结构）
+        if (leadingStocks.length === 0) {
+            $('table.m_table, table.boardinfotable, div.boardinfo table').find('tr, th, td').each((i, el) => {
+                const text = $(el).text().trim();
+                if (text.includes('龙头股')) {
+                    // 找到"龙头股"所在行，提取其中的链接
+                    const row = $(el).closest('tr');
+                    row.find('a').each((j, a) => {
+                        const href = $(a).attr('href') || '';
+                        const name = $(a).text().trim();
+                        // 从href中提取股票代码，如 /300801/ 或 stockpage.10jqka.com.cn/300801
+                        const codeMatch = href.match(/(\d{6})/);
+                        const code = codeMatch ? codeMatch[1] : '';
                         if (code && name && /^\d{6}$/.test(code)) {
-                            leadingStocks.push({ code, name });
+                            // 去重
+                            if (!leadingStocks.some(s => s.code === code)) {
+                                leadingStocks.push({ code, name });
+                            }
                         }
                     });
                     return false;
                 }
+            });
+        }
+
+        // 策略4：从排名表提取（概念股排名表中排名靠前的即为龙头股）
+        if (leadingStocks.length === 0) {
+            $('table.m_table').find('a').each((i, a) => {
+                const href = $(a).attr('href') || '';
+                const name = $(a).text().trim();
+                const codeMatch = href.match(/(\d{6})/);
+                const code = codeMatch ? codeMatch[1] : '';
+                if (code && name && /^\d{6}$/.test(code)) {
+                    if (!leadingStocks.some(s => s.code === code)) {
+                        leadingStocks.push({ code, name });
+                    }
+                }
+                // 最多取前3只作为龙头股
+                if (leadingStocks.length >= 3) return false;
             });
         }
 
@@ -885,7 +956,7 @@ async function fetchConceptConstituentsFromPage(boardCode: string): Promise<{ co
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
 
-    const url = `https://basic.10jqka.com.cn/${boardCode}/`;
+    const url = `https://basic.10jqka.com.cn/48/${boardCode}/`;
     try {
         const html = await thsCrawler.fetchHtml(url);
 
@@ -1005,18 +1076,22 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
     // 从同花顺概念板块页面并发爬取龙头股
     const leadingResults = await thsCrawler.crawlAll(
         result.map(concept => ({
-            url: `https://basic.10jqka.com.cn/${concept.code}/`,
+            url: `https://basic.10jqka.com.cn/48/${concept.code}/`,
             handler: async (html: string) => {
                 const $ = cheerio.load(html);
+                const stocks: { code: string; name: string }[] = [];
+
+                // 策略1：从 topStock 隐藏字段提取
                 const topStockAttr = $('input.topStock').attr('topStock') || '';
                 const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
-                const stocks: { code: string; name: string }[] = [];
                 if (topStockCodes.length > 0) {
                     for (const code of topStockCodes) {
                         const name = $(`a[code="${code}"]`).first().text().trim();
                         if (name) stocks.push({ code, name });
                     }
                 }
+
+                // 策略2：从 span.hltip + a.jumpto 区域提取
                 if (stocks.length === 0) {
                     $('span.hltip').each((i, el) => {
                         if ($(el).text().trim().includes('龙头股')) {
@@ -1029,6 +1104,39 @@ async function identifyHotConcepts(topN: number = 8, minFrequency: number = 3, d
                         }
                     });
                 }
+
+                // 策略3：从基本资料表格中"龙头股"行提取
+                if (stocks.length === 0) {
+                    $('table.m_table, table.boardinfotable, div.boardinfo table').find('tr, th, td').each((i, el) => {
+                        if ($(el).text().trim().includes('龙头股')) {
+                            $(el).closest('tr').find('a').each((j, a) => {
+                                const href = $(a).attr('href') || '';
+                                const name = $(a).text().trim();
+                                const codeMatch = href.match(/(\d{6})/);
+                                const code = codeMatch ? codeMatch[1] : '';
+                                if (code && name && /^\d{6}$/.test(code) && !stocks.some(s => s.code === code)) {
+                                    stocks.push({ code, name });
+                                }
+                            });
+                            return false;
+                        }
+                    });
+                }
+
+                // 策略4：从排名表提取排名靠前的股票
+                if (stocks.length === 0) {
+                    $('table.m_table').find('a').each((i, a) => {
+                        const href = $(a).attr('href') || '';
+                        const name = $(a).text().trim();
+                        const codeMatch = href.match(/(\d{6})/);
+                        const code = codeMatch ? codeMatch[1] : '';
+                        if (code && name && /^\d{6}$/.test(code) && !stocks.some(s => s.code === code)) {
+                            stocks.push({ code, name });
+                        }
+                        if (stocks.length >= 3) return false;
+                    });
+                }
+
                 return stocks;
             },
         }))
@@ -1580,26 +1688,35 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
     }
 
     try {
+        // 格式化上下游传导数据
+        const formatTransmission = (items: TransmissionItem[]) => {
+            if (items.length === 0) return '无';
+            return items.map(i => `${i.name}(传导因子:${i.factor.toFixed(2)}, 来源:${i.source_industry})`).join('; ');
+        };
+
         const prompt = `你是一位资深A股市场分析师。请根据以下数据，分析该风口概念板块的持续性和热度传递。
 
 ## 概念板块数据
 - 概念名称：${sectorName}
+- 板块评分：${sectorData.score}分（综合频次、涨幅、资金等因素）
 - 近10日上榜频次：${sectorData.frequency}天
-- 平均涨幅：${sectorData.avg_change}%
+- 10日平均涨幅：${sectorData.avg_change}%
 - 今日涨幅：${sectorData.today_change}%
 - 主力净流入：${sectorData.amount_trend}万元
-- 领涨股：${sectorData.leading_stock}
+- 板块净流入：${sectorData.net_inflow}万元
+- 驱动因素：${sectorData.driver}
+- 领涨股：${sectorData.leading_stock}（涨幅${sectorData.leading_change}%）
 
 ## 上下游传导
-- 上游：${JSON.stringify(transmission.upstream)}
-- 下游：${JSON.stringify(transmission.downstream)}
+- 上游行业：${formatTransmission(transmission.upstream)}
+- 下游行业：${formatTransmission(transmission.downstream)}
 
 请以JSON格式返回分析结果，包含以下字段：
 1. persistence: 持续时间判断，值为"短期(1-3天)"/"中期(1-2周)"/"长期(1月+)"
-2. persistence_reason: 持续性判断理由（50字以内）
+2. persistence_reason: 持续性判断理由（50字以内，需结合上榜频次、涨幅、资金等因素综合分析）
 3. heat_transfer: 热度是否会在板块间传递，true/false
-4. transfer_direction: 传递方向
-5. transfer_reason: 传递判断理由（50字以内）
+4. transfer_direction: 传递方向（如"上游→中游"、"中游→下游"、"无明显传递"）
+5. transfer_reason: 传递判断理由（50字以内，需结合上下游传导因子分析）
 6. risk_warning: 风险提示（30字以内）
 
 只返回JSON，不要其他文字。`;
@@ -1721,21 +1838,15 @@ function toTsCodeFromEm(emCode: string): string {
     return emCode + suffix;
 }
 
-/** 带重试的Tushare行情获取，最多重试3次，每次间隔1秒 */
-async function fetchQuoteWithRetry(code: string, maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
-    const tsCode = toTsCodeFromEm(code);
-    if (!tsCode) return { price: null, changePct: null };
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const quote = await TushareQuoteService.getQuote(code, 'core');
-            const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
-            const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
-            if (price !== null) return { price, changePct };
-        } catch {
-            if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
-            }
-        }
+/** 带重试的东方财富实时行情获取，最多重试3次，每次间隔1秒 */
+async function fetchQuoteWithRetry(code: string, _maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
+    try {
+        const quote = await TencentQuoteService.getCachedQuote(code, 'core');
+        const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
+        const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
+        if (price !== null) return { price, changePct };
+    } catch {
+        // 缓存和接口都失败时返回null
     }
     return { price: null, changePct: null };
 }
@@ -2380,7 +2491,22 @@ async function extractLeadingStock(
     // 优先从同花顺概念板块页面爬取龙头股
     const conceptLeadingStocks = await fetchConceptLeadingStocks(conceptCode);
     if (conceptLeadingStocks.length > 0) {
-        const stock = conceptLeadingStocks[0];
+        // 按市值排序，取市值最大的龙头股
+        let selectedStock = conceptLeadingStocks[0];
+        let maxMarketCap = 0;
+
+        for (const stock of conceptLeadingStocks) {
+            const tsCode = toTsCodeFromEm(stock.code);
+            const dbData = tsCode ? enhancement?.dailyBasicMap.get(tsCode) : undefined;
+            const circMv = dbData?.circ_mv || 0; // 流通市值（万元）
+
+            if (circMv > maxMarketCap) {
+                maxMarketCap = circMv;
+                selectedStock = stock;
+            }
+        }
+
+        const stock = selectedStock;
         let price: number | null = null;
         let changePct: number | null = null;
         if (stock.code) {
@@ -2491,100 +2617,8 @@ async function extractLeadingStock(
         };
     }
 
-    // 备选1：从已筛选的mainStocks中取评分最高的
-    if (mainStocks.length > 0) {
-        const best = mainStocks.reduce((a, b) => (a.score > b.score ? a : b));
-        let price = best.price || null;
-        let changePct = best.change_pct || null;
-        if (best.code && (!price || price === 0)) {
-            const result = await fetchQuoteWithRetry(best.code);
-            if (result.price !== null) price = result.price;
-            if (result.changePct !== null) changePct = result.changePct;
-        }
-
-        let leaderBasis = best.reason;
-        let leaderBonus = 0;
-        try {
-            const tsCode = toTsCodeFromEm(best.code);
-            if (tsCode) {
-                const companyData = await getStockCompany(tsCode);
-                if (companyData) {
-                    const desc = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
-                    const keywordCount = countLeaderKeywords(companyData.introduction || '');
-                    if (keywordCount >= 2) {
-                        leaderBonus = 8;
-                    } else if (keywordCount >= 1) {
-                        leaderBonus = 4;
-                    }
-                    const luDesc = best.reason;
-                    if (desc && luDesc) {
-                        leaderBasis = desc + '；' + luDesc;
-                    } else if (desc) {
-                        leaderBasis = desc;
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn(`[HotSectorAnalyzer] stock_company获取失败(${best.code}):`, (e as Error).message);
-        }
-
-        if (leaderBonus > 0) {
-            best.score = Math.round((best.score + leaderBonus) * 10) / 10;
-        }
-
-        return {
-            name: best.name,
-            code: best.code,
-            industry: best.industry || conceptName,
-            price,
-            change_pct: changePct,
-            reason: leaderBasis,
-            reason_tag: best.reason_tag || '龙头股',
-            reason_tag_class: best.reason_tag_class || 'longtou',
-            related_industry: best.related_industry || conceptName,
-            in_concept: best.in_concept,
-        };
-    }
-
-    // 再备选：从概念板块成分股中取涨幅最高的
-    const topStocks = await getBoardTopStocks(conceptCode, 1);
-    if (topStocks.length > 0) {
-        const stock = topStocks[0];
-        let price = stock.price || null;
-        let changePct = stock.change_pct || null;
-        if (stock.code && (!price || price === 0)) {
-            const result = await fetchQuoteWithRetry(stock.code);
-            if (result.price !== null) price = result.price;
-            if (result.changePct !== null) changePct = result.changePct;
-        }
-
-        // 备选龙头也调用stock_company
-        let leaderBasis = concept.driver || '';
-        try {
-            const tsCode = toTsCodeFromEm(stock.code);
-            if (tsCode) {
-                const companyData = await getStockCompany(tsCode);
-                if (companyData) {
-                    const desc = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
-                    if (desc) leaderBasis = desc;
-                }
-            }
-        } catch { /* ignore */ }
-
-        return {
-            name: stock.name,
-            code: stock.code,
-            industry: stock.industry || conceptName,
-            price,
-            change_pct: changePct,
-            reason: leaderBasis,
-            reason_tag: '龙头股',
-            reason_tag_class: 'longtou',
-            related_industry: conceptName,
-            in_concept: true,
-        };
-    }
-
+    // 同花顺页面爬取失败时，不再回退到其他数据源，确保龙头股必须来自同花顺
+    console.warn(`[HotSectorAnalyzer] 概念${conceptCode}(${conceptName})同花顺页面未爬取到龙头股，不使用备选数据源`);
     return {
         name: concept.leading_stock !== '--' ? concept.leading_stock : '',
         code: '',
@@ -2673,7 +2707,7 @@ export class WindLeaderAnalyzerService {
             leadingStocks: { code: string; name: string }[];
         }>(
             hotConcepts.map(concept => ({
-                url: `https://basic.10jqka.com.cn/${concept.code}/`,
+                url: `https://basic.10jqka.com.cn/48/${concept.code}/`,
                 handler: async (html: string) => {
                     const $ = cheerio.load(html);
                     // 提取龙头股

@@ -1,5 +1,6 @@
 import pool from '../db';
 import { ScanLoginController } from '../controllers/ScanLoginController';
+import { sessionFetch } from '../utils/httpAgent';
 
 export interface MonitorEvent {
     event_id: string;
@@ -241,7 +242,7 @@ export class WechatPushService {
 
         const accessToken = await ScanLoginController.getServerAccessToken();
         const detailUrl = WechatPushService.buildDetailUrl(event.detail_url);
-        const res = await fetch(
+        const res = await sessionFetch(
             `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
             {
                 method: 'POST',
@@ -469,7 +470,7 @@ export class WechatPushService {
         const accessToken = await ScanLoginController.getServerAccessToken();
         const detailUrl = WechatPushService.buildDetailUrl(event.url);
         const title = event.title.length > 40 ? `${event.title.slice(0, 40)}...` : event.title;
-        const res = await fetch(
+        const res = await sessionFetch(
             `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
             {
                 method: 'POST',
@@ -646,7 +647,7 @@ export class WechatPushService {
             }
         }
 
-        const res = await fetch(
+        const res = await sessionFetch(
             `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
             {
                 method: 'POST',
@@ -755,7 +756,7 @@ export class WechatPushService {
             `${i + 1}. ${s.trigger_reason}`
         ).join('\n');
 
-        const res = await fetch(
+        const res = await sessionFetch(
             `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
             {
                 method: 'POST',

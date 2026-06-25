@@ -14,7 +14,7 @@ import pool from '../db';
 import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
 import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
-import { TushareQuoteService } from './TushareQuoteService';
+import { TencentQuoteService } from './TencentQuoteService';
 import { TradingCalendarService } from './TradingCalendarService';
 
 // ==================== 类型定义 ====================
@@ -265,6 +265,25 @@ async function getFeishuMessages(hours: number = 6): Promise<FeishuMessageRow[]>
 // ==================== 整合服务 ====================
 
 export class HotBurstService {
+    /** 用缓存行情批量刷新 outbreaks 的价格和涨跌幅 */
+    private static async refreshOutbreaksQuotes(outbreaks: StockResonanceSignal[]): Promise<void> {
+        try {
+            const symbols = outbreaks.map(s => s.symbol);
+            const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
+            for (let i = 0; i < outbreaks.length; i++) {
+                const q = quotes[i];
+                if (q && !('错误' in q)) {
+                    const price = q['最新价'];
+                    const changePct = q['涨跌幅'];
+                    if (price && price > 0) outbreaks[i].price = price;
+                    if (changePct !== undefined && changePct !== null) outbreaks[i].changePct = changePct;
+                }
+            }
+        } catch (e) {
+            console.warn('[HotBurst] 刷新行情失败:', (e as Error).message);
+        }
+    }
+
     /**
      * 执行完整的机构调研推荐热门股检测（四信号源共振模型）：
      * 1. 个股爆发检测（财联社/格隆汇快讯中提取股票代码）
@@ -514,7 +533,7 @@ export class HotBurstService {
 
         console.log(`[HotBurst] 检测完成: ${outbreaks.length} 个机构调研热门信号`);
 
-        // 批量获取股价（并发，限制并发数避免压垮接口）
+        // 批量获取股价（走缓存，避免重复请求接口）
         // 交易时间用实时行情，非交易时间也查询一次获取最新收盘价
         const isTradingHours = (() => {
             const now = new Date();
@@ -525,31 +544,20 @@ export class HotBurstService {
             return day >= 1 && day <= 5 && ((h === 9 && m >= 15) || (h >= 10 && h < 15) || (h === 15 && m <= 5));
         })();
 
-        const QUOTE_CONCURRENCY = 5;
-        const QUOTE_TIMEOUT = 5000;
-        for (let i = 0; i < outbreaks.length; i += QUOTE_CONCURRENCY) {
-            const batch = outbreaks.slice(i, i + QUOTE_CONCURRENCY);
-            await Promise.all(batch.map(async (signal) => {
-                try {
-                    const quote = await withTimeout(
-                        TushareQuoteService.getQuote(signal.symbol, 'core'),
-                        QUOTE_TIMEOUT,
-                        null as any,
-                        `获取${signal.symbol}股价`
-                    );
-                    if (quote) {
-                        const price = quote['最新价'];
-                        const changePct = quote['涨跌幅'];
-                        // 只在交易时间或首次获取时写入，避免非交易时间写入 0
-                        if (isTradingHours || !signal.price) {
-                            signal.price = (price && price > 0) ? price : null;
-                            signal.changePct = (changePct !== undefined && changePct !== null) ? changePct : null;
-                        }
-                    }
-                } catch (err) {
-                    console.warn(`[HotBurst] 获取${signal.symbol}股价失败:`, (err as Error).message);
+        const symbols = outbreaks.map(s => s.symbol);
+        const quoteResults = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
+        for (let i = 0; i < outbreaks.length; i++) {
+            const signal = outbreaks[i];
+            const quote = quoteResults[i];
+            if (quote && !('错误' in quote)) {
+                const price = quote['最新价'];
+                const changePct = quote['涨跌幅'];
+                // 只在交易时间或首次获取时写入，避免非交易时间写入 0
+                if (isTradingHours || !signal.price) {
+                    signal.price = (price && price > 0) ? price : null;
+                    signal.changePct = (changePct !== undefined && changePct !== null) ? changePct : null;
                 }
-            }));
+            }
         }
         if (!isTradingHours) {
             console.log('[HotBurst] 非交易时间，已获取最新收盘价');
@@ -616,12 +624,15 @@ export class HotBurstService {
         offset: number = 0,
         minResonanceOnly: boolean = true
     ): Promise<{ total: number; records: any[] }> {
+        let total: number;
+        let records: any[];
+
         if (minResonanceOnly) {
             const countResult = await pool.query(
                 `SELECT COUNT(*)::int AS total FROM institution_research_history
                  WHERE resonance_count >= 3`
             );
-            const total = countResult.rows[0]?.total || 0;
+            total = countResult.rows[0]?.total || 0;
 
             const result = await pool.query(
                 `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
@@ -632,23 +643,40 @@ export class HotBurstService {
                  LIMIT $1 OFFSET $2`,
                 [limit, offset]
             );
+            records = result.rows;
+        } else {
+            const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM institution_research_history');
+            total = countResult.rows[0]?.total || 0;
 
-            return { total, records: result.rows };
+            const result = await pool.query(
+                `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
+                        price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
+                 FROM institution_research_history
+                 ORDER BY detected_at DESC, resonance_score DESC
+                 LIMIT $1 OFFSET $2`,
+                [limit, offset]
+            );
+            records = result.rows;
         }
 
-        const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM institution_research_history');
-        const total = countResult.rows[0]?.total || 0;
+        // 刷新行情数据
+        try {
+            const symbols = records.map((r: any) => r.symbol);
+            const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
+            for (let i = 0; i < records.length; i++) {
+                const q = quotes[i];
+                if (q && !('错误' in q)) {
+                    const price = q['最新价'];
+                    const changePct = q['涨跌幅'];
+                    if (price && price > 0) records[i].price = price;
+                    if (changePct !== undefined && changePct !== null) records[i].change_pct = changePct;
+                }
+            }
+        } catch (e) {
+            console.warn('[HotBurst] getHistory 刷新行情失败:', (e as Error).message);
+        }
 
-        const result = await pool.query(
-            `SELECT id, detected_at, symbol, stock_name, resonance_score, resonance_level,
-                    price, change_pct, sector_info, keywords, news_count, feishu_count, ths_verified, resonance_count
-             FROM institution_research_history
-             ORDER BY detected_at DESC, resonance_score DESC
-             LIMIT $1 OFFSET $2`,
-            [limit, offset]
-        );
-
-        return { total, records: result.rows };
+        return { total, records };
     }
 
     /** 最近一次检测结果缓存 */
@@ -663,6 +691,8 @@ export class HotBurstService {
      */
     static async getRecentBursts(_hours: number = 6, minResonanceCount: number = 0): Promise<HotBurstResult | null> {
         if (HotBurstService.lastDetectResult && (Date.now() - HotBurstService.lastDetectTime) < HotBurstService.DETECT_CACHE_TTL) {
+            // 刷新内存缓存中的行情数据
+            await HotBurstService.refreshOutbreaksQuotes(HotBurstService.lastDetectResult.outbreaks);
             if (minResonanceCount > 0) {
                 return {
                     ...HotBurstService.lastDetectResult,
@@ -754,6 +784,8 @@ export class HotBurstService {
                     outbreaks,
                     hot_concepts: [],
                 };
+                // 刷新行情数据
+                await HotBurstService.refreshOutbreaksQuotes(outbreaks);
                 HotBurstService.lastDetectResult = fallbackResult;
                 HotBurstService.lastDetectTime = Date.now();
                 console.log(`[HotBurst] 从 DB 恢复 ${outbreaks.length} 条三源共振记录`);
@@ -818,6 +850,24 @@ export class HotBurstService {
                 conceptDetail: null,
                 reportDetail: null,
             }));
+
+            // 用缓存行情实时刷新价格和涨跌幅
+            try {
+                const symbols = outbreaks.map(s => s.symbol);
+                const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
+                for (let i = 0; i < outbreaks.length; i++) {
+                    const q = quotes[i];
+                    if (q && !('错误' in q)) {
+                        const price = q['最新价'];
+                        const changePct = q['涨跌幅'];
+                        if (price && price > 0) outbreaks[i].price = price;
+                        if (changePct !== undefined && changePct !== null) outbreaks[i].changePct = changePct;
+                    }
+                }
+            } catch (e) {
+                console.warn('[HotBurst] getLatestFromDB 刷新行情失败:', (e as Error).message);
+            }
+
             return {
                 update_time: latestTime,
                 total_stocks_checked: outbreaks.length,

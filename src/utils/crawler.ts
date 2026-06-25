@@ -133,15 +133,12 @@ export class DistributedCrawler {
             finalReferer = 'https://q.10jqka.com.cn/';
         }
 
+        // 简化headers，只保留最基本的，避免被反爬检测
         return {
             'User-Agent': ua,
             'Referer': finalReferer,
             'Accept-Language': lang,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
         };
     }
 
