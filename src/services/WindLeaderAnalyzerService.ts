@@ -2457,7 +2457,22 @@ async function extractLeadingStock(
     // 优先从同花顺概念板块页面爬取龙头股
     const conceptLeadingStocks = await fetchConceptLeadingStocks(conceptCode);
     if (conceptLeadingStocks.length > 0) {
-        const stock = conceptLeadingStocks[0];
+        // 按市值排序，取市值最大的龙头股
+        let selectedStock = conceptLeadingStocks[0];
+        let maxMarketCap = 0;
+
+        for (const stock of conceptLeadingStocks) {
+            const tsCode = toTsCodeFromEm(stock.code);
+            const dbData = tsCode ? enhancement?.dailyBasicMap.get(tsCode) : undefined;
+            const circMv = dbData?.circ_mv || 0; // 流通市值（万元）
+
+            if (circMv > maxMarketCap) {
+                maxMarketCap = circMv;
+                selectedStock = stock;
+            }
+        }
+
+        const stock = selectedStock;
         let price: number | null = null;
         let changePct: number | null = null;
         if (stock.code) {
