@@ -3,6 +3,7 @@ import { createResponse } from '../utils/response';
 import { formatToChinaTime } from '../utils/datetime';
 import * as cheerio from 'cheerio';
 import { cailianpressThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 import { ClsStockNewsService } from '../services/ClsStockNewsService';
 
 export class NewsController {
@@ -27,7 +28,7 @@ export class NewsController {
         try {
             await cailianpressThrottler.throttle();
 
-            const response = await fetch(url.toString(), {
+            const response = await sessionFetch(url.toString(), {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                     'Accept': 'application/json',
@@ -165,7 +166,7 @@ export class NewsController {
         try {
             await cailianpressThrottler.throttle();
 
-            const response = await fetch(url, {
+            const response = await sessionFetch(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',

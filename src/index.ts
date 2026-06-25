@@ -44,6 +44,7 @@ import { StockInfoCrawlService } from './services/crawler/StockInfoCrawlService'
 import { syncStockConceptMapping } from './services/StockConceptMappingService';
 import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
 import { HotBurstService } from './services/HotBurstService';
+import { closeAllAgents } from './utils/httpAgent';
 
 import { Application } from 'express';
 
@@ -683,5 +684,13 @@ async function start() {
 }
 
 start();
+
+// 进程退出时清理 HTTP 连接池
+function gracefulShutdown() {
+    closeAllAgents();
+}
+process.on('SIGINT', () => { gracefulShutdown(); process.exit(0); });
+process.on('SIGTERM', () => { gracefulShutdown(); process.exit(0); });
+process.on('exit', gracefulShutdown);
 
 export { app, pool, redis };

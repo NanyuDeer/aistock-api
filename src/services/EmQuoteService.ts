@@ -1,6 +1,7 @@
 import { getStockIdentity } from '../utils/stock';
 import { formatToChinaTime } from '../utils/datetime';
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export type QuoteLevel = 'core' | 'activity' | 'fundamental';
 
@@ -38,7 +39,7 @@ export class EmQuoteService {
 
         await eastmoneyThrottler.throttle();
 
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             method: 'GET',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',

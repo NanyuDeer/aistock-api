@@ -2,6 +2,7 @@ import { tushareRequest } from './TushareService';
 import { getStockIdentity } from '../utils/stock';
 import { createThrottler } from '../utils/throttle';
 import pool from '../db';
+import { sessionFetch } from '../utils/httpAgent';
 
 const capitalFlowThrottler = createThrottler(150);
 
@@ -338,7 +339,7 @@ async function requestAiAnalysis(symbol: string, stockName: string, data: Capita
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-        const response = await fetch(apiBaseUrl, {
+        const response = await sessionFetch(apiBaseUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             body: JSON.stringify({

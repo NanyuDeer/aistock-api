@@ -9,6 +9,8 @@
  * 5. 请求指纹 - 每次请求生成不同的headers组合
  */
 
+import { sessionFetch } from './httpAgent';
+
 // ==================== UA池 ====================
 const USER_AGENTS = [
     // Chrome - Windows
@@ -160,7 +162,7 @@ export class DistributedCrawler {
 
         const headers = { ...this.generateHeaders(url), ...extraHeaders };
         this.requestCount++;
-        return fetch(url, { headers });
+        return sessionFetch(url, { headers });
     }
 
     /** 带重试的GBK HTML请求 */

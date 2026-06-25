@@ -1,5 +1,6 @@
 import { getStockIdentity } from '../utils/stock';
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export type KLinePeriod = 1 | 5 | 15 | 30 | 60 | 101 | 102 | 103;
 export type KLineFqt = 0 | 1 | 2;
@@ -65,7 +66,7 @@ export class EmKlineService {
         for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
             await eastmoneyThrottler.throttle();
             try {
-                const response = await fetch(url.toString(), { method: 'GET', headers });
+                const response = await sessionFetch(url.toString(), { method: 'GET', headers });
                 if (response.ok) return await response.json();
                 const status = response.status;
                 const bodyText = await response.text().catch(() => '');

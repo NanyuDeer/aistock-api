@@ -17,6 +17,7 @@ import { TushareQuoteService } from './TushareQuoteService';
 import { IndustryKGService } from './IndustryKGService';
 import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
+import { sessionFetch } from '../utils/httpAgent';
 import {
     tushareRequest,
     getMoneyflowByDate,
@@ -703,7 +704,7 @@ async function isAIRelatedByAI(name: string): Promise<boolean | null> {
 
 只回答"是"或"否"，不要其他文字。`;
 
-        const resp = await fetch(chatUrl, {
+        const resp = await sessionFetch(chatUrl, {
             method: 'POST',
             signal: AbortSignal.timeout(20000),  // 20秒超时，32B模型响应较慢
             headers: {
@@ -776,7 +777,7 @@ async function fetchBlockRotationData(days: number = 20): Promise<{
     };
 
     console.log('[HotSectorAnalyzer] 正在从同花顺板块轮动API获取数据...');
-    const response = await fetch(url, { headers });
+    const response = await sessionFetch(url, { headers });
     if (!response.ok) throw new Error(`同花顺板块轮动API请求失败: HTTP ${response.status}`);
     const json = await response.json() as any;
 
@@ -1294,7 +1295,7 @@ ${batch.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 5. 每个行业的上下游各不超过5个
 6. 只返回JSON，不要其他文字`;
 
-    const resp = await fetch(chatUrl, {
+    const resp = await sessionFetch(chatUrl, {
         method: 'POST',
         signal: AbortSignal.timeout(90000),
         headers: {
@@ -1603,7 +1604,7 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
 
 只返回JSON，不要其他文字。`;
 
-        const resp = await fetch(chatUrl, {
+        const resp = await sessionFetch(chatUrl, {
             method: 'POST',
             signal: AbortSignal.timeout(45000),  // 45秒超时，32B模型复杂分析需要更长时间
             headers: {

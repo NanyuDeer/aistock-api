@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../utils/response';
 import { isValidAShareSymbol, isValidGlobalIndexSymbol } from '../utils/validator';
 import { CacheService } from '../services/CacheService';
+import { sessionFetch } from '../utils/httpAgent';
 import {
     INDEX_QUOTE_CACHE_KEY_PREFIX,
     buildTimestampedCachePayload,
@@ -114,7 +115,7 @@ async function fetchTencentIndexQuotes(tencentCodes: string[]): Promise<Map<stri
 
     try {
         const url = `https://qt.gtimg.cn/q=${tencentCodes.join(',')}`;
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
             signal: AbortSignal.timeout(10000), // 10秒超时
         });

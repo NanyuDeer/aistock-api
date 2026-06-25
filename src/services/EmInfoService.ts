@@ -1,5 +1,6 @@
 import { getStockIdentity } from '../utils/stock';
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export class EmService {
     private static readonly FIELDS = 'f57,f58,f127,f116,f117,f189,f84,f85,f128';
@@ -16,7 +17,7 @@ export class EmService {
 
         await eastmoneyThrottler.throttle();
 
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             method: 'GET',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',

@@ -12,6 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getThsIndex, getThsMember, getDailyByDate, getDailyBasicByDate, getFinaIndicator, getIncome, ThsIndexRow } from './TushareService';
+import { sessionFetch } from '../utils/httpAgent';
 
 // ==================== 类型定义 ====================
 
@@ -159,7 +160,7 @@ ${batch.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 6. 只返回JSON，不要其他文字
 7. 确保JSON格式完全正确，不要有多余逗号或注释`;
 
-    const resp = await fetch(chatUrl, {
+    const resp = await sessionFetch(chatUrl, {
         method: 'POST',
         signal: AbortSignal.timeout(180000),
         headers: {

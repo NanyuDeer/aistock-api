@@ -7,6 +7,7 @@
  */
 
 import type { AiJudgement, EastmoneyAnnouncement, EastmoneyNews, PdfContent } from './types';
+import { sessionFetch } from '../../utils/httpAgent';
 
 const IMPACTS = new Set(['重大利好', '利好', '中性', '利空', '重大利空']);
 const HORIZONS = new Set(['短期', '中期', '长期', '中长期']);
@@ -138,7 +139,7 @@ export class StockInfoJudgeService {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try {
-                const response = await fetch(url, {
+                const response = await sessionFetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
