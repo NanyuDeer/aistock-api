@@ -841,9 +841,33 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
         const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
         if (topStockCodes.length > 0) {
             for (const code of topStockCodes) {
-                const nameEl = $(`a[code="${code}"]`).first();
-                const name = nameEl.text().trim();
-                if (name) leadingStocks.push({ code, name });
+                // 尝试多种方法获取股票名称
+                let name = '';
+                
+                // 方法1: 从 a[code="${code}"] 获取
+                const nameEl1 = $(`a[code="${code}"]`).first();
+                name = nameEl1.text().trim();
+                
+                // 方法2: 如果方法1失败，从 a[href*="${code}"] 获取
+                if (!name) {
+                    const nameEl2 = $(`a[href*="${code}"]`).first();
+                    name = nameEl2.text().trim();
+                }
+                
+                // 方法3: 从表格中查找（排除新闻链接）
+                if (!name) {
+                    $('table').find('a').each((i, a) => {
+                        const href = $(a).attr('href') || '';
+                        const text = $(a).text().trim();
+                        if (href.includes(code) && text.length > 0 && text.length < 20 && !href.includes('news')) {
+                            name = text;
+                            return false; // 找到第一个就停止
+                        }
+                    });
+                }
+                
+                // 即使名称为空，也添加代码（后续可以通过数据库查询补充名称）
+                leadingStocks.push({ code, name: name || code });
             }
         }
 
