@@ -1,4 +1,5 @@
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export class EmTagLeaderService {
     private static readonly BASE_URL = 'https://push2.eastmoney.com/api/qt/clist/get';
@@ -25,7 +26,7 @@ export class EmTagLeaderService {
 
         await eastmoneyThrottler.throttle();
 
-        const response = await fetch(url.toString(), {
+        const response = await sessionFetch(url.toString(), {
             method: 'GET',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',

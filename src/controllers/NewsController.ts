@@ -3,6 +3,7 @@ import { createResponse } from '../utils/response';
 import { formatToChinaTime } from '../utils/datetime';
 import * as cheerio from 'cheerio';
 import { cailianpressThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 import { ClsStockNewsService } from '../services/ClsStockNewsService';
 
 export class NewsController {
@@ -27,7 +28,7 @@ export class NewsController {
         try {
             await cailianpressThrottler.throttle();
 
-            const response = await fetch(url.toString(), {
+            const response = await sessionFetch(url.toString(), {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                     'Accept': 'application/json',
@@ -165,7 +166,7 @@ export class NewsController {
         try {
             await cailianpressThrottler.throttle();
 
-            const response = await fetch(url, {
+            const response = await sessionFetch(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
@@ -188,15 +189,6 @@ export class NewsController {
             $('.detail-title span').each((_, elem) => { title = $(elem).text().trim(); return false; });
             if (!title) {
                 $('.detail-header').each((_, elem) => { title = $(elem).text().trim(); return false; });
-            }
-            // 策略3：从meta标签提取标题
-            if (!title) {
-                title = $('meta[property="og:title"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-            }
-            // 策略4：从<title>标签提取标题（去掉" - 财联社"后缀）
-            if (!title) {
-                const rawTitle = $('title').first().text().trim();
-                title = rawTitle.replace(/\s*[-–—]\s*财联社\s*$/, '').trim();
             }
 
             let publishTime = '';
@@ -242,44 +234,6 @@ export class NewsController {
                 brief = this.cleanSummaryPrefix($(elem).text().trim());
                 return false;
             });
-
-            // 策略2：从detail-content前的<pre>标签提取摘要（财联社深度文章格式：①②③）
-            if (!brief) {
-                const preEl = $('.detail-content').first().prev('pre');
-                if (preEl.length > 0) {
-                    const text = preEl.text().trim();
-                    if (text && text.length > 10) {
-                        brief = this.cleanSummaryPrefix(text);
-                    }
-                }
-            }
-
-            // 策略3：从页面中任意<pre>标签提取含①②③的摘要
-            if (!brief) {
-                $('pre').each((_, elem) => {
-                    const text = $(elem).text().trim();
-                    if (text && /[①②③④⑤⑥⑦⑧⑨⑩]/.test(text) && text.length > 10) {
-                        brief = this.cleanSummaryPrefix(text);
-                        return false;
-                    }
-                });
-            }
-
-            // 策略4：从正文开头提取以①开头的段落作为摘要
-            if (!brief) {
-                const contentText = $('.detail-content').first().text() || '';
-                const circledMatch = contentText.match(/①[\s\S]*?(?=②|[\n\r]{2}|$)/);
-                if (circledMatch) {
-                    let summaryParts = circledMatch[0].trim();
-                    const fullCircled = contentText.match(/①[\s\S]*?(?=财联社|正文|$)/);
-                    if (fullCircled && fullCircled[0].length > summaryParts.length) {
-                        summaryParts = fullCircled[0].trim();
-                    }
-                    if (summaryParts.length > 10) {
-                        brief = this.cleanSummaryPrefix(summaryParts);
-                    }
-                }
-            }
 
             let content = '';
             $('.detail-content').each((_, elem) => {

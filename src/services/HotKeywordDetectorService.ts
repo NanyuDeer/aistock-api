@@ -16,6 +16,7 @@ import * as cheerio from 'cheerio';
 import { TradingCalendarService } from './TradingCalendarService';
 import { formatToChinaTime } from '../utils/datetime';
 import { cailianpressThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 import { getThsIndex, tushareRequest } from './TushareService';
 import pool from '../db';
 
@@ -262,7 +263,7 @@ async function fetchClsTelegraph(lastTime: number = 0, limit: number = 100, sinc
 
     await cailianpressThrottler.throttle();
 
-    const response = await fetch(CLS_TELEGRAPH_URL, {
+    const response = await sessionFetch(CLS_TELEGRAPH_URL, {
         method: 'POST',
         headers: CLS_HEADERS,
         body: JSON.stringify(payload),
@@ -398,7 +399,7 @@ export function parseGelonghuiNuxtData(html: string): any[] {
 
 async function fetchGelonghuiNews(limit: number = 50, sinceHours: number = 0): Promise<TelegraphItem[]> {
     try {
-        const response = await fetch(GELONGHUI_URL, {
+        const response = await sessionFetch(GELONGHUI_URL, {
             method: 'GET',
             headers: GELONGHUI_HEADERS,
         });

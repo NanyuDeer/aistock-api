@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { formatToChinaTime } from '../utils/datetime';
 import { cailianpressThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 import pool from '../db';
 
 export interface ClsStockNewsItem {
@@ -113,7 +114,7 @@ export class ClsStockNewsService {
 
         await cailianpressThrottler.throttle();
 
-        const response = await fetch(this.STOCK_NEWS_URL, {
+        const response = await sessionFetch(this.STOCK_NEWS_URL, {
             method: 'POST',
             headers: this.STOCK_NEWS_HEADERS,
             body: JSON.stringify(payload),
@@ -148,7 +149,7 @@ export class ClsStockNewsService {
         const url = `https://www.cls.cn/detail/${newsId}`;
         await cailianpressThrottler.throttle();
 
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             method: 'GET',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',

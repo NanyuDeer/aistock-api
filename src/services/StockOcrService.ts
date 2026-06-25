@@ -1,4 +1,5 @@
 import pool from '../db';
+import { sessionFetch } from '../utils/httpAgent';
 
 export interface StockOcrItem {
     '股票简称': string;
@@ -305,7 +306,7 @@ export class StockOcrService {
         const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
         try {
             const content = [{ type: 'text', text: prompt }, ...imageUrls.map(url => this.buildImageMessage(url))];
-            const response = await fetch(apiBaseUrl, {
+            const response = await sessionFetch(apiBaseUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                 body: JSON.stringify({ model: ocrModel, temperature: 0, messages: [{ role: 'system', content: this.SYSTEM_PROMPT }, { role: 'user', content }] }),

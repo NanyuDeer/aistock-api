@@ -1,4 +1,5 @@
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 interface RankItem {
     sc: string;
@@ -16,7 +17,7 @@ export class EmStockRankService {
     static async getStockHotRank(): Promise<StockRankResult[]> {
         await eastmoneyThrottler.throttle();
 
-        const response = await fetch(this.RANK_URL, {
+        const response = await sessionFetch(this.RANK_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

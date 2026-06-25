@@ -10,6 +10,7 @@ import type {
 import { formatToChinaTime } from '../utils/datetime';
 import pool from '../db';
 import { setAiIndicatorScores } from './TenxScoreService';
+import { sessionFetch } from '../utils/httpAgent';
 
 const DEFAULT_CONFIG: AgentConfig = {
   maxRounds: 5,
@@ -97,7 +98,7 @@ export class StockAnalysisAgentService {
     const timeout = setTimeout(() => controller.abort(), 60_000);
 
     try {
-      const response = await fetch(this.buildModelUrl(), {
+      const response = await sessionFetch(this.buildModelUrl(), {
         method: 'POST',
         headers,
         body: JSON.stringify(body),

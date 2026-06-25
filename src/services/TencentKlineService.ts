@@ -83,7 +83,7 @@ export class TencentKlineService {
                     },
                 });
                 if (response.ok) {
-                    const json = await response.json();
+                    const json: any = await response.json();
                     if (json.code === 0 && json.data) return json;
                     lastError = new Error(`腾讯K线接口返回异常: ${json.msg || 'unknown'}`);
                 } else {

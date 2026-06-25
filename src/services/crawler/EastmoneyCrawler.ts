@@ -11,6 +11,7 @@
 
 import * as cheerio from 'cheerio';
 import type { EastmoneyAnnouncement, EastmoneyNews } from './types';
+import { sessionFetch } from '../../utils/httpAgent';
 
 const EASTMONEY_NOTICE_API = 'https://np-anotice-stock.eastmoney.com/api/security/ann';
 const EASTMONEY_NEWS_API = 'https://search-api-web.eastmoney.com/search/jsonp';
@@ -207,7 +208,7 @@ export class EastmoneyCrawler {
         const endDate = end.toISOString().slice(0, 10);
         const url = buildNoticeApiUrl(symbol, beginDate, endDate, pageSize);
 
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         if (!response.ok) {
@@ -224,7 +225,7 @@ export class EastmoneyCrawler {
         pageSize = 10,
     ): Promise<EastmoneyNews[]> {
         const url = buildNewsApiUrl(symbol, pageSize);
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         if (!response.ok) {
@@ -238,7 +239,7 @@ export class EastmoneyCrawler {
     /** 抓取新闻正文（从详情页 HTML 提取） */
     static async fetchNewsContent(url: string, fallback: string): Promise<string> {
         try {
-            const response = await fetch(url, {
+            const response = await sessionFetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0' },
             });
             if (!response.ok) return fallback;
@@ -252,7 +253,7 @@ export class EastmoneyCrawler {
     /** 下载 PDF 二进制数据 */
     static async fetchPdfBuffer(pdfUrl: string): Promise<Buffer | null> {
         try {
-            const response = await fetch(pdfUrl, {
+            const response = await sessionFetch(pdfUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0' },
             });
             if (!response.ok) return null;
@@ -266,7 +267,7 @@ export class EastmoneyCrawler {
     /** 从公告详情页提取文本（PDF 降级方案） */
     static async fetchDetailPageText(detailUrl: string): Promise<string> {
         try {
-            const response = await fetch(detailUrl, {
+            const response = await sessionFetch(detailUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0' },
             });
             if (!response.ok) return '';

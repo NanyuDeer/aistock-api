@@ -29,7 +29,7 @@ export class WindLeaderController {
     static async getWindLeaders(req: Request, res: Response, _next: NextFunction): Promise<void> {
         try {
             const limit = Math.min(Math.max(parseInt(String(req.query.limit || '8'), 10), 1), 20);
-            const data = await WindLeaderService.getAnalysis(limit);
+            const data = WindLeaderService.getAnalysis(limit);
 
             if (!data) {
                 createResponse(res, 404, '暂无风口龙头数据，请先执行分析');

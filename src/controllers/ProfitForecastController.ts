@@ -3,6 +3,7 @@ import { ThsService } from '../services/ThsService';
 import { createResponse } from '../utils/response';
 import pool from '../db';
 import { CacheService } from '../services/CacheService';
+import { sessionFetch } from '../utils/httpAgent';
 
 interface EarningsForecastRow {
     update_time: string;
@@ -481,7 +482,7 @@ export class ProfitForecastController {
         try {
             // ThsService 不支持 abort，这里直接内联实现以便控制超时
             const url = `http://basic.10jqka.com.cn/${symbol}/worth.html`;
-            const response = await fetch(url, {
+            const response = await sessionFetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' },
                 signal: controller.signal,
             });

@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { parseTable } from '../utils/parser';
 import { thsThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export class ThsService {
     private static readonly BASE_URL = 'http://basic.10jqka.com.cn';
@@ -12,7 +13,7 @@ export class ThsService {
         const url = `${this.BASE_URL}/${symbol}/worth.html`;
         await thsThrottler.throttle();
 
-        const response = await fetch(url, { headers: this.HEADERS });
+        const response = await sessionFetch(url, { headers: this.HEADERS });
         if (!response.ok) throw new Error(`同花顺接口请求失败: ${response.status}`);
 
         const arrayBuffer = await response.arrayBuffer();

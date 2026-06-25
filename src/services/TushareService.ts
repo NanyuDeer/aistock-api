@@ -1,5 +1,6 @@
 import { getStockIdentity } from '../utils/stock';
 import { createThrottler } from '../utils/throttle';
+import { sessionFetch } from '../utils/httpAgent';
 
 const TUSHARE_MIN_INTERVAL_MS = 320;
 const tushareThrottler = createThrottler(TUSHARE_MIN_INTERVAL_MS);
@@ -33,7 +34,7 @@ export async function tushareRequest(
         fields: requestedFields,
     };
 
-    const response = await fetch('https://api.tushare.pro', {
+    const response = await sessionFetch('https://api.tushare.pro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
