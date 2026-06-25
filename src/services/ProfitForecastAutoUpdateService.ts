@@ -13,6 +13,7 @@
 import pool from '../db';
 import { getReportRc, type ReportRcRow } from './TushareService';
 import { CacheService } from './CacheService';
+import { sessionFetch } from '../utils/httpAgent';
 
 /** 从 ts_code 提取6位股票代码 */
 function tsCodeToSymbol(tsCode: string): string {
@@ -219,7 +220,7 @@ export class ProfitForecastAutoUpdateService {
     /** 爬取个股业绩预测 */
     private static async fetchProfitForecast(symbol: string): Promise<Record<string, any>> {
         const url = `http://basic.10jqka.com.cn/${symbol}/worth.html`;
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' },
             signal: AbortSignal.timeout(15000),
         });

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { signJwt } from '../utils/jwt';
 import { createResponse } from '../utils/response';
 import { CacheService } from '../services/CacheService';
+import { sessionFetch } from '../utils/httpAgent';
 import pool from '../db';
 
 export class ScanLoginController {
@@ -25,7 +26,7 @@ export class ScanLoginController {
         }
 
         ScanLoginController.log('accessToken', '请求微信获取 server access_token');
-        const res = await fetch(
+        const res = await sessionFetch(
             `https://api.weixin.qq.com/cgi-bin/token` +
             `?grant_type=client_credential` +
             `&appid=${process.env.WECHAT_APPID}` +
@@ -55,7 +56,7 @@ export class ScanLoginController {
             const accessToken = await ScanLoginController.getServerAccessToken();
 
             ScanLoginController.log('generateQr', '调用微信创建临时二维码', { sceneStr });
-            const wxRes = await fetch(
+            const wxRes = await sessionFetch(
                 `https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token=${accessToken}`,
                 {
                     method: 'POST',

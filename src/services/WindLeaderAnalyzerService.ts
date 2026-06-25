@@ -704,7 +704,7 @@ async function isAIRelatedByAI(name: string): Promise<boolean | null> {
 
 只回答"是"或"否"，不要其他文字。`;
 
-        const resp = await fetch(chatUrl, {
+        const resp = await sessionFetch(chatUrl, {
             method: 'POST',
             signal: AbortSignal.timeout(20000),  // 20秒超时，32B模型响应较慢
             headers: {
@@ -1687,7 +1687,7 @@ async function aiAnalyzeSector(sectorName: string, sectorData: HotConcept, trans
 
 只返回JSON，不要其他文字。`;
 
-        const resp = await fetch(chatUrl, {
+        const resp = await sessionFetch(chatUrl, {
             method: 'POST',
             signal: AbortSignal.timeout(45000),  // 45秒超时，32B模型复杂分析需要更长时间
             headers: {

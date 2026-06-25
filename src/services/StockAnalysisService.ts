@@ -3,6 +3,7 @@ import { ThsService } from './ThsService';
 import { ClsStockNewsService } from './ClsStockNewsService';
 import { formatToChinaTime } from '../utils/datetime';
 import { setAiIndicatorScores } from './TenxScoreService';
+import { sessionFetch } from '../utils/httpAgent';
 import pool from '../db';
 
 type AnalysisConclusion = '重大利好' | '利好' | '中性' | '利空' | '重大利空';
@@ -311,7 +312,7 @@ JSON 结构如下：
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45_000);
         try {
-            const response = await fetch(apiBaseUrl, {
+            const response = await sessionFetch(apiBaseUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                 body: JSON.stringify(this.buildModelRequestBody(prompt, false)),
@@ -336,7 +337,7 @@ JSON 结构如下：
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45_000);
         try {
-            const response = await fetch(apiBaseUrl, {
+            const response = await sessionFetch(apiBaseUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                 body: JSON.stringify(this.buildModelRequestBody(prompt, true)),
