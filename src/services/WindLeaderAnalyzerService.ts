@@ -832,13 +832,19 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
     const url = `https://basic.10jqka.com.cn/48/${boardCode}/`;
     try {
         const html = await thsCrawler.fetchHtml(url);
+        console.log(`[HotSectorAnalyzer] 概念${boardCode}页面HTML长度: ${html.length}`);
+        
         const $ = cheerio.load(html);
 
         const leadingStocks: { code: string; name: string }[] = [];
 
         // 策略1：从 topStock 隐藏字段提取龙头股代码
         const topStockAttr = $('input.topStock').attr('topstock') || $('input.topStock').attr('topStock') || '';
+        console.log(`[HotSectorAnalyzer] 概念${boardCode} topstock字段: "${topStockAttr}"`);
+        
         const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
+        console.log(`[HotSectorAnalyzer] 概念${boardCode} 解析后的龙头股代码: ${topStockCodes.join(', ') || '无'}`);
+        
         if (topStockCodes.length > 0) {
             for (const code of topStockCodes) {
                 // 尝试多种方法获取股票名称
@@ -847,11 +853,13 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
                 // 方法1: 从 a[code="${code}"] 获取
                 const nameEl1 = $(`a[code="${code}"]`).first();
                 name = nameEl1.text().trim();
+                console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法1(${code}): ${name || '未找到'}`);
                 
                 // 方法2: 如果方法1失败，从 a[href*="${code}"] 获取
                 if (!name) {
                     const nameEl2 = $(`a[href*="${code}"]`).first();
                     name = nameEl2.text().trim();
+                    console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法2(${code}): ${name || '未找到'}`);
                 }
                 
                 // 方法3: 从表格中查找（排除新闻链接）
@@ -861,6 +869,7 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
                         const text = $(a).text().trim();
                         if (href.includes(code) && text.length > 0 && text.length < 20 && !href.includes('news')) {
                             name = text;
+                            console.log(`[HotSectorAnalyzer] 概念${boardCode} 方法3(${code}): ${name}`);
                             return false; // 找到第一个就停止
                         }
                     });
@@ -868,6 +877,7 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
                 
                 // 即使名称为空，也添加代码（后续可以通过数据库查询补充名称）
                 leadingStocks.push({ code, name: name || code });
+                console.log(`[HotSectorAnalyzer] 概念${boardCode} 添加龙头股: ${code} - ${name || code}`);
             }
         }
 
