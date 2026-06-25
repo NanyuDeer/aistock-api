@@ -837,7 +837,7 @@ async function fetchConceptLeadingStocks(boardCode: string): Promise<{ code: str
         const leadingStocks: { code: string; name: string }[] = [];
 
         // 策略1：从 topStock 隐藏字段提取龙头股代码
-        const topStockAttr = $('input.topStock').attr('topStock') || '';
+        const topStockAttr = $('input.topStock').attr('topstock') || $('input.topStock').attr('topStock') || '';
         const topStockCodes = topStockAttr.split(',').filter((c: string) => c && /^\d{6}$/.test(c));
         if (topStockCodes.length > 0) {
             for (const code of topStockCodes) {
