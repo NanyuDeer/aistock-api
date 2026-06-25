@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { EmKlineService } from './EmKlineService';
+import { EmQuoteService } from './EmQuoteService';
 import { tushareRequest } from './TushareService';
 import { getStockIdentity } from '../utils/stock';
 
@@ -228,7 +229,7 @@ async function getPreviousClosePrice(symbol: string, pushDate: string): Promise<
         .sort((a, b) => String(b['时间']).localeCompare(String(a['时间'])));
     const close = Number(previousRows[0]?.['收盘价']);
     if (Number.isFinite(close) && close > 0) {
-        return { price: Number(close.toFixed(2)), basis: 'eastmoney_previous_trade_close' };
+        return { price: Number(close.toFixed(2)), basis: 'tencent_previous_trade_close' };
     }
 
     const fallbackRows = await tushareRequest(
@@ -278,10 +279,10 @@ function mergePushRecord(existing: any, next: any): any {
 }
 
 export class WindLeaderService {
-    static getAnalysis(limit: number = 8): {
+    static async getAnalysis(limit: number = 8): Promise<{
         update_time: string;
         hot_sectors: any[];
-    } | null {
+    } | null> {
         const data = loadData();
         if (!data) return null;
 
@@ -309,6 +310,49 @@ export class WindLeaderService {
             flow_data: sector.flow_data || null,
             leading_stock_info: sector.leading_stock_info || null,
         }));
+
+        // 用缓存行情实时刷新所有股票的价格和涨跌幅
+        try {
+            const stockLists = ['main_stocks', 'upstream_stocks', 'downstream_stocks'] as const;
+            const allCodes: string[] = [];
+            for (const sector of sectors) {
+                if (sector.leading_stock_info?.code) allCodes.push(sector.leading_stock_info.code);
+                for (const key of stockLists) {
+                    for (const s of sector[key]) {
+                        if (s.code) allCodes.push(s.code);
+                    }
+                }
+            }
+            const uniqueCodes = [...new Set(allCodes)];
+            if (uniqueCodes.length > 0) {
+                const quotes = await EmQuoteService.getCachedBatchQuotes(uniqueCodes, 'core');
+                const quoteMap = new Map<string, Record<string, any>>();
+                uniqueCodes.forEach((code, i) => {
+                    if (quotes[i] && !('错误' in quotes[i])) quoteMap.set(code, quotes[i]);
+                });
+                for (const sector of sectors) {
+                    if (sector.leading_stock_info?.code) {
+                        const q = quoteMap.get(sector.leading_stock_info.code);
+                        if (q) {
+                            if (q['最新价'] && q['最新价'] > 0) sector.leading_stock_info.price = q['最新价'];
+                            if (q['涨跌幅'] !== undefined && q['涨跌幅'] !== null) sector.leading_stock_info.change_pct = q['涨跌幅'];
+                        }
+                    }
+                    for (const key of stockLists) {
+                        for (const s of sector[key]) {
+                            if (!s.code) continue;
+                            const q = quoteMap.get(s.code);
+                            if (q) {
+                                if (q['最新价'] && q['最新价'] > 0) s.price = q['最新价'];
+                                if (q['涨跌幅'] !== undefined && q['涨跌幅'] !== null) s.change_pct = q['涨跌幅'];
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[WindLeaderService] getAnalysis 刷新行情失败:', (e as Error).message);
+        }
 
         return {
             update_time: data.update_time || '',

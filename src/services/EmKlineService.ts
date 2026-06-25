@@ -13,66 +13,82 @@ export interface KLineOptions {
     endDate?: string;
 }
 
+/** 腾讯K线周期映射 */
+const PERIOD_MAP: Record<number, string> = {
+    1: 'm1',      // 1分钟
+    5: 'm5',      // 5分钟
+    15: 'm15',    // 15分钟
+    30: 'm30',    // 30分钟
+    60: 'm60',    // 60分钟
+    101: 'day',   // 日K
+    102: 'week',  // 周K
+    103: 'month', // 月K
+};
+
+/** 腾讯复权类型映射: 0=不复权, 1=前复权, 2=后复权 */
+const FQT_MAP: Record<number, string> = {
+    0: '',     // 不复权
+    1: 'qfq',  // 前复权
+    2: 'hfq',  // 后复权
+};
+
 export class EmKlineService {
-    private static readonly BASE_URL = 'https://62.push2his.eastmoney.com/api/qt/stock/kline/get';
-    private static readonly UT = 'fa5fd1943c7b386f172d6893dbfba10b';
-    private static readonly RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
+    private static readonly BASE_URL = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get';
     private static readonly MAX_RETRIES = 3;
     private static readonly RETRY_BASE_DELAY_MS = 300;
-    private static readonly USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0';
 
     private static async sleep(ms: number): Promise<void> {
         await new Promise<void>((resolve) => setTimeout(resolve, ms));
     }
 
-    private static buildBrowserLikeHeaders(): Record<string, string> {
-        return {
-            'User-Agent': this.USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'DNT': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'sec-ch-ua': '"Not:A-Brand";v="99", "Microsoft Edge";v="145", "Chromium";v="145"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"',
-        };
+    /** 将日期字符串转为腾讯格式 YYYY-MM-DD */
+    private static formatDate(dateStr: string): string {
+        if (!dateStr) return '';
+        // 兼容多种格式: 20250601 / 2025-06-01 / 20500101
+        const compact = dateStr.replace(/[-/]/g, '');
+        if (compact.length === 8) {
+            return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+        }
+        return dateStr;
     }
 
     private static buildKlineUrl(options: KLineOptions): URL {
         const { symbol, klt = 101, fqt = 1, limit = 1000, startDate, endDate } = options;
         const identity = getStockIdentity(symbol);
-        const secid = `${identity.eastmoneyId}.${symbol}`;
+        const code = `${identity.tencentPrefix}${symbol}`;
+        const period = PERIOD_MAP[klt] || 'day';
+        const fqtType = FQT_MAP[fqt] ?? '';
+        const start = startDate ? this.formatDate(startDate) : '';
+        const end = endDate ? this.formatDate(endDate) : '';
+
+        // param=代码,周期,开始日期,结束日期,数量,复权类型
+        const param = [code, period, start, end, String(limit), fqtType].join(',');
         const url = new URL(this.BASE_URL);
-        url.searchParams.set('secid', secid);
-        url.searchParams.set('klt', String(klt));
-        url.searchParams.set('fqt', String(fqt));
-        url.searchParams.set('lmt', String(limit));
-        url.searchParams.set('end', endDate || '20500101');
-        url.searchParams.set('ut', this.UT);
-        url.searchParams.set('fields1', 'f1,f2,f3,f4,f5,f6');
-        url.searchParams.set('fields2', 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61');
-        url.searchParams.set('_', String(Date.now()));
-        if (startDate) url.searchParams.set('beg', startDate);
+        url.searchParams.set('param', param);
         return url;
     }
 
     private static async fetchKlineJson(url: URL): Promise<any> {
         let lastError: Error | null = null;
-        const headers = this.buildBrowserLikeHeaders();
 
         for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
             await eastmoneyThrottler.throttle();
             try {
-                const response = await fetch(url.toString(), { method: 'GET', headers });
-                if (response.ok) return await response.json();
-                const status = response.status;
-                const bodyText = await response.text().catch(() => '');
-                const snippet = bodyText.replace(/\s+/g, ' ').slice(0, 180);
-                const message = snippet ? `东方财富 K 线接口请求失败: ${status} ${snippet}` : `东方财富 K 线接口请求失败: ${status}`;
-                lastError = new Error(message);
-                if (!this.RETRYABLE_STATUS.has(status) || attempt === this.MAX_RETRIES) throw lastError;
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                        'Referer': 'https://gu.qq.com/',
+                    },
+                });
+                if (response.ok) {
+                    const json = await response.json();
+                    if (json.code === 0 && json.data) return json;
+                    lastError = new Error(`腾讯K线接口返回异常: ${json.msg || 'unknown'}`);
+                } else {
+                    lastError = new Error(`腾讯K线接口请求失败: ${response.status}`);
+                }
+                if (attempt === this.MAX_RETRIES) throw lastError;
             } catch (err) {
                 const wrapped = err instanceof Error ? err : new Error(String(err));
                 lastError = wrapped;
@@ -80,7 +96,7 @@ export class EmKlineService {
             }
             await this.sleep(this.RETRY_BASE_DELAY_MS * attempt);
         }
-        throw new Error(`东方财富 K 线接口请求失败: 未知错误 (url=${url.toString()})`);
+        throw new Error(`腾讯K线接口请求失败: 未知错误 (url=${url.toString()})`);
     }
 
     private static toNumber(value: string): number | null {
@@ -88,22 +104,33 @@ export class EmKlineService {
         return Number.isFinite(num) ? num : null;
     }
 
-    private static parseKLineRow(line: string): Record<string, any> | null {
-        const parts = line.split(',');
-        if (parts.length < 11) return null;
+    private static parseKLineRow(row: string[]): Record<string, any> | null {
+        if (!Array.isArray(row) || row.length < 6) return null;
         return {
-            '时间': parts[0], '开盘价': this.toNumber(parts[1]), '收盘价': this.toNumber(parts[2]),
-            '最高价': this.toNumber(parts[3]), '最低价': this.toNumber(parts[4]), '成交量': this.toNumber(parts[5]),
-            '成交额': this.toNumber(parts[6]), '振幅': this.toNumber(parts[7]), '涨跌幅': this.toNumber(parts[8]),
-            '涨跌额': this.toNumber(parts[9]), '换手率': this.toNumber(parts[10]),
+            '时间': row[0],
+            '开盘价': this.toNumber(row[1]),
+            '收盘价': this.toNumber(row[2]),
+            '最高价': this.toNumber(row[3]),
+            '最低价': this.toNumber(row[4]),
+            '成交量': this.toNumber(row[5]),
         };
     }
 
     static async getKLine(options: KLineOptions): Promise<Record<string, any>[]> {
         const url = this.buildKlineUrl(options);
         const json: any = await this.fetchKlineJson(url);
-        const klineRows: unknown = json?.data?.klines;
+
+        const identity = getStockIdentity(options.symbol);
+        const code = `${identity.tencentPrefix}${options.symbol}`;
+        const stockData = json.data?.[code];
+        if (!stockData) return [];
+
+        // 前复权数据在 qfqday，不复权在 day
+        const klineRows: unknown[] = stockData.qfqday || stockData.day || stockData.hfqday || [];
         if (!Array.isArray(klineRows)) return [];
-        return klineRows.map(line => typeof line === 'string' ? this.parseKLineRow(line) : null).filter((item): item is Record<string, any> => item !== null);
+
+        return klineRows
+            .map((row: any) => Array.isArray(row) ? this.parseKLineRow(row) : null)
+            .filter((item): item is Record<string, any> => item !== null);
     }
 }

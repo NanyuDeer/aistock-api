@@ -248,6 +248,37 @@ app.post('/api/internal/push-stock-info', async (req, res) => {
     }
 });
 
+// 手动刷新行情缓存（仅清除价格/涨跌幅相关缓存，下次请求时自动从东方财富获取最新数据）
+app.post('/api/internal/refresh-quotes', async (req, res) => {
+    const token = req.headers['x-internal-token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (token !== (process.env.INTERNAL_TOKEN || 'crawler-int-2026-token')) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+        const { CacheService } = await import('./services/CacheService');
+        const {
+            STOCK_QUOTE_CORE_CACHE_KEY_PREFIX,
+            STOCK_QUOTE_ACTIVITY_CACHE_KEY_PREFIX,
+            INDEX_QUOTE_CACHE_KEY_PREFIX,
+        } = await import('./constants/cache');
+
+        const [coreDeleted, activityDeleted, indexDeleted] = await Promise.all([
+            CacheService.delByPrefix(STOCK_QUOTE_CORE_CACHE_KEY_PREFIX),
+            CacheService.delByPrefix(STOCK_QUOTE_ACTIVITY_CACHE_KEY_PREFIX),
+            CacheService.delByPrefix(INDEX_QUOTE_CACHE_KEY_PREFIX),
+        ]);
+
+        const totalDeleted = coreDeleted + activityDeleted + indexDeleted;
+        res.json({
+            success: true,
+            message: `已清除 ${totalDeleted} 条价格/涨跌幅缓存，下次请求将获取最新数据`,
+            detail: { coreDeleted, activityDeleted, indexDeleted, totalDeleted },
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 公共配置接口
 app.get('/api/config/public', (req, res, next) => ConfigController.getPublicConfig(req, res, next));
 
@@ -558,6 +589,18 @@ cron.schedule('0 15 * * *', async () => {
         console.log(`[CrawlCron] 尾盘完成: 抓取${result.crawler.submitted}条, 推送候选${result.push.candidates}条`);
     } catch (err: any) {
         console.error('[CrawlCron] 尾盘失败:', err?.message || err);
+    }
+});
+
+// 业绩预测自动更新：每天凌晨 02:00 执行，仅更新前一天有新报告的股票
+cron.schedule('0 2 * * *', async () => {
+    console.log('[ProfitForecastCron] 开始业绩预测自动更新');
+    try {
+        const { ProfitForecastAutoUpdateService } = await import('./services/ProfitForecastAutoUpdateService');
+        const result = await ProfitForecastAutoUpdateService.run();
+        console.log(`[ProfitForecastCron] 业绩预测自动更新完成: 更新${result.updated}只, 跳过${result.skipped}只, 失败${result.errors}只, 方法: ${result.method}`);
+    } catch (err: any) {
+        console.error('[ProfitForecastCron] 业绩预测自动更新失败:', err?.message || err);
     }
 });
 

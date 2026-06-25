@@ -38,4 +38,21 @@ export class CacheService {
         if (!redisAvailable) return;
         try { await redis.del(key); } catch { /* ignore */ }
     }
+
+    static async delByPrefix(prefix: string): Promise<number> {
+        if (!redisAvailable) return 0;
+        try {
+            let cursor = '0';
+            let totalDeleted = 0;
+            do {
+                const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 200);
+                if (keys.length > 0) {
+                    await redis.del(...keys);
+                    totalDeleted += keys.length;
+                }
+                cursor = nextCursor;
+            } while (cursor !== '0');
+            return totalDeleted;
+        } catch { return 0; }
+    }
 }
