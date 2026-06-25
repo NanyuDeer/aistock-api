@@ -5,8 +5,10 @@ import { TencentQuoteService } from './TencentQuoteService';
 import { tushareRequest } from './TushareService';
 import { getStockIdentity } from '../utils/stock';
 
-const DATA_FILE = path.resolve(__dirname, '../../data/hot-sectors.json');
-const PUSH_HISTORY_FILE = path.resolve(__dirname, '../../data/potential-stock-push-history.json');
+// 使用项目根目录的data文件夹（而不是相对于编译代码的路径）
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const DATA_FILE = path.join(PROJECT_ROOT, 'data', 'hot-sectors.json');
+const PUSH_HISTORY_FILE = path.join(PROJECT_ROOT, 'data', 'potential-stock-push-history.json');
 
 let cachedData: any = null;
 let cachedTime = 0;
