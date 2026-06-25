@@ -17,6 +17,7 @@ import { TencentQuoteService } from './TencentQuoteService';
 import { IndustryKGService } from './IndustryKGService';
 import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
+import { sessionFetch } from '../utils/httpAgent';
 import {
     tushareRequest,
     getMoneyflowByDate,
@@ -776,7 +777,7 @@ async function fetchBlockRotationData(days: number = 20): Promise<{
     };
 
     console.log('[HotSectorAnalyzer] 正在从同花顺板块轮动API获取数据...');
-    const response = await fetch(url, { headers });
+    const response = await sessionFetch(url, { headers });
     if (!response.ok) throw new Error(`同花顺板块轮动API请求失败: HTTP ${response.status}`);
     const json = await response.json() as any;
 
