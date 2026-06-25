@@ -14,7 +14,7 @@ import pool from '../db';
 import { HotKeywordDetectorService, extractStockCodes, type HotConceptResult } from './HotKeywordDetectorService';
 import { getThsHot, type ThsHotRow } from './TushareService';
 import { findResearchReportMessagesForStock } from './FeishuResearchReportService';
-import { EmQuoteService } from './EmQuoteService';
+import { TencentQuoteService } from './TencentQuoteService';
 import { TradingCalendarService } from './TradingCalendarService';
 
 // ==================== 类型定义 ====================
@@ -269,7 +269,7 @@ export class HotBurstService {
     private static async refreshOutbreaksQuotes(outbreaks: StockResonanceSignal[]): Promise<void> {
         try {
             const symbols = outbreaks.map(s => s.symbol);
-            const quotes = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+            const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
             for (let i = 0; i < outbreaks.length; i++) {
                 const q = quotes[i];
                 if (q && !('错误' in q)) {
@@ -545,7 +545,7 @@ export class HotBurstService {
         })();
 
         const symbols = outbreaks.map(s => s.symbol);
-        const quoteResults = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+        const quoteResults = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
         for (let i = 0; i < outbreaks.length; i++) {
             const signal = outbreaks[i];
             const quote = quoteResults[i];
@@ -662,7 +662,7 @@ export class HotBurstService {
         // 刷新行情数据
         try {
             const symbols = records.map((r: any) => r.symbol);
-            const quotes = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+            const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
             for (let i = 0; i < records.length; i++) {
                 const q = quotes[i];
                 if (q && !('错误' in q)) {
@@ -854,7 +854,7 @@ export class HotBurstService {
             // 用缓存行情实时刷新价格和涨跌幅
             try {
                 const symbols = outbreaks.map(s => s.symbol);
-                const quotes = await EmQuoteService.getCachedBatchQuotes(symbols, 'core');
+                const quotes = await TencentQuoteService.getCachedBatchQuotes(symbols, 'core');
                 for (let i = 0; i < outbreaks.length; i++) {
                     const q = quotes[i];
                     if (q && !('错误' in q)) {

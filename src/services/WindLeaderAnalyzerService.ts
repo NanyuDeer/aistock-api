@@ -13,7 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as cheerio from 'cheerio';
-import { EmQuoteService } from './EmQuoteService';
+import { TencentQuoteService } from './TencentQuoteService';
 import { IndustryKGService } from './IndustryKGService';
 import { WindLeaderService } from './WindLeaderService';
 import { thsCrawler, thsApiCrawler } from '../utils/crawler';
@@ -1806,7 +1806,7 @@ function toTsCodeFromEm(emCode: string): string {
 /** 带重试的东方财富实时行情获取，最多重试3次，每次间隔1秒 */
 async function fetchQuoteWithRetry(code: string, _maxRetries = 3): Promise<{ price: number | null; changePct: number | null }> {
     try {
-        const quote = await EmQuoteService.getCachedQuote(code, 'core');
+        const quote = await TencentQuoteService.getCachedQuote(code, 'core');
         const price = (quote['最新价'] && quote['最新价'] !== '-') ? parseFloat(String(quote['最新价'])) : null;
         const changePct = quote['涨跌幅'] ? parseFloat(String(quote['涨跌幅'])) : null;
         if (price !== null) return { price, changePct };

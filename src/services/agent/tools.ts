@@ -1,6 +1,6 @@
 import { ClsStockNewsService } from '../ClsStockNewsService';
 import { ThsService } from '../ThsService';
-import { EmQuoteService } from '../EmQuoteService';
+import { TencentQuoteService } from '../TencentQuoteService';
 import type { AgentToolCall, AgentToolResult, AgentContext } from './types';
 
 /** OpenAI Function Calling 工具定义 */
@@ -119,7 +119,7 @@ export async function executeToolCall(
 
       case 'get_trading_data': {
         try {
-          const quote = await EmQuoteService.getQuote(context.symbol, 'activity');
+          const quote = await TencentQuoteService.getQuote(context.symbol, 'activity');
           result = JSON.stringify(quote, null, 2);
         } catch (e) {
           result = '交易数据获取失败: ' + (e instanceof Error ? e.message : '未知错误');

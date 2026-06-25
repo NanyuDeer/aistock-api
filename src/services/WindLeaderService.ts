@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { EmKlineService } from './EmKlineService';
-import { EmQuoteService } from './EmQuoteService';
+import { TencentKlineService } from './TencentKlineService';
+import { TencentQuoteService } from './TencentQuoteService';
 import { tushareRequest } from './TushareService';
 import { getStockIdentity } from '../utils/stock';
 
@@ -217,7 +217,7 @@ function writePushHistoryFile(records: any[]): void {
 }
 
 async function getPreviousClosePrice(symbol: string, pushDate: string): Promise<{ price: number; basis: string } | null> {
-    const rows = await EmKlineService.getKLine({
+    const rows = await TencentKlineService.getKLine({
         symbol,
         klt: 101,
         fqt: 0,
@@ -325,7 +325,7 @@ export class WindLeaderService {
             }
             const uniqueCodes = [...new Set(allCodes)];
             if (uniqueCodes.length > 0) {
-                const quotes = await EmQuoteService.getCachedBatchQuotes(uniqueCodes, 'core');
+                const quotes = await TencentQuoteService.getCachedBatchQuotes(uniqueCodes, 'core');
                 const quoteMap = new Map<string, Record<string, any>>();
                 uniqueCodes.forEach((code, i) => {
                     if (quotes[i] && !('错误' in quotes[i])) quoteMap.set(code, quotes[i]);

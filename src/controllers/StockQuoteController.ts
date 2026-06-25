@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { TushareQuoteService, QuoteLevel as TushareQuoteLevel } from '../services/TushareQuoteService';
-import { EmQuoteService, QuoteLevel as EmQuoteLevel } from '../services/EmQuoteService';
+import { TencentQuoteService, QuoteLevel as TencentQuoteLevel } from '../services/TencentQuoteService';
 import { TushareKlineService, KLineFqt, KLinePeriod } from '../services/TushareKlineService';
 import { CacheService } from '../services/CacheService';
 import { createResponse } from '../utils/response';
@@ -137,7 +137,7 @@ export class StockQuoteController {
                 // activity 额外从 Tushare 补充均价、量比、涨停价、跌停价等字段
                 const useEm = level === 'core' || level === 'activity';
                 const fetchedQuotes = useEm
-                    ? await EmQuoteService.getBatchQuotes(missedSymbols, level as EmQuoteLevel)
+                    ? await TencentQuoteService.getBatchQuotes(missedSymbols, level as TencentQuoteLevel)
                     : await TushareQuoteService.getBatchQuotes(missedSymbols, level as TushareQuoteLevel);
 
                 // activity 级别：从 Tushare 补充腾讯接口缺失的字段
@@ -222,7 +222,7 @@ export class StockQuoteController {
 
         try {
             // 实时行情使用腾讯财经接口（盘中实时更新）
-            const results = await EmQuoteService.getBatchQuotes(symbols, 'core');
+            const results = await TencentQuoteService.getBatchQuotes(symbols, 'core');
             createResponse(res, 200, 'success', {
                 '来源': '腾讯财经',
                 '股票数量': results.length,

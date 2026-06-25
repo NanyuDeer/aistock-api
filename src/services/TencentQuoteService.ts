@@ -9,6 +9,7 @@ import {
     type StockInfoCachePayload,
 } from '../constants/cache';
 import { getAShareAdaptiveCacheTtlSeconds } from '../utils/tradingTime';
+import { sessionFetch } from '../utils/httpAgent';
 
 export type QuoteLevel = 'core' | 'activity' | 'fundamental';
 
@@ -53,7 +54,7 @@ const LEVEL_FIELDS: Record<QuoteLevel, Set<string>> = {
     'fundamental': FUNDAMENTAL_FIELDS,
 };
 
-export class EmQuoteService {
+export class TencentQuoteService {
     private static readonly BASE_URL = 'https://qt.gtimg.cn/q=';
 
     private static readonly HEADERS: Record<string, string> = {
@@ -115,7 +116,7 @@ export class EmQuoteService {
 
         await eastmoneyThrottler.throttle();
 
-        const response = await fetch(url, {
+        const response = await sessionFetch(url, {
             method: 'GET',
             headers: this.HEADERS,
         });
@@ -153,7 +154,7 @@ export class EmQuoteService {
             await eastmoneyThrottler.throttle();
 
             try {
-                const response = await fetch(url, {
+                const response = await sessionFetch(url, {
                     method: 'GET',
                     headers: this.HEADERS,
                 });

@@ -1,5 +1,6 @@
 import { getStockIdentity } from '../utils/stock';
 import { eastmoneyThrottler } from '../utils/throttlers';
+import { sessionFetch } from '../utils/httpAgent';
 
 export type KLinePeriod = 1 | 5 | 15 | 30 | 60 | 101 | 102 | 103;
 export type KLineFqt = 0 | 1 | 2;
@@ -32,7 +33,7 @@ const FQT_MAP: Record<number, string> = {
     2: 'hfq',  // 后复权
 };
 
-export class EmKlineService {
+export class TencentKlineService {
     private static readonly BASE_URL = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get';
     private static readonly MAX_RETRIES = 3;
     private static readonly RETRY_BASE_DELAY_MS = 300;
@@ -74,7 +75,7 @@ export class EmKlineService {
         for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
             await eastmoneyThrottler.throttle();
             try {
-                const response = await fetch(url.toString(), {
+                const response = await sessionFetch(url.toString(), {
                     method: 'GET',
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
