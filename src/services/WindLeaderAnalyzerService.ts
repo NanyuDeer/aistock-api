@@ -2996,9 +2996,32 @@ export class WindLeaderAnalyzerService {
             }
             const finalMainStocks = uniqueMain.slice(0, 5);
 
-            // 6. 选股 - 上下游行业（使用与流向图相同的过滤逻辑，确保股票列表与图一致）
-            const filteredTransmission = filterTransmissionForFlow(transmission);
+            // 6. 先构建层级流向图数据（选股行业必须与流向图显示的完全一致）
+            const flowData = buildFlowData(concept.name, industryResult.strongly_related, transmission, aiAnalysis);
 
+            // 从流向图 nodes 提取上下游行业名（与流向图100%一致）
+            const flowUpstreamNames = flowData.nodes.filter(n => n.type === 'upstream').map(n => n.id);
+            const flowDownstreamNames = flowData.nodes.filter(n => n.type === 'downstream').map(n => n.id);
+
+            // 从 transmission 中提取对应的 TransmissionItem（按流向图顺序去重，保留 factor 最高的）
+            const pickItemsByFlowNames = (items: TransmissionItem[], names: string[]): TransmissionItem[] => {
+                const result: TransmissionItem[] = [];
+                const seen = new Set<string>();
+                for (const name of names) {
+                    if (seen.has(name)) continue;
+                    seen.add(name);
+                    const candidates = items.filter(it => it.name === name);
+                    if (candidates.length > 0) {
+                        candidates.sort((a, b) => b.factor - a.factor);
+                        result.push(candidates[0]);
+                    }
+                }
+                return result;
+            };
+            const upstreamItems = pickItemsByFlowNames(transmission.upstream, flowUpstreamNames);
+            const downstreamItems = pickItemsByFlowNames(transmission.downstream, flowDownstreamNames);
+
+            // 7. 选股 - 上下游行业（两阶段：先保每个行业1只，再按权重补足，确保规则生效）
             const calcPerIndustryCount = (items: TransmissionItem[]): Map<string, number> => {
                 const countMap = new Map<string, number>();
                 const total = items.length;
@@ -3012,51 +3035,63 @@ export class WindLeaderAnalyzerService {
                 return countMap;
             };
 
-            const upstreamCountMap = calcPerIndustryCount(filteredTransmission.upstream);
-            const upstreamStocks: SelectedStock[] = [];
-            for (const up of filteredTransmission.upstream) {
-                if (upstreamStocks.length >= 6) break;
-                const indCode = industryBoards.find(i => i.name === up.name)?.code || '';
-                if (!indCode) continue;
-                const perCount = upstreamCountMap.get(up.name) || 1;
-                const remaining = 6 - upstreamStocks.length;
-                const stocks = await selectStocksFromIndustry(
-                    indCode, up.name, concept.name, conceptCodes, Math.min(perCount, remaining), enhancement,
-                );
-                for (const s of stocks) {
-                    s.chain_position = '上游';
-                    s.transmission_factor = up.factor;
-                    s.source_industry = up.source_industry;
-                }
-                upstreamStocks.push(...stocks);
-            }
+            const selectTransmissionStocks = async (
+                items: TransmissionItem[], totalCount: number, chainPosition: string,
+            ): Promise<SelectedStock[]> => {
+                if (items.length === 0) return [];
+                const countMap = calcPerIndustryCount(items);
+                const result: SelectedStock[] = [];
+                const selectedCodes = new Set<string>();
 
-            const downstreamCountMap = calcPerIndustryCount(filteredTransmission.downstream);
-            const downstreamStocks: SelectedStock[] = [];
-            for (const down of filteredTransmission.downstream) {
-                if (downstreamStocks.length >= 6) break;
-                const indCode = industryBoards.find(i => i.name === down.name)?.code || '';
-                if (!indCode) continue;
-                const perCount = downstreamCountMap.get(down.name) || 1;
-                const remaining = 6 - downstreamStocks.length;
-                const stocks = await selectStocksFromIndustry(
-                    indCode, down.name, concept.name, conceptCodes, Math.min(perCount, remaining), enhancement,
-                );
-                for (const s of stocks) {
-                    s.chain_position = '下游';
-                    s.transmission_factor = down.factor;
-                    s.source_industry = down.source_industry;
+                // 阶段1：每个行业至少选1只（确保流向图显示的每个行业都有股票）
+                for (const item of items) {
+                    if (result.length >= totalCount) break;
+                    const indCode = industryBoards.find(i => i.name === item.name)?.code || '';
+                    if (!indCode) continue;
+                    const stocks = await selectStocksFromIndustry(
+                        indCode, item.name, concept.name, conceptCodes, 1, enhancement,
+                    );
+                    for (const s of stocks) {
+                        if (selectedCodes.has(s.code)) continue;
+                        selectedCodes.add(s.code);
+                        s.chain_position = chainPosition;
+                        s.transmission_factor = item.factor;
+                        s.source_industry = item.source_industry;
+                        result.push(s);
+                        break;
+                    }
                 }
-                downstreamStocks.push(...stocks);
-            }
+
+                // 阶段2：按 factor 顺序补足到 totalCount
+                for (const item of items) {
+                    if (result.length >= totalCount) break;
+                    const perCount = countMap.get(item.name) || 1;
+                    if (perCount <= 1) continue;
+                    const indCode = industryBoards.find(i => i.name === item.name)?.code || '';
+                    if (!indCode) continue;
+                    const remaining = totalCount - result.length;
+                    const stocks = await selectStocksFromIndustry(
+                        indCode, item.name, concept.name, conceptCodes, Math.min(perCount - 1, remaining), enhancement,
+                    );
+                    for (const s of stocks) {
+                        if (selectedCodes.has(s.code)) continue;
+                        selectedCodes.add(s.code);
+                        s.chain_position = chainPosition;
+                        s.transmission_factor = item.factor;
+                        s.source_industry = item.source_industry;
+                        result.push(s);
+                    }
+                }
+                return result;
+            };
+
+            const upstreamStocks = await selectTransmissionStocks(upstreamItems, 6, '上游');
+            const downstreamStocks = await selectTransmissionStocks(downstreamItems, 6, '下游');
 
             // 跨类别去重：上游和下游中移除已出现在核心的股票
             const mainCodes = new Set(finalMainStocks.map(s => s.code));
             const filteredUpstream = upstreamStocks.filter(s => !mainCodes.has(s.code));
             const filteredDownstream = downstreamStocks.filter(s => !mainCodes.has(s.code) && !filteredUpstream.some(u => u.code === s.code));
-
-            // 7. 构建层级流向图数据
-            const flowData = buildFlowData(concept.name, industryResult.strongly_related, transmission, aiAnalysis);
 
             // 8. 获取关联行业行情数据
             const industryData = await getIndustryStats(relatedIndNames);
