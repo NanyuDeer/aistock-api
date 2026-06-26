@@ -3,6 +3,7 @@ import { getStockIdentity } from '../utils/stock';
 import { createThrottler } from '../utils/throttle';
 import pool from '../db';
 import { sessionFetch } from '../utils/httpAgent';
+import { getSinaMoneyflow, isBJStock } from './SinaMoneyFlowService';
 
 const capitalFlowThrottler = createThrottler(150);
 
@@ -177,6 +178,13 @@ function parseNetAmount(buy: number, sell: number): number {
 }
 
 export async function getCapitalFlow(symbol: string): Promise<CapitalFlowResult> {
+    // 北交所股票Tushare不支持，用新浪接口获取当日资金流向
+    if (isBJStock(symbol)) {
+        const sinaResult = await buildResultFromSina(symbol);
+        if (sinaResult) return sinaResult;
+        return buildEmptyResult(symbol);
+    }
+
     const today = new Date();
     const start = new Date(today);
     start.setDate(start.getDate() - 20);
@@ -262,6 +270,65 @@ export async function getCapitalFlow(symbol: string): Promise<CapitalFlowResult>
     return {
         symbol,
         tradeDate: latest.trade_date,
+        mainInflow,
+        retailInflow,
+        ratio: ratioStr,
+        fiveDay,
+        streak,
+        tag,
+        tagClass,
+        trendBadge,
+        narrative,
+        risk,
+        trend,
+        trendDates,
+        orders,
+    };
+}
+
+/**
+ * 用新浪单日资金流向数据构建结果（用于北交所股票）
+ * 新浪接口只提供当日数据，趋势/连买连卖/5日数据仅以单日填充
+ */
+async function buildResultFromSina(symbol: string): Promise<CapitalFlowResult | null> {
+    const raw = await getSinaMoneyflow(symbol);
+    if (!raw) return null;
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const today = new Date();
+    const tradeDate = `${today.getFullYear()}${pad(today.getMonth() + 1)}${pad(today.getDate())}`;
+
+    // 新浪金额单位为元，转为万元
+    const elgNet = Math.round((raw.r0_in - raw.r0_out) / 10000 * 100) / 100; // 特大单净额（万元）
+    const lgNet = Math.round((raw.r1_in - raw.r1_out) / 10000 * 100) / 100;  // 大单净额（万元）
+    const mdNet = Math.round((raw.r2_in - raw.r2_out) / 10000 * 100) / 100;  // 中单净额（万元）
+    const smNet = Math.round((raw.r3_in - raw.r3_out) / 10000 * 100) / 100;  // 散单净额（万元）
+
+    const mainInflow = Math.round((elgNet + lgNet) * 100) / 100;
+    const retailInflow = Math.round((mdNet + smNet) * 100) / 100;
+    const ratioVal = Math.abs(raw.r0x_ratio);
+    const ratioStr = `${ratioVal.toFixed(1)}%`;
+
+    const orders: CapitalFlowOrder[] = [
+        { label: '超大单', value: elgNet },
+        { label: '大单', value: lgNet },
+        { label: '中单', value: mdNet },
+        { label: '小单', value: smNet },
+    ];
+
+    const trend = [mainInflow];
+    const trendDates = [`${tradeDate.slice(4, 6)}/${tradeDate.slice(6, 8)}`];
+    const fiveDay = mainInflow;
+    const streak = '单日数据';
+
+    const { tag, tagClass } = computeTagAndClass(mainInflow, ratioVal, streak);
+    const trendBadge = computeTrendBadge(mainInflow, ratioVal, streak);
+    const narrative = computeNarrative(mainInflow, ratioVal, orders) + '（数据来源：新浪财经，北交所仅提供当日数据）';
+    const risk = computeRisk(mainInflow, ratioVal, streak);
+
+    return {
+        symbol,
+        tradeDate,
         mainInflow,
         retailInflow,
         ratio: ratioStr,

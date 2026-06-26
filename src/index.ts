@@ -46,6 +46,7 @@ import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService'
 import { HotBurstService } from './services/HotBurstService';
 import { closeAllAgents } from './utils/httpAgent';
 import { ProfitForecastAutoUpdateService } from './services/ProfitForecastAutoUpdateService';
+import { StockSyncService } from './services/StockSyncService';
 
 import { Application } from 'express';
 
@@ -571,6 +572,17 @@ cron.schedule('0 0 * * *', async () => {
         console.log(`[ProfitForecastAutoUpdateCron] 完成: method=${result.method}, updated=${result.updated}, skipped=${result.skipped}, errors=${result.errors}`);
     } catch (err: any) {
         console.error('[ProfitForecastAutoUpdateCron] 执行失败:', err?.message || err);
+    }
+});
+
+// 股票基础数据同步：每天凌晨 00:05 执行（同步新股、更新行业等）
+cron.schedule('5 0 * * *', async () => {
+    console.log('[StockSyncCron] 开始同步股票基础数据');
+    try {
+        const result = await StockSyncService.sync();
+        console.log(`[StockSyncCron] 完成: 新增=${result.inserted}, 更新=${result.updated}, 总计=${result.total}`);
+    } catch (err: any) {
+        console.error('[StockSyncCron] 执行失败:', err?.message || err);
     }
 });
 

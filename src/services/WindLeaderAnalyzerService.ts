@@ -48,10 +48,55 @@ import {
     getStockCompany,
     type StockCompanyRow,
 } from './TushareService';
+import pool from '../db';
+import { getBatchSinaMoneyflowForBJ, isBJStock } from './SinaMoneyFlowService';
 
 // ==================== 缓存 ====================
 const CACHE_DIR = path.resolve(__dirname, '../../data/hot-sector-cache');
 const CACHE_TTL = 3600 * 1000; // 缓存1小时
+
+/** 批量查询股票的行业板块（从 stocks 表，与个股详情页一致） */
+async function getStocksIndustryMap(codes: string[]): Promise<Map<string, string>> {
+    if (codes.length === 0) return new Map();
+    try {
+        const result = await pool.query(
+            'SELECT symbol, industry FROM stocks WHERE symbol = ANY($1) AND industry IS NOT NULL AND industry != \'\'',
+            [codes],
+        );
+        return new Map(result.rows.map((r: any) => [r.symbol, r.industry]));
+    } catch (err) {
+        console.warn('[HotSectorAnalyzer] getStocksIndustryMap failed:', (err as Error).message);
+        return new Map();
+    }
+}
+
+/** 过滤传导数据：与 buildFlowData 一致的过滤逻辑（按 source_industry 分组，每组取权重最高的3个） */
+function filterTransmissionForFlow(transmission: TransmissionResult): { upstream: TransmissionItem[]; downstream: TransmissionItem[] } {
+    const filterGroup = (items: TransmissionItem[]): TransmissionItem[] => {
+        const bySource = new Map<string, TransmissionItem[]>();
+        for (const item of items) {
+            const arr = bySource.get(item.source_industry) || [];
+            arr.push(item);
+            bySource.set(item.source_industry, arr);
+        }
+        const filtered: TransmissionItem[] = [];
+        const seen = new Set<string>();
+        for (const [, list] of bySource) {
+            const top = list.sort((a, b) => b.factor - a.factor).slice(0, 3);
+            for (const item of top) {
+                if (!seen.has(item.name)) {
+                    seen.add(item.name);
+                    filtered.push(item);
+                }
+            }
+        }
+        return filtered;
+    };
+    return {
+        upstream: filterGroup(transmission.upstream),
+        downstream: filterGroup(transmission.downstream),
+    };
+}
 
 /** Tushare概念/行业指数 名称→ts_code 映射缓存 */
 let thsIndexNameMap: Map<string, string> | null = null;
@@ -1833,8 +1878,10 @@ interface SelectedStock {
 /** 将东方财富6位代码转为Tushare ts_code格式 */
 function toTsCodeFromEm(emCode: string): string {
     if (!emCode || emCode.length !== 6) return '';
+    // BJ: 920xxx / 83xxxx / 87xxxx / 430xxx
+    const isBJ = emCode.startsWith('920') || emCode.startsWith('8') || emCode.startsWith('43');
     const first = emCode[0];
-    const suffix = first === '6' ? '.SH' : (first === '0' || first === '3') ? '.SZ' : first === '8' || first === '4' ? '.BJ' : '.SZ';
+    const suffix = isBJ ? '.BJ' : first === '6' ? '.SH' : (first === '0' || first === '3') ? '.SZ' : '.SZ';
     return emCode + suffix;
 }
 
@@ -1887,6 +1934,20 @@ async function fetchTushareEnhancement(stockCodes: string[]): Promise<{
         console.log(`[HotSectorAnalyzer] moneyflow_ths获取成功: ${moneyflowThsMap.size}只`);
     } catch (err) {
         console.warn('[HotSectorAnalyzer] moneyflow_ths获取失败，回退到moneyflow:', (err as Error).message);
+    }
+
+    // 北交所股票Tushare不支持资金流向，用新浪接口补充
+    const bjCandidates = stockCodes.filter(c => isBJStock(c));
+    if (bjCandidates.length > 0) {
+        try {
+            const sinaMfMap = await getBatchSinaMoneyflowForBJ(bjCandidates, tradeDateStr);
+            for (const [tsCode, row] of sinaMfMap) {
+                moneyflowThsMap.set(tsCode, row);
+            }
+            console.log(`[HotSectorAnalyzer] 新浪补充BJ资金流向: ${sinaMfMap.size}/${bjCandidates.length}只`);
+        } catch (err) {
+            console.warn('[HotSectorAnalyzer] 新浪BJ资金流向补充失败:', (err as Error).message);
+        }
     }
 
     // 如果moneyflow_ths无数据，回退到原有moneyflow
@@ -2478,6 +2539,8 @@ async function extractLeadingStock(
     // 优先从同花顺概念板块页面爬取龙头股
     const conceptLeadingStocks = await fetchConceptLeadingStocks(conceptCode);
     if (conceptLeadingStocks.length > 0) {
+        // 批量查询龙头股的实际行业板块
+        const leadingIndustryMap = await getStocksIndustryMap(conceptLeadingStocks.map(s => s.code));
         // 按市值排序，取市值最大的龙头股
         let selectedStock = conceptLeadingStocks[0];
         let maxMarketCap = 0;
@@ -2509,8 +2572,10 @@ async function extractLeadingStock(
         const dbData = tsCode ? enhancement?.dailyBasicMap.get(tsCode) : undefined;
         const histData = tsCode ? enhancement?.dailyHistMap.get(tsCode) : undefined;
 
-        const isLimitUp = limitData != null;
-        const statusStr = limitData?.status || '';
+        // 北交所股票Tushare不支持limit_list_ths，用涨幅判断涨停
+        const isBJ = isBJStock(stock.code);
+        const isLimitUp = limitData != null || (isBJ && (changePct || 0) >= 9.5);
+        const statusStr = limitData?.status || (isBJ && (changePct || 0) >= 9.5 ? '涨停' : '');
         const limitTimes = statusStr.match(/(\d+)天(\d+)板/)?.[2]
             ? parseInt(statusStr.match(/(\d+)天(\d+)板/)![2])
             : (statusStr.includes('首板') ? 1 : 0);
@@ -2522,6 +2587,10 @@ async function extractLeadingStock(
 
         // 生成选股理由：优先用涨停原因，缺失时回退到公司简介（截断30字）
         let reason = limitReason || '';
+        // 北交所股票Tushare不支持limit_list_ths，对涨幅较大的BJ股补充默认原因
+        if (!reason && isBJStock(stock.code) && (changePct || 0) >= 9.5) {
+            reason = '北交所个股涨停，资金关注度提升';
+        }
         if (!reason && tsCode) {
             try {
                 const companyData = await getStockCompany(tsCode);
@@ -2554,7 +2623,7 @@ async function extractLeadingStock(
         return {
             name: stock.name,
             code: stock.code,
-            industry: conceptName,
+            industry: leadingIndustryMap.get(stock.code) || conceptName,
             price,
             change_pct: changePct,
             reason,
@@ -2751,9 +2820,10 @@ export class WindLeaderAnalyzerService {
                 }
             }
 
-            // 收集上下游行业的候选股代码（限制数量）
+            // 收集上下游行业的候选股代码（限制数量，使用与流向图一致的过滤逻辑）
             const transmission = await calculateTransmissionFactor(concept.name, industryResult.all_ranked);
-            for (const up of transmission.upstream.slice(0, 1)) {
+            const filteredTrans = filterTransmissionForFlow(transmission);
+            for (const up of filteredTrans.upstream.slice(0, 1)) {
                 const indCode = industryBoards.find(i => i.name === up.name)?.code || '';
                 if (!indCode) continue;
                 const topStocks = await getBoardTopStocks(indCode, 10, 'industry');
@@ -2763,7 +2833,7 @@ export class WindLeaderAnalyzerService {
                     }
                 }
             }
-            for (const down of transmission.downstream.slice(0, 1)) {
+            for (const down of filteredTrans.downstream.slice(0, 1)) {
                 const indCode = industryBoards.find(i => i.name === down.name)?.code || '';
                 if (!indCode) continue;
                 const topStocks = await getBoardTopStocks(indCode, 10, 'industry');
@@ -2804,6 +2874,8 @@ export class WindLeaderAnalyzerService {
 
             // 优先加入概念板块页面爬取的龙头股
             const conceptLeadingStocksForConcept = await fetchConceptLeadingStocks(concept.code);
+            // 批量查询龙头股的实际行业板块（从 stocks 表，与个股详情页一致）
+            const leadingIndustryMap = await getStocksIndustryMap(conceptLeadingStocksForConcept.map(ls => ls.code));
             for (const ls of conceptLeadingStocksForConcept) {
                 if (conceptCodes.has(ls.code)) {
                     let price: number | null = null;
@@ -2820,9 +2892,14 @@ export class WindLeaderAnalyzerService {
                     const histData = tsCode ? enhancement?.dailyHistMap.get(tsCode) : undefined;
 
                     // 涨停标签：从Tushare limit_list_ths获取
+                    // 北交所股票Tushare不支持limit_list_ths，用涨幅判断涨停（BJ涨停幅度30%，新股期除外）
                     const limitTags: string[] = ['龙头股'];
-                    const isLimitUp = limitData != null;
-                    const statusStr = limitData?.status || '';
+                    const isBJ = isBJStock(ls.code);
+                    const isLimitUp = limitData != null || (isBJ && changePct >= 9.5);
+                    let statusStr = limitData?.status || '';
+                    if (!statusStr && isBJ && changePct >= 9.5) {
+                        statusStr = changePct >= 29.5 ? '北交所涨停' : '涨停';
+                    }
                     if (isLimitUp) {
                         if (statusStr) limitTags.push(statusStr);
                         const tagStr = limitData?.tag || '';
@@ -2844,6 +2921,10 @@ export class WindLeaderAnalyzerService {
                     const consecutiveUpDays = histData ? calcConsecutiveUpDays(histData) : 0;
                     const limitReason = limitData?.lu_desc || '';
                     let reason = limitReason;
+                    // 北交所股票Tushare不支持limit_list_ths，对涨幅较大的BJ股补充默认原因
+                    if (!reason && isBJStock(ls.code) && changePct >= 9.5) {
+                        reason = '北交所个股涨停，资金关注度提升';
+                    }
                     if (!reason && tsCode) {
                         try {
                             const companyData = await getStockCompany(tsCode);
@@ -2876,7 +2957,7 @@ export class WindLeaderAnalyzerService {
                     mainStocks.push({
                         code: ls.code,
                         name: ls.name,
-                        industry: concept.name,
+                        industry: leadingIndustryMap.get(ls.code) || concept.name,
                         score,
                         reason,
                         reason_tag: reasonTag,
@@ -2915,7 +2996,9 @@ export class WindLeaderAnalyzerService {
             }
             const finalMainStocks = uniqueMain.slice(0, 5);
 
-            // 6. 选股 - 上下游行业（自适应选股数：总数≤3每行业2只，=4则top2选2其余1，>4则top1选2其余1，上限6只）
+            // 6. 选股 - 上下游行业（使用与流向图相同的过滤逻辑，确保股票列表与图一致）
+            const filteredTransmission = filterTransmissionForFlow(transmission);
+
             const calcPerIndustryCount = (items: TransmissionItem[]): Map<string, number> => {
                 const countMap = new Map<string, number>();
                 const total = items.length;
@@ -2929,9 +3012,9 @@ export class WindLeaderAnalyzerService {
                 return countMap;
             };
 
-            const upstreamCountMap = calcPerIndustryCount(transmission.upstream);
+            const upstreamCountMap = calcPerIndustryCount(filteredTransmission.upstream);
             const upstreamStocks: SelectedStock[] = [];
-            for (const up of transmission.upstream) {
+            for (const up of filteredTransmission.upstream) {
                 if (upstreamStocks.length >= 6) break;
                 const indCode = industryBoards.find(i => i.name === up.name)?.code || '';
                 if (!indCode) continue;
@@ -2948,9 +3031,9 @@ export class WindLeaderAnalyzerService {
                 upstreamStocks.push(...stocks);
             }
 
-            const downstreamCountMap = calcPerIndustryCount(transmission.downstream);
+            const downstreamCountMap = calcPerIndustryCount(filteredTransmission.downstream);
             const downstreamStocks: SelectedStock[] = [];
-            for (const down of transmission.downstream) {
+            for (const down of filteredTransmission.downstream) {
                 if (downstreamStocks.length >= 6) break;
                 const indCode = industryBoards.find(i => i.name === down.name)?.code || '';
                 if (!indCode) continue;
