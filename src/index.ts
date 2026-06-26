@@ -45,6 +45,7 @@ import { syncStockConceptMapping } from './services/StockConceptMappingService';
 import { WindLeaderAnalyzerService } from './services/WindLeaderAnalyzerService';
 import { HotBurstService } from './services/HotBurstService';
 import { closeAllAgents } from './utils/httpAgent';
+import { ProfitForecastAutoUpdateService } from './services/ProfitForecastAutoUpdateService';
 
 import { Application } from 'express';
 
@@ -559,6 +560,17 @@ cron.schedule('0 15 * * *', async () => {
         console.log(`[CrawlCron] 尾盘完成: 抓取${result.crawler.submitted}条, 推送候选${result.push.candidates}条`);
     } catch (err: any) {
         console.error('[CrawlCron] 尾盘失败:', err?.message || err);
+    }
+});
+
+// 业绩预测自动更新：每天凌晨 00:00 执行
+cron.schedule('0 0 * * *', async () => {
+    console.log('[ProfitForecastAutoUpdateCron] 开始执行业绩预测自动更新');
+    try {
+        const result = await ProfitForecastAutoUpdateService.run();
+        console.log(`[ProfitForecastAutoUpdateCron] 完成: method=${result.method}, updated=${result.updated}, skipped=${result.skipped}, errors=${result.errors}`);
+    } catch (err: any) {
+        console.error('[ProfitForecastAutoUpdateCron] 执行失败:', err?.message || err);
     }
 });
 

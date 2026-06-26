@@ -2251,56 +2251,23 @@ async function selectStocksFromIndustry(
         // ===== 生成标签和描述 =====
         let reasonTag = '';
         let reasonTagClass = '';
-        let reason = '';
+        let reason = limitReason || '';
 
         if (isLimitUp && limitTimes >= 2) {
             reasonTag = `${limitTimes}连板`;
             reasonTagClass = 'tag-bullish';
-            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-            reason = reason || '涨停';
         } else if (isLimitUp) {
             reasonTag = '涨停';
             reasonTagClass = 'tag-bullish';
-            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-            reason = reason || '涨停';
         } else if (consecutiveUpDays >= 5 && mf5day > 0) {
             reasonTag = '强势连阳';
             reasonTagClass = 'tag-trend';
-            reason = `连续${consecutiveUpDays}日上涨，5日主力净流入${(mf5day / 10000).toFixed(2)}亿`;
         } else if (consecutiveUpDays >= 3 && mf5day > 0) {
             reasonTag = '资金连阳';
             reasonTagClass = 'tag-trend';
-            reason = `连续${consecutiveUpDays}日上涨，资金持续流入`;
         } else if (changePct > 5 && turnover > 5) {
             reasonTag = '量价齐升';
             reasonTagClass = 'tag-trend';
-            reason = `量价齐升，涨幅${changePct.toFixed(1)}%`;
-        } else if (mf5day > 0 && changePct > 0) {
-            reasonTag = '资金流入';
-            reasonTagClass = 'tag-fund';
-            reason = `资金流入+上涨${changePct.toFixed(1)}%`;
-        } else if (consecutiveUpDays >= 3) {
-            reasonTag = '连续上涨';
-            reasonTagClass = 'tag-bullish';
-            reason = `连续${consecutiveUpDays}日上涨`;
-        } else if (changePct > 3) {
-            reasonTag = '强势上涨';
-            reasonTagClass = 'tag-bullish';
-            reason = `涨幅${changePct.toFixed(1)}%`;
-        } else if (changePct > 0) {
-            reasonTag = '上涨';
-            reasonTagClass = 'tag-trend';
-            reason = `涨幅${changePct.toFixed(1)}%`;
-        } else {
-            reasonTag = '资金关注';
-            reasonTagClass = 'tag-fund';
-            reason = `主力资金关注`;
-        }
-
-        // 概念共振覆盖标签
-        if (inConcept) {
-            reasonTag = '概念共振';
-            reasonTagClass = 'tag-bullish';
         }
 
         stocks.push({
@@ -2311,7 +2278,7 @@ async function selectStocksFromIndustry(
             reason,
             reason_tag: reasonTag,
             reason_tag_class: reasonTagClass,
-            source: reasonTag === '概念共振' ? conceptName : reasonTag,
+            source: reasonTag || '',
             in_concept: inConcept,
             price: stock.price,
             change_pct: stock.change_pct,
@@ -2533,50 +2500,12 @@ async function extractLeadingStock(
         const fcRatio = limitData?.limit_up_suc_rate || 0;
         const limitReason = limitData?.lu_desc || '';
 
-        // 生成选股理由（与selectStocksFromIndustry逻辑一致）
-        let reason = '';
-        if (isLimitUp && limitTimes >= 2) {
-            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-            reason = reason || '涨停';
-        } else if (isLimitUp) {
-            reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-            reason = reason || '涨停';
-        } else if (consecutiveUpDays >= 5 && mf5day > 0) {
-            reason = `连续${consecutiveUpDays}日上涨，5日主力净流入${(mf5day / 10000).toFixed(2)}亿`;
-        } else if (consecutiveUpDays >= 3 && mf5day > 0) {
-            reason = `连续${consecutiveUpDays}日上涨，资金持续流入`;
-        } else if ((changePct || 0) > 5 && turnover > 5) {
-            reason = `量价齐升，涨幅${(changePct || 0).toFixed(1)}%`;
-        } else if (mf5day > 0 && (changePct || 0) > 0) {
-            reason = `资金流入+上涨${(changePct || 0).toFixed(1)}%`;
-        } else if (consecutiveUpDays >= 3) {
-            reason = `连续${consecutiveUpDays}日上涨`;
-        } else if ((changePct || 0) > 3) {
-            reason = `涨幅${(changePct || 0).toFixed(1)}%`;
-        } else if ((changePct || 0) > 0) {
-            reason = `涨幅${(changePct || 0).toFixed(1)}%`;
-        }
+        // 生成选股理由：只用涨停原因（lu_desc）
+        const reason = limitReason || '';
 
-        // 补充公司简介作为理由前缀
-        try {
-            if (tsCode) {
-                const companyData = await getStockCompany(tsCode);
-                if (companyData) {
-                    const desc = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
-                    if (desc && reason) {
-                        reason = desc + '，' + reason;
-                    } else if (desc) {
-                        reason = desc;
-                    }
-                }
-            }
-        } catch { /* ignore */ }
-
-        if (!reason) reason = concept.driver || '';
-
-        // 生成理由标签
-        let reasonTag = '龙头股';
-        let reasonTagClass = 'longtou';
+        // 生成理由标签：只保留有特殊信号的标签，无信号则留空
+        let reasonTag = '';
+        let reasonTagClass = '';
         if (isLimitUp && limitTimes >= 2) {
             reasonTag = `${limitTimes}连板`;
             reasonTagClass = 'tag-bullish';
@@ -2592,15 +2521,6 @@ async function extractLeadingStock(
         } else if ((changePct || 0) > 5 && turnover > 5) {
             reasonTag = '量价齐升';
             reasonTagClass = 'tag-trend';
-        } else if (mf5day > 0 && (changePct || 0) > 0) {
-            reasonTag = '资金流入';
-            reasonTagClass = 'tag-fund';
-        } else if (consecutiveUpDays >= 3) {
-            reasonTag = '连续上涨';
-            reasonTagClass = 'tag-bullish';
-        } else if ((changePct || 0) > 3) {
-            reasonTag = '强势上涨';
-            reasonTagClass = 'tag-bullish';
         }
 
         return {
@@ -2887,42 +2807,19 @@ export class WindLeaderAnalyzerService {
                     if (isLimitUp) score += 10;
                     score = Math.round(score * 10) / 10;
 
-                    // 选股理由：从Tushare数据生成，与selectStocksFromIndustry逻辑一致
-                    let reason = '';
+                    // 选股理由：只用涨停原因（lu_desc）
                     const limitTimes = statusStr.match(/(\d+)天(\d+)板/)?.[2]
                         ? parseInt(statusStr.match(/(\d+)天(\d+)板/)![2])
                         : (statusStr.includes('首板') ? 1 : 0);
                     const mf5day = mfThsData?.mf_5day || 0;
                     const turnover = dbData?.turnover_rate || 0;
                     const consecutiveUpDays = histData ? calcConsecutiveUpDays(histData) : 0;
-                    const fcRatio = limitData?.limit_up_suc_rate || 0;
                     const limitReason = limitData?.lu_desc || '';
+                    const reason = limitReason;
 
-                    if (isLimitUp && limitTimes >= 2) {
-                        reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-                        reason = reason || '涨停';
-                    } else if (isLimitUp) {
-                        reason = `${fcRatio > 0 ? '历史封板率' + fcRatio.toFixed(0) + '%' : ''}${limitReason ? (fcRatio > 0 ? '，' : '') + limitReason : ''}`;
-                        reason = reason || '涨停';
-                    } else if (consecutiveUpDays >= 5 && mf5day > 0) {
-                        reason = `连续${consecutiveUpDays}日上涨，5日主力净流入${(mf5day / 10000).toFixed(2)}亿`;
-                    } else if (consecutiveUpDays >= 3 && mf5day > 0) {
-                        reason = `连续${consecutiveUpDays}日上涨，资金持续流入`;
-                    } else if (changePct > 5 && turnover > 5) {
-                        reason = `量价齐升，涨幅${changePct.toFixed(1)}%`;
-                    } else if (mf5day > 0 && changePct > 0) {
-                        reason = `资金流入+上涨${changePct.toFixed(1)}%`;
-                    } else if (changePct > 3) {
-                        reason = `涨幅${changePct.toFixed(1)}%`;
-                    } else if (changePct > 0) {
-                        reason = `涨幅${changePct.toFixed(1)}%`;
-                    } else {
-                        reason = '概念板块龙头';
-                    }
-
-                    // reason_tag也根据Tushare数据生成
-                    let reasonTag = '龙头股';
-                    let reasonTagClass = 'longtou';
+                    // reason_tag：只保留有特殊信号的标签，无信号则留空
+                    let reasonTag = '';
+                    let reasonTagClass = '';
                     if (isLimitUp && limitTimes >= 2) {
                         reasonTag = `${limitTimes}连板`;
                         reasonTagClass = 'tag-bullish';
@@ -2938,9 +2835,6 @@ export class WindLeaderAnalyzerService {
                     } else if (changePct > 5 && turnover > 5) {
                         reasonTag = '量价齐升';
                         reasonTagClass = 'tag-trend';
-                    } else if (mf5day > 0 && changePct > 0) {
-                        reasonTag = '资金流入';
-                        reasonTagClass = 'tag-fund';
                     }
 
                     mainStocks.push({

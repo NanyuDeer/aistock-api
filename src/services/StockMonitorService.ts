@@ -69,23 +69,34 @@ async function enrichIndustry(events: MonitorEventItem[]): Promise<MonitorEventI
     if (symbols.length === 0) return events;
 
     try {
+        // 从 stocks 表获取行业板块名称（Tushare stock_basic.industry），与个股详情页"行业板块"一致
         const result = await pool.query(
-            `SELECT symbol, sector_name
-             FROM stock_concept_mapping
-             WHERE symbol = ANY($1)
-             ORDER BY symbol, sector_name`,
+            `SELECT symbol, industry FROM stocks WHERE symbol = ANY($1)`,
             [symbols],
         );
 
-        const sectorMap = new Map<string, string[]>();
+        const industryMap = new Map<string, string>();
         for (const row of result.rows) {
-            if (!sectorMap.has(row.symbol)) sectorMap.set(row.symbol, []);
-            sectorMap.get(row.symbol)!.push(row.sector_name);
+            if (row.industry) industryMap.set(row.symbol, row.industry);
+        }
+
+        // 回退：对 stocks 表中没有 industry 的 symbol，从 stock_concept_mapping 取第一条
+        const missingSymbols = symbols.filter(s => !industryMap.has(s));
+        if (missingSymbols.length > 0) {
+            const fallbackResult = await pool.query(
+                `SELECT DISTINCT ON (symbol) symbol, sector_name
+                 FROM stock_concept_mapping
+                 WHERE symbol = ANY($1)
+                 ORDER BY symbol, sector_name`,
+                [missingSymbols],
+            );
+            for (const row of fallbackResult.rows) {
+                industryMap.set(row.symbol, row.sector_name);
+            }
         }
 
         for (const event of events) {
-            const sectors = sectorMap.get(event.symbol);
-            event.industry = sectors ? sectors.slice(0, 2).join(' · ') : '';
+            event.industry = industryMap.get(event.symbol) || '';
         }
     } catch (err) {
         console.error('enrichIndustry failed:', err);
