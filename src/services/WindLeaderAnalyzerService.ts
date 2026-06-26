@@ -2253,11 +2253,21 @@ async function selectStocksFromIndustry(
         let reasonTagClass = '';
         let reason = limitReason || '';
 
+        // 涨停原因缺失时，回退到公司简介（截断30字）
+        if (!reason && tsCode) {
+            try {
+                const companyData = await getStockCompany(tsCode);
+                if (companyData) {
+                    reason = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
+                }
+            } catch { /* ignore */ }
+        }
+
         if (isLimitUp && limitTimes >= 2) {
             reasonTag = `${limitTimes}连板`;
             reasonTagClass = 'tag-bullish';
         } else if (isLimitUp) {
-            reasonTag = '涨停';
+            reasonTag = '昨日涨停';
             reasonTagClass = 'tag-bullish';
         } else if (consecutiveUpDays >= 5 && mf5day > 0) {
             reasonTag = '强势连阳';
@@ -2392,30 +2402,40 @@ const LEADER_KEYWORDS = [
     '垄断', '主导', '标杆', '领军', '先驱',
 ];
 
-/** 从introduction中提取龙头优势描述（1-2句） */
-function extractLeaderDescription(introduction: string, mainBusiness: string): string {
+/** 从introduction中提取龙头优势描述（截断到maxLen字以内） */
+function extractLeaderDescription(introduction: string, mainBusiness: string, maxLen = 30): string {
     if (!introduction && !mainBusiness) return '';
 
     // 按句号/分号拆分句子
     const sentences = introduction.split(/[。；]/).filter(s => s.trim().length > 0);
-    const matched: string[] = [];
 
+    // 找到第一句包含龙头关键词的句子
+    let matched = '';
     for (const sentence of sentences) {
         for (const keyword of LEADER_KEYWORDS) {
             if (sentence.includes(keyword)) {
-                matched.push(sentence.trim());
-                break;  // 每个句子只匹配一次
+                matched = sentence.trim();
+                break;
             }
         }
-        if (matched.length >= 2) break;  // 最多取2句
+        if (matched) break;
     }
 
-    if (matched.length > 0) {
-        return matched.join('；');
+    // 无关键词匹配时用main_business
+    if (!matched) {
+        matched = (mainBusiness || '').trim();
     }
 
-    // 无关键词时用main_business
-    return mainBusiness || '';
+    if (!matched) return '';
+
+    // 截断到maxLen字以内，优先在自然边界（，、；）处截断
+    if (matched.length <= maxLen) return matched;
+    const sub = matched.substring(0, maxLen);
+    const lastBreak = Math.max(sub.lastIndexOf('，'), sub.lastIndexOf('、'), sub.lastIndexOf('；'));
+    if (lastBreak >= Math.floor(maxLen * 0.5)) {
+        return sub.substring(0, lastBreak);
+    }
+    return sub;
 }
 
 /** 统计introduction中龙头关键词数量 */
@@ -2500,8 +2520,16 @@ async function extractLeadingStock(
         const fcRatio = limitData?.limit_up_suc_rate || 0;
         const limitReason = limitData?.lu_desc || '';
 
-        // 生成选股理由：只用涨停原因（lu_desc）
-        const reason = limitReason || '';
+        // 生成选股理由：优先用涨停原因，缺失时回退到公司简介（截断30字）
+        let reason = limitReason || '';
+        if (!reason && tsCode) {
+            try {
+                const companyData = await getStockCompany(tsCode);
+                if (companyData) {
+                    reason = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
+                }
+            } catch { /* ignore */ }
+        }
 
         // 生成理由标签：只保留有特殊信号的标签，无信号则留空
         let reasonTag = '';
@@ -2510,7 +2538,7 @@ async function extractLeadingStock(
             reasonTag = `${limitTimes}连板`;
             reasonTagClass = 'tag-bullish';
         } else if (isLimitUp) {
-            reasonTag = '涨停';
+            reasonTag = '昨日涨停';
             reasonTagClass = 'tag-bullish';
         } else if (consecutiveUpDays >= 5 && mf5day > 0) {
             reasonTag = '强势连阳';
@@ -2807,7 +2835,7 @@ export class WindLeaderAnalyzerService {
                     if (isLimitUp) score += 10;
                     score = Math.round(score * 10) / 10;
 
-                    // 选股理由：只用涨停原因（lu_desc）
+                    // 选股理由：优先用涨停原因，缺失时回退到公司简介（截断30字）
                     const limitTimes = statusStr.match(/(\d+)天(\d+)板/)?.[2]
                         ? parseInt(statusStr.match(/(\d+)天(\d+)板/)![2])
                         : (statusStr.includes('首板') ? 1 : 0);
@@ -2815,7 +2843,15 @@ export class WindLeaderAnalyzerService {
                     const turnover = dbData?.turnover_rate || 0;
                     const consecutiveUpDays = histData ? calcConsecutiveUpDays(histData) : 0;
                     const limitReason = limitData?.lu_desc || '';
-                    const reason = limitReason;
+                    let reason = limitReason;
+                    if (!reason && tsCode) {
+                        try {
+                            const companyData = await getStockCompany(tsCode);
+                            if (companyData) {
+                                reason = extractLeaderDescription(companyData.introduction || '', companyData.main_business || '');
+                            }
+                        } catch { /* ignore */ }
+                    }
 
                     // reason_tag：只保留有特殊信号的标签，无信号则留空
                     let reasonTag = '';
@@ -2824,7 +2860,7 @@ export class WindLeaderAnalyzerService {
                         reasonTag = `${limitTimes}连板`;
                         reasonTagClass = 'tag-bullish';
                     } else if (isLimitUp) {
-                        reasonTag = '涨停';
+                        reasonTag = '昨日涨停';
                         reasonTagClass = 'tag-bullish';
                     } else if (consecutiveUpDays >= 5 && mf5day > 0) {
                         reasonTag = '强势连阳';
