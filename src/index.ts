@@ -8,6 +8,9 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 
+// 显式指定时区，避免服务器系统时区为 UTC 时定时任务偏移 8 小时
+const CRON_TZ = { timezone: 'Asia/Shanghai' as const };
+
 import pool from './db';
 import redis from './redis';
 
@@ -457,7 +460,7 @@ cron.schedule('0 4 * * *', async () => {
     } catch (err: any) {
         console.error('[TenxCron] 批量评分失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 cron.schedule('5 19 * * 1-5', async () => {
     console.log('[CapitalFlowCron] 收盘后批量预取资金流向');
@@ -495,7 +498,7 @@ cron.schedule('5 19 * * 1-5', async () => {
     } catch (err: any) {
         console.error('[CapitalFlowCron] 批量预取失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 // 风口龙头定时分析：每天凌晨3点执行（跳过节假日）
 cron.schedule('0 3 * * *', async () => {
@@ -512,7 +515,7 @@ cron.schedule('0 3 * * *', async () => {
     } catch (err: any) {
         console.error('[WindLeaderCron] 分析失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 // 机构调研推荐热门股定时检测：交易日 9:30、10:30、11:30、13:30、14:30、15:05
 const runInstitutionResearchDetect = async (label: string) => {
@@ -524,12 +527,12 @@ const runInstitutionResearchDetect = async (label: string) => {
         console.error(`[InstResearchCron] ${label} 检测失败:`, err?.message || err);
     }
 };
-cron.schedule('30 9 * * 1-5', () => runInstitutionResearchDetect('开盘'));
-cron.schedule('30 10 * * 1-5', () => runInstitutionResearchDetect('上午'));
-cron.schedule('30 11 * * 1-5', () => runInstitutionResearchDetect('午前'));
-cron.schedule('30 13 * * 1-5', () => runInstitutionResearchDetect('午盘'));
-cron.schedule('30 14 * * 1-5', () => runInstitutionResearchDetect('尾盘'));
-cron.schedule('5 15 * * 1-5', () => runInstitutionResearchDetect('收盘'));
+cron.schedule('30 9 * * 1-5', () => runInstitutionResearchDetect('开盘'), CRON_TZ);
+cron.schedule('30 10 * * 1-5', () => runInstitutionResearchDetect('上午'), CRON_TZ);
+cron.schedule('30 11 * * 1-5', () => runInstitutionResearchDetect('午前'), CRON_TZ);
+cron.schedule('30 13 * * 1-5', () => runInstitutionResearchDetect('午盘'), CRON_TZ);
+cron.schedule('30 14 * * 1-5', () => runInstitutionResearchDetect('尾盘'), CRON_TZ);
+cron.schedule('5 15 * * 1-5', () => runInstitutionResearchDetect('收盘'), CRON_TZ);
 
 // 每日 04:30 刷新个股-板块映射表（在 04:00 TenxCron 之后）
 cron.schedule('30 4 * * *', async () => {
@@ -540,7 +543,7 @@ cron.schedule('30 4 * * *', async () => {
     } catch (err: any) {
         console.error('[StockConceptMappingCron] 刷新失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 // 个股资讯爬虫+实时推送：每天 8:00 和 15:00（包括节假日）
 // runCycle = 抓取 + AI研判 + 入库 + 触发自选股异动实时推送（飞书卡片+微信模板）
@@ -562,7 +565,7 @@ cron.schedule('0 15 * * *', async () => {
     } catch (err: any) {
         console.error('[CrawlCron] 尾盘失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 // 业绩预测自动更新：每天凌晨 00:00 执行
 cron.schedule('0 0 * * *', async () => {
@@ -573,7 +576,7 @@ cron.schedule('0 0 * * *', async () => {
     } catch (err: any) {
         console.error('[ProfitForecastAutoUpdateCron] 执行失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 // 股票基础数据同步：每天凌晨 00:05 执行（同步新股、更新行业等）
 cron.schedule('5 0 * * *', async () => {
@@ -584,7 +587,7 @@ cron.schedule('5 0 * * *', async () => {
     } catch (err: any) {
         console.error('[StockSyncCron] 执行失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 async function start() {
     try {
@@ -697,7 +700,9 @@ async function start() {
     }
 
     app.listen(PORT, '0.0.0.0', () => {
+        const now = new Date();
         console.log(`[Server] aistock-api running on http://0.0.0.0:${PORT}`);
+        console.log(`[Server] 当前时间: ${now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}, TZ=${process.env.TZ || 'system'}`);
         // 启动飞书定时推送调度器
         MessagePushService.startScheduler();
         // 异步同步个股-板块映射（不阻塞启动，首次启动时填充空表）

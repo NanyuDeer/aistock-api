@@ -75,13 +75,13 @@ async function isChinaHoliday(dateKey: string, fetcher: typeof fetch): Promise<b
     const timer = setTimeout(() => controller.abort(), HOLIDAY_REQUEST_TIMEOUT_MS);
     try {
         const response = await fetcher(`${TIMOR_HOLIDAY_API_BASE}${dateKey}`, { method: 'GET', headers: { 'Accept': 'application/json' }, signal: controller.signal });
-        if (!response.ok) { console.error(`[TradingTime] Holiday API failed: ${response.status}`); return true; }
+        if (!response.ok) { console.error(`[TradingTime] Holiday API failed: ${response.status}, treating as non-holiday`); return false; }
         const data = await response.json() as HolidayApiResponse;
-        if (data.code !== 0) { console.error(`[TradingTime] Holiday API returned code: ${data.code}`); return true; }
+        if (data.code !== 0) { console.error(`[TradingTime] Holiday API returned code: ${data.code}, treating as non-holiday`); return false; }
         const isHoliday = Boolean(data.holiday && data.holiday.holiday === true);
         holidayCache.set(dateKey, isHoliday);
         return isHoliday;
-    } catch (err) { console.error('[TradingTime] Holiday API request error:', err); return true; }
+    } catch (err) { console.error('[TradingTime] Holiday API request error, treating as non-holiday:', err); return false; }
     finally { clearTimeout(timer); }
 }
 

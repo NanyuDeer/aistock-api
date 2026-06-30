@@ -13,17 +13,18 @@ import pool from '../db';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import cron from 'node-cron';
 import { HotBurstService } from './HotBurstService';
 
 const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
 const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
 const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
 
-// 推送时间配置
+// 推送时间配置（cron 表达式 + 标签 + 类型）
 const PUSH_SCHEDULES = [
-    { hour: 8, minute: 30, label: '龙头股日报', type: 'leader' as const },
-    { hour: 9, minute: 0, label: '早报', type: 'outbreak+stock' as const },
-    { hour: 17, minute: 0, label: '晚报', type: 'outbreak+stock' as const },
+    { cron: '30 8 * * *', label: '龙头股日报', type: 'leader' as const },
+    { cron: '0 9 * * *', label: '早报', type: 'outbreak+stock' as const },
+    { cron: '0 17 * * *', label: '晚报', type: 'outbreak+stock' as const },
 ];
 
 // ==================== 标签 ====================
@@ -349,35 +350,30 @@ function buildStockInfoFeishuCard(event: StockInfoPushEventData): any {
 // ==================== 推送执行 ====================
 
 export class MessagePushService {
-    private static timer: NodeJS.Timeout | null = null;
+    private static cronTasks: cron.ScheduledTask[] = [];
 
     static startScheduler(): void {
-        if (this.timer) return;
+        if (this.cronTasks.length > 0) return;
 
-        console.log('[MessagePush] 启动定时推送调度器');
+        console.log('[MessagePush] 启动定时推送调度器 (node-cron)');
 
-        this.timer = setInterval(() => {
-            const now = new Date();
-            const hour = now.getHours();
-            const minute = now.getMinutes();
-
-            for (const schedule of PUSH_SCHEDULES) {
-                if (hour === schedule.hour && minute === schedule.minute) {
-                    console.log(`[MessagePush] 到达推送时间: ${schedule.label}`);
-                    this.executePush(schedule).catch(err => {
-                        console.error(`[MessagePush] ${schedule.label}推送失败:`, err.message);
-                    });
-                }
-            }
-        }, 60000);
+        for (const schedule of PUSH_SCHEDULES) {
+            const task = cron.schedule(schedule.cron, () => {
+                console.log(`[MessagePush] 到达推送时间: ${schedule.label}`);
+                this.executePush(schedule).catch(err => {
+                    console.error(`[MessagePush] ${schedule.label}推送失败:`, err.message);
+                });
+            }, { timezone: 'Asia/Shanghai' });
+            this.cronTasks.push(task);
+        }
     }
 
     static stopScheduler(): void {
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-            console.log('[MessagePush] 停止定时推送调度器');
+        for (const task of this.cronTasks) {
+            task.stop();
         }
+        this.cronTasks = [];
+        console.log('[MessagePush] 停止定时推送调度器');
     }
 
     static async executePush(schedule: { label: string; type: string }): Promise<{ success: number; fail: number }> {
