@@ -68,7 +68,31 @@ export class ScanLoginController {
                     }),
                 },
             );
-            const wxData: any = await wxRes.json();
+
+            // 先检查 HTTP 状态码
+            if (!wxRes.ok) {
+                const errText = await wxRes.text().catch(() => '');
+                ScanLoginController.log('generateQr', '❌ 微信API返回非200状态', { status: wxRes.status, body: errText.slice(0, 200) });
+                createResponse(res, 500, `微信API错误(${wxRes.status}): ${errText.slice(0, 100) || '无响应体'}`);
+                return;
+            }
+
+            // 解析响应体
+            const wxText = await wxRes.text().catch(() => '');
+            if (!wxText || wxText.trim() === '') {
+                ScanLoginController.log('generateQr', '❌ 微信API返回空响应', { status: wxRes.status });
+                createResponse(res, 500, '微信API返回空响应，请检查公众号配置');
+                return;
+            }
+
+            let wxData: any;
+            try {
+                wxData = JSON.parse(wxText);
+            } catch (parseErr: any) {
+                ScanLoginController.log('generateQr', '❌ 微信API响应非JSON', { body: wxText.slice(0, 200) });
+                createResponse(res, 500, `微信API响应格式错误: ${wxText.slice(0, 100)}`);
+                return;
+            }
 
             if (wxData.errcode) {
                 ScanLoginController.log('generateQr', '❌ 创建二维码失败', { errcode: wxData.errcode, errmsg: wxData.errmsg });
