@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { signJwt } from '../utils/jwt';
 import { createResponse } from '../utils/response';
-import { sessionFetch } from '../utils/httpAgent';
 import pool from '../db';
 
 export class AuthController {
@@ -122,7 +121,7 @@ export class AuthController {
     }
 
     private static async exchangeCodeForToken(code: string): Promise<any> {
-        const res = await sessionFetch(
+        const res = await fetch(
             `https://api.weixin.qq.com/sns/oauth2/access_token` +
             `?appid=${process.env.WECHAT_APPID}` +
             `&secret=${process.env.WECHAT_SECRET}` +
@@ -133,7 +132,7 @@ export class AuthController {
     }
 
     private static async fetchWechatUserInfo(accessToken: string, openid: string): Promise<any> {
-        const res = await sessionFetch(
+        const res = await fetch(
             `https://api.weixin.qq.com/sns/userinfo` +
             `?access_token=${accessToken}` +
             `&openid=${openid}` +

@@ -3,13 +3,12 @@ import crypto from 'crypto';
 import { signJwt } from '../utils/jwt';
 import { createResponse } from '../utils/response';
 import { CacheService } from '../services/CacheService';
-import { sessionFetch } from '../utils/httpAgent';
 import pool from '../db';
 
 export class ScanLoginController {
     private static log(stage: string, message: string, data?: any): void {
         const ts = new Date().toISOString();
-        const detail = data !== undefined ? ` | ${JSON.stringify(data)}` : ''; 
+        const detail = data !== undefined ? ` | ${JSON.stringify(data)}` : '';
         console.log(`[ScanLogin][${stage}] ${ts} ${message}${detail}`);
     }
 
@@ -26,7 +25,7 @@ export class ScanLoginController {
         }
 
         ScanLoginController.log('accessToken', '请求微信获取 server access_token');
-        const res = await sessionFetch(
+        const res = await fetch(
             `https://api.weixin.qq.com/cgi-bin/token` +
             `?grant_type=client_credential` +
             `&appid=${process.env.WECHAT_APPID}` +
@@ -56,7 +55,7 @@ export class ScanLoginController {
             const accessToken = await ScanLoginController.getServerAccessToken();
 
             ScanLoginController.log('generateQr', '调用微信创建临时二维码', { sceneStr });
-            const wxRes = await sessionFetch(
+            const wxRes = await fetch(
                 `https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token=${accessToken}`,
                 {
                     method: 'POST',
