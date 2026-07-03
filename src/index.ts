@@ -555,7 +555,7 @@ cron.schedule('0 8 * * *', async () => {
     } catch (err: any) {
         console.error('[CrawlCron] 早盘失败:', err?.message || err);
     }
-});
+}, CRON_TZ);
 
 cron.schedule('0 15 * * *', async () => {
     console.log('[CrawlCron] 开始尾盘爬虫周期');
