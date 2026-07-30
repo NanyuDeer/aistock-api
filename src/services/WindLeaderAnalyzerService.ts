@@ -1448,7 +1448,7 @@ ${batch.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 5. 每个行业的上下游各不超过5个
 6. 只返回JSON，不要其他文字`;
 
-    const resp = await fetch(chatUrl, {
+    const resp = await sessionFetch(chatUrl, {
         method: 'POST',
         signal: AbortSignal.timeout(90000),
         headers: {
